@@ -1,0 +1,38 @@
+# Local reference source repositories
+/src/
+/source/
+
+# Unity-generated folders (projects can be nested)
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Mm]emoryCaptures/
+**/[Rr]ecordings/
+**/.utmp/
+
+# IDE and operating system files
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.csproj
+*.sln
+*.slnx
+*.log
+*.tmp
+*.user
+*.userprefs
+*.pdb
+*.mdb
+
+# Local credentials and agent state
+.env
+.env.*
+!.env.example
+.codex/
+.agents/
