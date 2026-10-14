@@ -6,10 +6,9 @@ using System.Xml;
 namespace RTXMnesia.Importer
 {
     /// <summary>
-    /// Mirrors the HPL2 resource lookup: files are found by file name only, in the directories listed in
-    /// resources.cfg. Paths written inside .mat/.dae files (often "G:/amnesia/redist/...") are ignored.
-    /// When a name exists in several folders, the file next to the referencing file wins, then the first
-    /// directory in resources.cfg order.
+    /// HPL2 FileSearcher indexes by filename, then disambiguates duplicate names by directory similarity.
+    /// Preserve paths even when they contain an obsolete exporter drive ("G:/amnesia/redist/...").
+    /// A bare filename uses the referencing directory when available, then resources.cfg order.
     /// </summary>
     public class ResourceIndex
     {
@@ -41,7 +40,8 @@ namespace RTXMnesia.Importer
         public string Find(string reference, string nearFile = null)
         {
             if (string.IsNullOrWhiteSpace(reference)) return null;
-            string name = reference.Trim();
+            string normalized = Uri.UnescapeDataString(reference.Trim()).Replace('\\', '/');
+            string name = normalized;
             name = name.Substring(name.LastIndexOfAny(new[] { '/', '\\', '|' }) + 1);
             if (!_byName.TryGetValue(name, out var list))
             {
@@ -52,14 +52,34 @@ namespace RTXMnesia.Importer
                 if (list == null) return null;
             }
 
-            if (nearFile != null && list.Count > 1)
+            if (list.Count > 1)
             {
-                string dir = Path.GetDirectoryName(nearFile);
+                // FileSearcher::GetFilePath compares matching directory components backwards in both
+                // directions, allowing old machine prefixes and inserted resource directories.
+                string wantedPath = normalized.Substring(0, Math.Max(0, normalized.LastIndexOf('/')));
+                if (wantedPath.Length == 0 && nearFile != null) wantedPath = Path.GetDirectoryName(nearFile);
+                var wanted = Directories(wantedPath);
+                string best = list[0];
+                int bestScore = 0;
                 foreach (string candidate in list)
-                    if (string.Equals(Path.GetDirectoryName(candidate), dir, StringComparison.OrdinalIgnoreCase))
-                        return candidate;
+                {
+                    var available = Directories(Path.GetDirectoryName(candidate));
+                    int score = Math.Max(MatchDirectories(wanted, available), MatchDirectories(available, wanted));
+                    if (score > bestScore) { best = candidate; bestScore = score; }
+                }
+                return best;
             }
             return list[0];
+        }
+
+        static string[] Directories(string path) => path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        static int MatchDirectories(string[] wanted, string[] available)
+        {
+            int matched = 0, i = wanted.Length - 1;
+            for (int j = available.Length - 1; i >= 0 && j >= 0; j--)
+                if (string.Equals(wanted[i], available[j], StringComparison.OrdinalIgnoreCase)) { matched++; i--; }
+            return matched;
         }
 
         public IEnumerable<string> AllWithExtension(string extension)

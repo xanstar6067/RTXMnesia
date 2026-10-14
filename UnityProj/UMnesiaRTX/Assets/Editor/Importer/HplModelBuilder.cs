@@ -27,7 +27,7 @@ namespace RTXMnesia.Importer
     public static class HplModelBuilder
     {
         /// <summary>Bump when the output changes: prefabs of older versions are rebuilt.</summary>
-        public const int Version = 1;
+        public const int Version = 4;
 
         static readonly Matrix4x4 Mirror = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
 

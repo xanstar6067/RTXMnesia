@@ -83,14 +83,16 @@ namespace RTXMnesia.Importer
 
             c.HasSkin = root.GetElementsByTagName("skin", Ns).Count > 0;
 
-            foreach (var lib in Children(root, "library_geometries"))
+            foreach (var lib in Children(root, "library_geometries").Concat(
+                         Children(root, "library").Where(l => l.GetAttribute("type") == "GEOMETRY")))
                 foreach (var g in Children(lib, "geometry"))
                     c.LoadGeometry(g);
 
             // The scene the file instantiates, or the first one.
             var scenes = Children(root, "library_visual_scenes").SelectMany(l => Children(l, "visual_scene")).ToList();
             string sceneUrl = (Child(Child(root, "scene"), "instance_visual_scene")?.GetAttribute("url") ?? "").TrimStart('#');
-            var scene = scenes.FirstOrDefault(s => s.GetAttribute("id") == sceneUrl) ?? scenes.FirstOrDefault();
+            var scene = scenes.FirstOrDefault(s => s.GetAttribute("id") == sceneUrl) ?? scenes.FirstOrDefault()
+                        ?? Child(root, "scene"); // COLLADA 1.3 stores nodes directly in scene.
             if (scene != null)
                 foreach (var n in Children(scene, "node"))
                     c.Roots.Add(c.LoadNode(n, null));
