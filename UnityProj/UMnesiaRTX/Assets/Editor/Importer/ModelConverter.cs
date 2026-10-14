@@ -9,14 +9,35 @@ using UnityEngine;
 namespace RTXMnesia.Importer
 {
     /// <summary>
-    /// Imports HPL2 .dae models: converts the materials they use, copies the .dae files to
-    /// Assets/AmnesiaImported/Models (same relative path) and lets Unity import them with <see cref="ModelImportRules"/>.
+    /// Imports HPL2 .dae models into Assets/AmnesiaImported/Models (same relative path), after converting the
+    /// materials they use:
+    /// - static meshes (no skin): built by <see cref="HplModelBuilder"/> as the engine loads them → &lt;path&gt;.prefab;
+    /// - skinned meshes: the .dae is copied and Unity's Collada import reads it (<see cref="ModelImportRules"/>).
     /// The .msh files next to them are HPL2's binary cache of the same meshes and are not needed.
     /// </summary>
     public static class ModelConverter
     {
-        public static string AssetPathFor(string daeAbsolute) =>
+        static readonly Dictionary<string, bool> Skinned = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Skinned models (Collada skin controller = HPL2 skeleton) still go through Unity's import.</summary>
+        public static bool UsesUnityImport(string daeAbsolute)
+        {
+            if (!Skinned.TryGetValue(daeAbsolute, out bool skinned))
+                Skinned[daeAbsolute] = skinned = ColladaInfo.Load(daeAbsolute).HasSkin;
+            return skinned;
+        }
+
+        static string ImportedDaePath(string daeAbsolute) =>
             AmnesiaPaths.ModelsRoot + "/" + AmnesiaPaths.ToSourceRelative(daeAbsolute);
+
+        public static string AssetPathFor(string daeAbsolute) =>
+            UsesUnityImport(daeAbsolute) ? ImportedDaePath(daeAbsolute) : HplModelBuilder.PrefabPathFor(daeAbsolute);
+
+        /// <summary>The model exists and was made from the current .dae with the current rules.</summary>
+        public static bool IsConverted(string daeAbsolute) =>
+            UsesUnityImport(daeAbsolute)
+                ? File.Exists(AmnesiaPaths.ToAbsolute(ImportedDaePath(daeAbsolute)))
+                : HplModelBuilder.IsUpToDate(daeAbsolute);
 
         public static void ConvertModels(IReadOnlyList<string> daeFiles, string title)
         {
@@ -43,11 +64,24 @@ namespace RTXMnesia.Importer
             }
             MaterialConverter.ConvertMaterials(matFiles.ToList(), false, title + " — materials");
 
-            // 2. Copy models and (re)import them, so remaps to newly created materials are applied.
-            var assetPaths = new List<string>();
-            foreach (string dae in daeFiles)
+            // 2a. Static meshes: built like the engine loads them.
+            int built = 0;
+            foreach (string dae in daeFiles.Where(d => !UsesUnityImport(d)))
             {
-                string assetPath = AssetPathFor(dae);
+                try
+                {
+                    if (HplModelBuilder.Build(dae, index, log) != null) built++;
+                    else log.Error($"{AmnesiaPaths.ToSourceRelative(dae)}: prefab not saved");
+                }
+                catch (Exception e) { log.Error($"{AmnesiaPaths.ToSourceRelative(dae)}: {e.Message}"); }
+            }
+            log.Info($"Built static models: {built}");
+
+            // 2b. Skinned meshes: copy and (re)import, so remaps to newly created materials are applied.
+            var assetPaths = new List<string>();
+            foreach (string dae in daeFiles.Where(UsesUnityImport))
+            {
+                string assetPath = ImportedDaePath(dae);
                 string target = AmnesiaPaths.ToAbsolute(assetPath);
                 if (!File.Exists(target) || File.GetLastWriteTimeUtc(dae) > File.GetLastWriteTimeUtc(target))
                 {

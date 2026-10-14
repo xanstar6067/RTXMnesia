@@ -254,7 +254,7 @@ namespace RTXMnesia.Importer
             foreach (string decal in _decalFiles) if (decal != null) mats.Add(decal);
             foreach (var e in contents.Child("Entities").Children()) AddWorldEntity(e);
 
-            var missingModels = daes.Where(d => !File.Exists(AmnesiaPaths.ToAbsolute(ModelConverter.AssetPathFor(d)))).ToList();
+            var missingModels = daes.Where(d => !ModelConverter.IsConverted(d)).ToList();
             if (missingModels.Count > 0) ModelConverter.ConvertModels(missingModels, $"Models for {_mapRelative}");
 
             var missingMats = mats.Where(m => !File.Exists(AmnesiaPaths.ToAbsolute(MaterialConverter.AssetPathFor(m)))).ToList();
@@ -310,23 +310,16 @@ namespace RTXMnesia.Importer
 
         // ---------- Coordinate helpers ----------
 
-        // Z_UP Collada files (verified on castle.dae, chandelier_simple_short.dae, plane_black.dae):
-        // - Unity keeps node-local vertices in the file's axes (X mirrored) and adds Rx(-90°) at the top
-        //   (on the root, or on each top-level node when the root is empty);
-        // - HPL2 rewrites vertices (x, y, z) → (-x, z, y) and node translations/scales (x, z, y), keeping rotate
-        //   elements as written (MeshLoaderColladaHelpers.cpp GetVectorPos / GetVectorPosFromPtr).
-        // In Unity space the HPL2 vertex of a Unity node-local vertex (-x, y, z) is (x, z, y):
-        static readonly Matrix4x4 ZUpNodeCorrection = new Matrix4x4(
-            new Vector4(-1f, 0f, 0f, 0f), new Vector4(0f, 0f, 1f, 0f), new Vector4(0f, 1f, 0f, 0f), new Vector4(0f, 0f, 0f, 1f));
-        // Unity's whole converted model vs HPL2: turned 180° around Y (used for skinned models placed whole).
+        // Static meshes come from HplModelBuilder with the engine's node transforms: an instance only needs the
+        // HPL2 placement. Skinned meshes are Unity imports: Unity's whole converted Z_UP model vs HPL2 is turned
+        // 180° around Y.
         static readonly Matrix4x4 ZUpModelCorrection = Matrix4x4.Rotate(Quaternion.Euler(0f, 180f, 0f));
-        static readonly Matrix4x4 UndoUnityZUp = Matrix4x4.Rotate(Quaternion.Euler(90f, 0f, 0f));
 
         bool IsZUp(string daeAbsolute) => Collada(daeAbsolute).UpAxis == "Z_UP";
 
-        Matrix4x4 NodeCorrection(string daeAbsolute) => IsZUp(daeAbsolute) ? ZUpNodeCorrection : Matrix4x4.identity;
-
         Matrix4x4 ModelCorrection(string daeAbsolute) => IsZUp(daeAbsolute) ? ZUpModelCorrection : Matrix4x4.identity;
+
+        static bool IsBuiltModel(GameObject prefab) => prefab.GetComponent<AmnesiaModel>() != null;
 
         static Matrix4x4 LocalMatrix(Transform t) => Matrix4x4.TRS(t.localPosition, t.localRotation, t.localScale);
 
@@ -337,42 +330,21 @@ namespace RTXMnesia.Importer
             t.localScale = m.lossyScale;
         }
 
-        /// <summary>Places a static model instance with HPL2 transform values.</summary>
-        void PlaceModel(Transform t, string daeAbsolute, Vector3 hplPosition, Vector3 hplRotation, Vector3 scale)
+        /// <summary>
+        /// Places a model instance with HPL2 transform values (static object: T·R·S, CreateStaticObjectEntity).
+        /// Built models carry the engine's node transforms, so this is exact; Unity-imported (skinned) ones get
+        /// their root transform kept and the Z_UP correction.
+        /// </summary>
+        void PlaceModel(Transform t, string daeAbsolute, Vector3 hplPosition, Vector3 hplRotation, Vector3 scale, bool builtModel)
         {
-            if (!IsZUp(daeAbsolute) && LocalMatrix(t).isIdentity)
+            if (builtModel)
             {
-                // Exact path (also keeps negative scales intact).
                 t.SetLocalPositionAndRotation(HplSpace.Position(hplPosition), HplSpace.Rotation(hplRotation));
                 t.localScale = scale;
                 return;
             }
             var placement = Matrix4x4.TRS(HplSpace.Position(hplPosition), HplSpace.Rotation(hplRotation), scale);
-            if (!IsZUp(daeAbsolute))
-            {
-                SetLocalMatrix(t, placement * LocalMatrix(t));
-                return;
-            }
-
-            // Z_UP: rebuild every mesh/collider node the way HPL2 places it: translation (x, z, y) of the node
-            // in the file's axes, node-local vertices as (-x, z, y), node scale. Node rotations are not used
-            // (none in the Z_UP static objects of the game except outdoor foliage).
-            Transform group = t.parent;
-            var targets = new List<(Transform node, Matrix4x4 matrix)>();
-            foreach (var node in t.GetComponentsInChildren<Transform>(true))
-            {
-                if (node.GetComponent<MeshFilter>() == null && node.GetComponent<Collider>() == null) continue;
-                Matrix4x4 unity = group.worldToLocalMatrix * node.localToWorldMatrix;
-                Vector3 raw = (UndoUnityZUp * unity).GetPosition(); // file axes, X mirrored
-                Matrix4x4 hpl = Matrix4x4.Translate(new Vector3(raw.x, raw.z, raw.y)) * ZUpNodeCorrection * Matrix4x4.Scale(unity.lossyScale);
-                targets.Add((node, placement * hpl));
-            }
-            SetLocalMatrix(t, placement);
-            foreach (var (node, matrix) in targets.OrderBy(x => Depth(x.node)))
-            {
-                Matrix4x4 parentToGroup = group.worldToLocalMatrix * node.parent.localToWorldMatrix;
-                SetLocalMatrix(node, parentToGroup.inverse * matrix);
-            }
+            SetLocalMatrix(t, placement * ModelCorrection(daeAbsolute) * LocalMatrix(t));
         }
 
         static void SetStatic(GameObject go)
@@ -397,16 +369,18 @@ namespace RTXMnesia.Importer
 
             var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
             go.name = e.Str("Name");
-            PlaceModel(go.transform, dae, e.Vec3("WorldPos"), e.Vec3("Rotation"), e.Vec3("Scale", Vector3.one));
+            bool built = IsBuiltModel(prefab);
+            PlaceModel(go.transform, dae, e.Vec3("WorldPos"), e.Vec3("Rotation"), e.Vec3("Scale", Vector3.one), built);
             SetCastShadows(go, e.Bool("CastShadows", true));
 
-            // WorldLoaderHplMap.cpp CreateStaticObjectEntity: collider shape nodes replace the visual mesh as collision.
+            // WorldLoaderHplMap.cpp CreateStaticObjectEntity: built models already have the static collision
+            // (collider nodes, else mesh colliders). Collides = false: no collision at all.
             var colliders = go.GetComponentsInChildren<Collider>(true);
             if (!e.Bool("Collides", true))
             {
                 foreach (var c in colliders) c.enabled = false;
             }
-            else if (!colliders.Any(c => c.name.StartsWith("_collider", StringComparison.OrdinalIgnoreCase)))
+            else if (!built && !colliders.Any(c => c.name.StartsWith("_collider", StringComparison.OrdinalIgnoreCase)))
             {
                 foreach (var filter in go.GetComponentsInChildren<MeshFilter>(true))
                     if (filter.sharedMesh != null && filter.GetComponent<Renderer>() != null && filter.GetComponent<Collider>() == null)
@@ -622,42 +596,36 @@ namespace RTXMnesia.Importer
             // Entities collide through the .ent shapes; collider nodes of the model are only used by static objects.
             foreach (var c in model.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
 
-            if (ent.HasBones || Collada(dae).HasSkin)
+            if (!IsBuiltModel(prefab))
             {
                 // Skinned meshes are placed whole with the entity scale; .ent sub mesh transforms are not used.
                 SetLocalMatrix(model.transform, Matrix4x4.Scale(scale) * ModelCorrection(dae) * LocalMatrix(model.transform));
                 return;
             }
-            Matrix4x4 correction = NodeCorrection(dae);
 
-            // EntityLoader_Object.cpp: each sub mesh gets the .ent transform relative to the entity, replacing
-            // the Collada node transform (e.g. the castle door mesh is turned 180° there). Node scale stays.
-            var nodes = model.GetComponentsInChildren<Transform>(true);
-            var renderNodes = nodes.Where(t => t.GetComponent<Renderer>() != null).ToList();
+            // EntityLoader_Object.cpp: each sub mesh listed in the .ent gets the matrix T(pos·s)·R(rot)·S(scale·s)
+            // relative to the entity, replacing its node transform (its vertices already hold the node's own
+            // scale). Sub meshes not listed keep their node transform. Sub mesh entities are not nested in HPL2,
+            // so they are moved directly under the model root first.
+            var subMeshNodes = model.GetComponentsInChildren<MeshFilter>(true).Select(f => f.transform).ToList();
+            foreach (var node in subMeshNodes) node.SetParent(model.transform, true);
             var targets = new List<(HplEntityFile.SubMesh sub, Transform node, Matrix4x4 matrix)>();
-            var unmatched = new List<HplEntityFile.SubMesh>();
             foreach (var sub in ent.SubMeshes)
             {
-                var node = renderNodes.FirstOrDefault(t => t.name == sub.Name) ?? nodes.FirstOrDefault(t => t.name == sub.Name);
-                if (node == null) { unmatched.Add(sub); continue; }
-                targets.Add((sub, node, SubMeshMatrix(sub, scale, correction, node, parent)));
-                renderNodes.Remove(node);
+                var node = subMeshNodes.FirstOrDefault(t => t.name == sub.Name);
+                if (node == null)
+                {
+                    _log.Warn($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: sub mesh '{sub.Name}' not found in the model");
+                    continue;
+                }
+                targets.Add((sub, node, Matrix4x4.TRS(HplSpace.Position(Vector3.Scale(sub.Position, scale)),
+                                                      HplSpace.Rotation(sub.Rotation), Vector3.Scale(sub.Scale, scale))));
+                subMeshNodes.Remove(node);
             }
-            // Unity merges a lone Collada node into the model root and renames it after the file.
-            if (unmatched.Count == 1 && renderNodes.Count == 1)
-            {
-                targets.Add((unmatched[0], renderNodes[0], SubMeshMatrix(unmatched[0], scale, correction, renderNodes[0], parent)));
-                unmatched.Clear();
-            }
-            foreach (var sub in unmatched)
-                _log.Warn($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: sub mesh '{sub.Name}' not found in the model");
 
-            // Parents first, so children are computed against their final parent transform.
-            foreach (var (_, node, matrix) in targets.OrderBy(t => Depth(t.node)))
-            {
-                Matrix4x4 parentToEntity = parent.worldToLocalMatrix * node.parent.localToWorldMatrix;
-                SetLocalMatrix(node, parentToEntity.inverse * matrix);
-            }
+            Matrix4x4 modelToEntity = parent.worldToLocalMatrix * model.transform.localToWorldMatrix;
+            foreach (var (_, node, matrix) in targets)
+                HplModelBuilder.SetLocalMatrix(node, modelToEntity.inverse * matrix, _log, $"{AmnesiaPaths.ToSourceRelative(ent.Path)} '{node.name}'");
 
             foreach (var (sub, node, _) in targets)
             {
@@ -667,22 +635,6 @@ namespace RTXMnesia.Importer
                 if (material != null && renderer != null)
                     renderer.sharedMaterials = Enumerable.Repeat(material, renderer.sharedMaterials.Length).ToArray();
             }
-        }
-
-        /// <summary>Sub mesh transform relative to the entity: .ent values (scaled by the instance) × imported node scale.</summary>
-        static Matrix4x4 SubMeshMatrix(HplEntityFile.SubMesh sub, Vector3 entityScale, Matrix4x4 correction, Transform node, Transform entity)
-        {
-            Vector3 nodeScale = (entity.worldToLocalMatrix * node.localToWorldMatrix).lossyScale;
-            return Matrix4x4.TRS(HplSpace.Position(Vector3.Scale(sub.Position, entityScale)),
-                       HplSpace.Rotation(sub.Rotation), Vector3.Scale(sub.Scale, entityScale))
-                   * correction * Matrix4x4.Scale(nodeScale);
-        }
-
-        static int Depth(Transform t)
-        {
-            int depth = 0;
-            for (; t.parent != null; t = t.parent) depth++;
-            return depth;
         }
 
         void BuildEntityBodies(HplEntityFile ent, Transform parent, Vector3 scale)
