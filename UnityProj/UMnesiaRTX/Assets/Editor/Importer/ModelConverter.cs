@@ -1,0 +1,111 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using UnityEditor;
+using UnityEngine;
+
+namespace RTXMnesia.Importer
+{
+    /// <summary>
+    /// Imports HPL2 .dae models: converts the materials they use, copies the .dae files to
+    /// Assets/AmnesiaImported/Models (same relative path) and lets Unity import them with <see cref="ModelImportRules"/>.
+    /// The .msh files next to them are HPL2's binary cache of the same meshes and are not needed.
+    /// </summary>
+    public static class ModelConverter
+    {
+        public static string AssetPathFor(string daeAbsolute) =>
+            AmnesiaPaths.ModelsRoot + "/" + AmnesiaPaths.ToSourceRelative(daeAbsolute);
+
+        public static void ConvertModels(IReadOnlyList<string> daeFiles, string title)
+        {
+            var log = new ImportLog();
+            ModelImportRules.ResetIndex();
+            var index = new ResourceIndex(AmnesiaPaths.SourceRoot);
+
+            // 1. Materials first: model import remaps to them, so they must exist already.
+            var matFiles = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string dae in daeFiles)
+            {
+                string rel = AmnesiaPaths.ToSourceRelative(dae);
+                try
+                {
+                    foreach (string texture in ColladaInfo.Load(dae).MaterialTextures.Values.Distinct())
+                    {
+                        string mat = index.Find(Path.ChangeExtension(texture, ".mat"), dae);
+                        if (mat != null) matFiles.Add(mat);
+                        // Often a placeholder on collider nodes (never rendered); real misses are reported after import.
+                        else log.Info($"{rel}: no .mat for texture '{texture}'");
+                    }
+                }
+                catch (Exception e) { log.Error($"{rel}: {e.Message}"); }
+            }
+            MaterialConverter.ConvertMaterials(matFiles.ToList(), false, title + " — materials");
+
+            // 2. Copy models and (re)import them, so remaps to newly created materials are applied.
+            var assetPaths = new List<string>();
+            foreach (string dae in daeFiles)
+            {
+                string assetPath = AssetPathFor(dae);
+                string target = AmnesiaPaths.ToAbsolute(assetPath);
+                if (!File.Exists(target) || File.GetLastWriteTimeUtc(dae) > File.GetLastWriteTimeUtc(target))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(target));
+                    File.Copy(dae, target, true);
+                }
+                assetPaths.Add(assetPath);
+            }
+            AssetDatabase.Refresh();
+
+            AssetDatabase.StartAssetEditing();
+            try
+            {
+                foreach (string path in assetPaths) AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
+
+            // 3. Report what came out.
+            foreach (string path in assetPaths)
+            {
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (model == null) { log.Error($"{path}: Unity failed to import the model"); continue; }
+                foreach (var renderer in model.GetComponentsInChildren<Renderer>(true))
+                    foreach (var material in renderer.sharedMaterials)
+                        if (material == null || !AssetDatabase.GetAssetPath(material).StartsWith(AmnesiaPaths.MaterialsRoot))
+                            log.Warn($"{path}: node '{renderer.name}' uses unconverted material '{(material != null ? material.name : "null")}'");
+            }
+
+            log.Info($"Models: {assetPaths.Count}, materials: {matFiles.Count}");
+            foreach (string path in Environment.GetCommandLineArgs().SkipWhile(a => a != "-describe").Skip(1).Take(1)
+                         .SelectMany(a => a.Split(',')))
+                log.Info(DescribeHierarchy(AssetDatabase.LoadAssetAtPath<GameObject>(AmnesiaPaths.ModelsRoot + "/" + path)));
+            log.Save(title);
+        }
+
+        /// <summary>Text dump of a model: nodes, components, materials. For checking import results in the log.</summary>
+        public static string DescribeHierarchy(GameObject root)
+        {
+            if (root == null) return "(null)";
+            var sb = new StringBuilder($"Hierarchy of {root.name}:\n");
+            void Walk(Transform t, int depth)
+            {
+                sb.Append(' ', depth * 2).Append(t.name)
+                  .Append($" pos={t.localPosition} rot={t.localEulerAngles} scale={t.localScale}");
+                foreach (var c in t.GetComponents<Component>())
+                    if (c is not Transform) sb.Append(" [").Append(c.GetType().Name).Append(']');
+                var r = t.GetComponent<Renderer>();
+                if (r != null) sb.Append(" materials: ").Append(string.Join(", ", r.sharedMaterials.Select(m => m != null ? m.name : "null")));
+                var f = t.GetComponent<MeshFilter>();
+                if (f != null && f.sharedMesh != null) sb.Append($" mesh: {f.sharedMesh.name} ({f.sharedMesh.vertexCount} v, bounds {f.sharedMesh.bounds})");
+                sb.Append('\n');
+                foreach (Transform child in t) Walk(child, depth + 1);
+            }
+            Walk(root.transform, 0);
+            return sb.ToString();
+        }
+    }
+}

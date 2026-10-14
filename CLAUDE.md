@@ -69,7 +69,36 @@ Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Edito
 - Объём: в итоге вся игра, но идём по шагам; первая цель — **глава 1** (`maps/main/ch01`, 15 карт, начиная с `00_rainy_hall`).
 - Скрипты уровней портируются **вручную на C#** (без встраивания AngelScript). Каждая карта документируется в `docs/ScriptPort/` по шаблону из README; код оригинала туда не копируется, только ссылки `файл:строка`.
 - После переноса функции API обновлять её статус в `docs/ScriptPort/api.md`.
-- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели, .ent) → 3) импорт одного уровня → 4) игрок → 5) скрипты уровней → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
+- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели ✓; префабы .ent → вместе с шагом 4) → 3) импорт одного уровня → 4) игрок → 5) скрипты уровней → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
+
+## Импортёры (Assets/Editor/Importer, namespace RTXMnesia.Importer)
+
+Меню: **Tools > RTXMnesia > Import**. Лог: `UnityProj/UMnesiaRTX/Logs/AmnesiaImport.log`.
+Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим проектом должен быть закрыт; проверять lock `Temp/UnityLockfile`):
+`ConvertMaterialsBatch`, `ConvertModelsBatch` с `[-amnesiaFolder <папка в source>] [-forceTextures] [-describe a.dae,b.dae]`;
+`RenderMaterialsBatch`/`RenderModelsBatch` — сцена-витрина + рендер в `Logs/<Kind>Preview.png` (без `-nographics`, нужен GPU).
+Быстрая проверка компиляции без Unity: Roslyn `Editor/Data/DotNetSdk/.../csc.dll` + ссылки на `Managed/UnityEngine/*Module.dll` и HDRP dll из `Library/ScriptAssemblies` (фасады UnityEngine.dll/UnityEditor.dll не подключать).
+Полный импорт `static_objects` + `entities`: ~3 мин, ~1 GB в `Assets/AmnesiaImported`.
+
+- `ResourceIndex` — поиск ресурса по имени файла, как в HPL2 (пути внутри .mat/.dae вида `G:/amnesia/redist/...` игнорируются; приоритет: та же папка, затем порядок `resources.cfg`). Дубликаты имён есть (27 .dds, 11 .mat, 52 .dae).
+- `DdsDecoder` — DXT1/3/5, ATI2(BC5), несжатые 24/32 бит, кубкарты. Форматы в игре: DXT1 1131, DXT5 714, BGRA32 36, ATI2 12, кубкарт 4.
+- `TextureConverter` — DDS → PNG в `Assets/AmnesiaImported/Textures/<путь>__<роль>.png`; роли: albedo, normal, mask, specular, height, emissive. Настройки импорта — `TextureImportRules` по роли из имени.
+- `MaterialConverter` — `.mat` → HDRP материал в `Assets/AmnesiaImported/Materials/<путь>.mat`; существующие обновляются на месте (GUID сохраняется). Константы тюнинга вверху файла.
+- `ImageLoader` — .dds/.tga/.jpg/.png → пиксели «верхняя строка первой» (HPL2 грузит всё через DevIL с IL_ORIGIN_UPPER_LEFT). Текстура без расширения → перебор форматов, как `TextureManager::FindTexture2D`.
+- `TextureConverter.Version` — при изменении математики конвертации увеличить: PNG старше момента смены версии перегенерируются.
+- `ModelConverter` + `ModelImportRules` — `.dae` копируется в `Assets/AmnesiaImported/Models/<путь>.dae` и импортируется **встроенным Collada-импортом Unity**; поверх: ремап материалов (`AddRemap` по id/name/symbol материала Collada), узлы `_collider_<box|sphere|capsule|cylinder|mesh>_*` → невидимые коллайдеры (cylinder → convex MeshCollider), `_charcollider_*` — то же, но только для персонажей (пока отличаются лишь именем узла), подмеши с материалом без текстуры удаляются (HPL2 их не рисует). `.msh` не нужны. При изменении правил — увеличить `GetVersion()`.
+- Статик без `_collider` узлов: в HPL2 коллизия строится из визуального меша, если у StaticObject `Collides="true"` — делать при расстановке карты (шаг 3).
+
+Проверенные по исходникам HPL2 конвенции:
+- UV COLLADA: движок делает `v = 1 - v`, DDS грузится верхней строкой в v=0 → в Unity UV не трогаем, PNG сохраняем как DDS (верх = верх).
+- Нормали: бинормаль движка смотрит «вниз по картинке» → зелёный канал инвертируем.
+- Specular-карта: R = интенсивность, G = степень `exp2(G*10)+1`. В HDRP: Specular Color workflow, F0 = R × 0.08, smoothness = 1 − sqrt(sqrt(2/(n+2))).
+- Height — в альфа-канале. Юнит `Alpha` = alpha test по альфе диффуза. `Illumination` = emissive (у ламп регулируется в игре).
+- Имя материала у меша = имя текстуры из `<library_images>` `.dae` с расширением `.mat`.
+- Height-карта Amnesia — это **глубина** (белое = глубже, relief mapping) → инвертируется для HDRP. Проверено численно: градиент инвертированной карты совпадает с normal map по знаку в обоих каналах (заодно подтверждает инверсию G).
+- **Оси**: Unity-импорт Collada отражает X: HPL `(x,y,z)` → Unity `(-x,y,z)` (проверено на `corner_concave_round.dae`). Позиции из `.map`/`.ent` переводить так же; повороты (Euler XYZ, радианы) — отражением: угол X сохраняется, Y и Z меняют знак (проверить на уровне в шаге 3).
+- TODO: блендинг Mul/MulX2 (нет в HDRP, 14 материалов: бутылки, стёкла, лужи), вода, DissolveAlpha, кубкарты отражений (заменяются HDRP/RT). ~10 моделей с материалом без .mat (кости, паук) — вероятно, материал задаётся в `.ent` (`SubMesh Material=`).
+- `.ent` (сущности): `ModelData` = Mesh + SubMesh (материал-override), Shapes, Bodies (масса, физ. материал, какие подмеши привязаны), Joints (двери — JointHinge), Bones, Animations; `UserDefinedVariables EntityType="SwingDoor|..."` + звуки/поведение. Префабы из .ent делать на шаге 4 вместе с механиками.
 
 ## Соглашения
 
