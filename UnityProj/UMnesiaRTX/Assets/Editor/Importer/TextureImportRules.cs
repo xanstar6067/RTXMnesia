@@ -41,6 +41,16 @@ namespace RTXMnesia.Importer
                     importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
                     importer.alphaSource = TextureImporterAlphaSource.None;
                     break;
+                case TextureRole.Lookup:
+                case TextureRole.Gui:
+                    importer.sRGBTexture = role == TextureRole.Gui;
+                    importer.mipmapEnabled = false;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                    importer.filterMode = UnityEngine.FilterMode.Bilinear;
+                    importer.anisoLevel = 0;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.npotScale = TextureImporterNPOTScale.None;
+                    break;
                 case TextureRole.Height:
                     importer.textureType = TextureImporterType.SingleChannel;
                     importer.sRGBTexture = false;

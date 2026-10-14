@@ -12,9 +12,11 @@ namespace RTXMnesia.Player
 
     /// <summary>
     /// The player (port of cLuxPlayer + cLuxInputHandler, movement part): a <see cref="HplCharacterBody"/>
-    /// with the normal move state, mouse look, lean and the head offsets that move the camera.
-    /// Logic runs in FixedUpdate at the HPL2 step (60 Hz), the camera is interpolated between steps and
-    /// turned every frame. Settings come from game.cfg (<see cref="gameConfig"/>).
+    /// with the normal move state, mouse look, lean, look-at and the head offsets that move the camera, plus the
+    /// values scripts change (health, sanity, oil, FOV / aspect / roll fades).
+    /// Logic runs at the HPL2 step (60 Hz): in FixedUpdate, or from the level's HplMap in the engine's order
+    /// (<see cref="steppedByMap"/>). The camera is interpolated between steps and turned every frame.
+    /// Settings come from game.cfg (<see cref="gameConfig"/>).
     /// Keys as in default_user_keys.cfg: WASD, Shift run, Space jump, Ctrl crouch, Q/E lean.
     /// F2 toggles a free camera, Esc releases the mouse.
     /// </summary>
@@ -42,18 +44,48 @@ namespace RTXMnesia.Player
         public bool smoothMouse = true;
 
         [Header("Script / state multipliers")]
+        [Tooltip("SetPlayerActive: off ignores all player input (cLuxInputHandler).")]
+        public bool active = true;
         public float scriptMoveSpeedMul = 1f;
         public float scriptRunSpeedMul = 1f;
         public float scriptJumpForceMul = 1f;
         public float lookSpeedMul = 1f;
         public bool jumpDisabled, crouchDisabled, noFallDamage;
+        public bool showCrossHairIcons = true;
+        public bool sanityDrainDisabled;
+        [Tooltip("Lantern state for scripts until the lantern exists (step 4.4).")]
+        public bool lanternActive, lanternDisabled;
 
         [Header("State")]
         public float health = 100f;
+        public float sanity = 100f;
+        public float lampOil = 100f;
+        public int tinderboxes;
+
+        [Tooltip("Set by HplMap: it calls StepLogic / StepPhysics in the engine's order instead of FixedUpdate.")]
+        public bool steppedByMap;
 
         public HplCharacterBody Body { get; private set; }
         public PlayerMoveNormal MoveState { get; private set; }
         public PlayerLean Lean { get; private set; }
+        public PlayerLookAt LookAt { get; private set; }
+        /// <summary>Radians, Unity convention: yaw turns right, pitch looks down.</summary>
+        public float Yaw => _yaw;
+        public float Pitch => _pitch;
+        /// <summary>Camera roll in radians, script roll plus lean roll.</summary>
+        public float Roll => _roll + _leanRoll;
+        public float FovMul => _fovMul;
+        public float AspectMul => _aspectMul;
+        public bool IsDead => health <= 0f;
+
+        /// <summary>AddSanity with a positive amount and the effect (sanity gain flash).</summary>
+        public event Action SanityGained;
+        /// <summary>GiveSanityDamage (hint, hit effect).</summary>
+        public event Action SanityHit;
+        /// <summary>Sanity reached 0 (insanity collapse, step 6).</summary>
+        public event Action InsanityCollapse;
+        /// <summary>Health reached 0 (death, step 6).</summary>
+        public event Action Died;
         public Vector3 BodySize { get; private set; }
         public Vector3 BodyCrouchSize { get; private set; }
         public Vector3 CameraPosAdd { get; private set; }
@@ -80,6 +112,8 @@ namespace RTXMnesia.Player
         float _yaw, _pitch; // radians, Unity convention: yaw turns right, pitch looks down
         float _pitchLimit = 70f * Mathf.Deg2Rad;
         float _fov;
+        float _fovMul = 1f, _fovMulGoal = 1f, _fovMulSpeed;
+        float _aspectMul = 1f, _aspectMulGoal = 1f, _aspectMulSpeed;
         float _roll, _rollGoal, _rollSpeedMul, _rollMaxSpeed;
         float _leanRoll, _leanRollGoal, _leanRollSpeedMul, _leanRollMaxSpeed;
 
@@ -139,6 +173,7 @@ namespace RTXMnesia.Player
 
             MoveState = new PlayerMoveNormal(this, cfg);
             Lean = new PlayerLean(this);
+            LookAt = new PlayerLookAt(this);
             MoveState.OnEnterState();
         }
 
@@ -199,6 +234,13 @@ namespace RTXMnesia.Player
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked) LockCursor(true);
             if (_freeCameraActive) return;
 
+            // cLuxInputHandler::UpdateGamePlayerInput: an inactive player gets no input at all.
+            if (!active)
+            {
+                held = default;
+                return;
+            }
+
             if (keyboard != null)
             {
                 // Held keys are applied in the next fixed step; presses are actions now (as cLuxInputHandler).
@@ -222,23 +264,42 @@ namespace RTXMnesia.Player
 
         void FixedUpdate()
         {
+            if (steppedByMap) return;
+            StepLogic(Time.fixedDeltaTime);
+            StepPhysics(Time.fixedDeltaTime);
+        }
+
+        /// <summary>
+        /// cLuxPlayer::Update: input of this step, move state, head offsets, helpers (lean, look-at), the collide
+        /// callbacks (<paramref name="collideCallbacks"/>, from the map), camera effects. The character body moves
+        /// in <see cref="StepPhysics"/> (the world update, after all modules).
+        /// </summary>
+        public void StepLogic(float dt, Action collideCallbacks = null)
+        {
             if (_freeCameraActive) return;
-            float dt = Time.fixedDeltaTime;
 
-            if (held.forward) Move(CharDir.Forward, 1f);
-            if (held.backward) Move(CharDir.Forward, -1f);
-            if (held.right) Move(CharDir.Right, 1f);
-            if (held.left) Move(CharDir.Right, -1f);
-            if (held.leanRight) Lean.SetLean(1f);
-            if (held.leanLeft) Lean.SetLean(-1f);
+            if (active)
+            {
+                if (held.forward) Move(CharDir.Forward, 1f);
+                if (held.backward) Move(CharDir.Forward, -1f);
+                if (held.right) Move(CharDir.Right, 1f);
+                if (held.left) Move(CharDir.Right, -1f);
+                if (held.leanRight) Lean.SetLean(1f);
+                if (held.leanLeft) Lean.SetLean(-1f);
+            }
 
-            // cLuxPlayer::Update order: move state, head offsets, helpers (lean), camera effects, then physics.
             MoveState.Update(dt);
             UpdateHeadPosAdd(dt);
             Lean.Update(dt);
-            UpdateCameraEffects(dt);
+            LookAt.Update(dt);
             PressedMove = false;
+            collideCallbacks?.Invoke();
+            UpdateCameraEffects(dt);
+        }
 
+        public void StepPhysics(float dt)
+        {
+            if (_freeCameraActive) return;
             Body.Step(dt);
         }
 
@@ -266,6 +327,10 @@ namespace RTXMnesia.Player
             playerCamera.transform.SetPositionAndRotation(
                 Body.InterpolatedCameraPosition(alpha),
                 Quaternion.Euler(_pitch * Mathf.Rad2Deg, _yaw * Mathf.Rad2Deg, (_roll + _leanRoll) * Mathf.Rad2Deg));
+            // FOV is vertical in both engines; the aspect multiplier squeezes the view (FadePlayerAspectMulTo).
+            playerCamera.fieldOfView = _fov * _fovMul;
+            if (_aspectMul == 1f) playerCamera.ResetAspect();
+            else playerCamera.aspect = (float)playerCamera.pixelWidth / Mathf.Max(1, playerCamera.pixelHeight) * _aspectMul;
         }
 
         // ------------------------------------------------------------------ input actions
@@ -372,11 +437,26 @@ namespace RTXMnesia.Player
             Body.cameraPosAdd = sum;
         }
 
+        /// <summary>Roll in radians (HPL2 and Unity camera roll have the same visual sense).</summary>
         public void FadeRollTo(float roll, float speedMul, float maxSpeed)
         {
             _rollGoal = roll;
             _rollSpeedMul = speedMul;
             _rollMaxSpeed = maxSpeed;
+        }
+
+        public void SetRoll(float roll) => _roll = _rollGoal = roll;
+
+        public void FadeFOVMulTo(float mul, float speed)
+        {
+            _fovMulGoal = mul;
+            _fovMulSpeed = speed;
+        }
+
+        public void FadeAspectMulTo(float mul, float speed)
+        {
+            _aspectMulGoal = mul;
+            _aspectMulSpeed = speed;
         }
 
         public void FadeLeanRollTo(float roll, float speedMul, float maxSpeed)
@@ -386,11 +466,21 @@ namespace RTXMnesia.Player
             _leanRollMaxSpeed = maxSpeed;
         }
 
-        // cLuxPlayer::UpdateCamera: roll and lean roll fade towards their goals.
+        // cLuxPlayer::UpdateCamera: FOV and aspect multipliers fade proportionally (no speed limit), roll and
+        // lean roll with a speed limit.
         void UpdateCameraEffects(float dt)
         {
+            FadeMul(ref _fovMul, _fovMulGoal, _fovMulSpeed, dt);
+            FadeMul(ref _aspectMul, _aspectMulGoal, _aspectMulSpeed, dt);
             Fade(ref _roll, _rollGoal, _rollSpeedMul, _rollMaxSpeed, dt);
             Fade(ref _leanRoll, _leanRollGoal, _leanRollSpeedMul, _leanRollMaxSpeed, dt);
+        }
+
+        static void FadeMul(ref float value, float goal, float speedMul, float dt)
+        {
+            if (value == goal) return;
+            value += dt * (goal - value) * speedMul;
+            if (Mathf.Abs(goal - value) < 0.004f) value = goal;
         }
 
         static void Fade(ref float value, float goal, float speedMul, float maxSpeed, float dt)
@@ -403,11 +493,70 @@ namespace RTXMnesia.Player
 
         // ------------------------------------------------------------------ misc
 
-        public void GiveDamage(float amount)
+        /// <summary>cLuxPlayer::GiveDamage (hud splash, flash and head spin come with step 6).</summary>
+        public void GiveDamage(float amount, bool lethal = false)
         {
             if (health <= 0f) return;
-            // Non-lethal damage leaves at least 10 health (cLuxPlayer::GiveDamage).
-            health = Mathf.Max(10f, health - amount);
+            health -= amount;
+            if (!lethal && health < 10f) health = 10f;
+            if (health <= 0f) Died?.Invoke();
+        }
+
+        public void SetHealth(float x)
+        {
+            if (health <= 0f && x <= 0f) return;
+            health = x;
+            if (health <= 0f) Died?.Invoke();
+        }
+
+        public void AddHealth(float x)
+        {
+            if ((health >= 100f && x > 0f) || health < 0f) return;
+            health = Mathf.Min(100f, health + x);
+            if (health <= 0f) Died?.Invoke();
+        }
+
+        public void SetSanity(float x) => sanity = x;
+
+        /// <summary>cLuxPlayer::AddSanity: capped at 100, below 0 starts the insanity collapse.</summary>
+        public void AddSanity(float x, bool showEffect = true)
+        {
+            if (sanity >= 100f && x > 0f) return;
+            sanity = Mathf.Min(100f, sanity + x);
+            if (sanity < 0f)
+            {
+                sanity = 0f;
+                InsanityCollapse?.Invoke();
+            }
+            if (x > 0f && showEffect) SanityGained?.Invoke();
+        }
+
+        /// <summary>cLuxPlayer::GiveSanityDamage: hint and hit effect, then <see cref="LowerSanity"/>.</summary>
+        public void GiveSanityDamage(float amount)
+        {
+            SanityHit?.Invoke();
+            LowerSanity(amount, true);
+            // TODO step 6 (insanity): cLuxPlayerSanity::StartHit (zoom and sound).
+        }
+
+        public void LowerSanity(float amount, bool useEffect)
+        {
+            if (health <= 0f) return;
+            sanity -= amount;
+            if (sanity < 0f)
+            {
+                sanity = 0f;
+                InsanityCollapse?.Invoke();
+            }
+            // TODO step 6 (insanity): useEffect → cLuxPlayerSanity::SetSanityLost.
+        }
+
+        public void SetLampOil(float x) => lampOil = x;
+
+        public void AddLampOil(float x)
+        {
+            if (lampOil >= 100f && x > 0f) return;
+            lampOil = Mathf.Clamp(lampOil + x, 0f, 100f);
         }
 
         public void PlaySound(string soundName)

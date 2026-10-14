@@ -15,6 +15,8 @@ namespace RTXMnesia.Importer
     {
         public const string ConfigRoot = AmnesiaPaths.ImportedAssetsRoot + "/Config";
         public const string GameConfig = "config/game.cfg";
+        public const string MenuConfig = "config/menu.cfg";
+        public const string KeysConfig = "config/default_user_keys.cfg";
 
         public static string AssetPathFor(string sourceRelative) =>
             ConfigRoot + "/" + Path.GetFileNameWithoutExtension(sourceRelative) + ".asset";

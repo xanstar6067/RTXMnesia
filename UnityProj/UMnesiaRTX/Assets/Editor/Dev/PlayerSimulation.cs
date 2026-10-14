@@ -1,8 +1,11 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
+using RTXMnesia.Hpl;
 using RTXMnesia.Importer;
 using RTXMnesia.Player;
+using RTXMnesia.ScriptApi;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -10,12 +13,16 @@ using UnityEngine.Rendering;
 namespace RTXMnesia.EditorDev
 {
     /// <summary>
-    /// Runs the player of a converted level without play mode (the scene is not saved): scripted input, fixed
-    /// 60 Hz steps, state logged to Logs/AmnesiaImport.log and camera shots to Logs/Player_&lt;map&gt;_NN_*.png.
+    /// Runs a converted level without play mode (the scene is not saved): scripted input, fixed 60 Hz steps, state
+    /// logged to Logs/AmnesiaImport.log and camera shots to Logs/Player_&lt;map&gt;_NN_*.png. If the level has an
+    /// <see cref="HplMap"/>, the steps go through it: the level script, its timers and callbacks, effects and HUD run
+    /// too, and script messages are copied into the log.
     /// Batch: -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch [-amnesiaMap maps/...map] [-script "..."]
-    /// (shots need a GPU: no -nographics). Script commands, ';'-separated, durations in seconds:
-    /// idle t | w/s/a/d t | run t | turn deg | pitch deg | crouch (toggle) | jump | leanr/leanl t |
+    /// [-scriptDebug] [-noScript] [-seed N] (shots need a GPU: no -nographics). Script commands, ';'-separated,
+    /// durations in seconds:
+    /// idle t | watch t interval | w/s/a/d t | run t | turn deg | pitch deg | crouch (toggle) | jump | leanr/leanl t |
     /// start AreaName | goto x y z [yawDeg] | shot name.
+    /// "watch" steps like idle and logs the script state every interval.
     /// </summary>
     public static class PlayerSimulation
     {
@@ -42,90 +49,173 @@ namespace RTXMnesia.EditorDev
                 return;
             }
 
-            Physics.SyncTransforms();
-            player.readDevices = false;
-            Call(player, "Awake");
-            Call(player, "Start");
-            float dt = Time.fixedDeltaTime;
-            log.Info($"Fixed step {dt:0.#####} s; start feet {player.Body.FeetPosition:F3} yaw {player.Body.Yaw * Mathf.Rad2Deg:0.#}°");
+            if (int.TryParse(ImportMenu.Arg("-seed", ""), out int seed)) HplMath.Seed(seed);
+            HplGame.Reset();
 
-            int shot = 0;
-            float time = 0f, maxSpeed = 0f, minY = float.MaxValue, maxY = float.MinValue;
-            void Step(int count)
+            float time = 0f;
+            void OnLog(string message, string stack, LogType type)
             {
-                maxSpeed = 0f;
-                minY = float.MaxValue;
-                maxY = float.MinValue;
-                for (int i = 0; i < count; i++)
+                if (!message.StartsWith("[Script")) return;
+                string line = $"t={time,6:0.00} {message}";
+                if (type == LogType.Error || type == LogType.Exception) log.Error(line);
+                else if (type == LogType.Warning) log.Warn(line);
+                else log.Info(line);
+            }
+            Application.logMessageReceived += OnLog;
+
+            try
+            {
+                Physics.SyncTransforms();
+                player.readDevices = false;
+                Call(player, "Awake");
+                Call(player, "Start");
+
+                var map = UnityEngine.Object.FindAnyObjectByType<HplMap>();
+                if (map != null)
                 {
-                    Call(player, "FixedUpdate");
-                    time += dt;
-                    Vector3 v = player.Body.GetVelocity(dt);
-                    maxSpeed = Mathf.Max(maxSpeed, new Vector2(v.x, v.z).magnitude);
-                    minY = Mathf.Min(minY, player.Body.FeetPosition.y);
-                    maxY = Mathf.Max(maxY, player.Body.FeetPosition.y);
+                    map.scriptDebug = ImportMenu.HasArg("-scriptDebug");
+                    map.runScript = !ImportMenu.HasArg("-noScript");
+                    map.logDebugMessages = true;
+                    map.Build();
+                    map.Begin();
+                    log.Info($"Map {map.mapFile}: script {map.Script?.GetType().Name ?? "none"}, {map.Entities.Count} script entities, " +
+                             $"debug {map.scriptDebug}");
                 }
-                player.SnapCamera();
-            }
-            void State(string what)
-            {
-                var b = player.Body;
-                Vector3 cam = player.playerCamera.transform.position - b.FeetPosition;
-                log.Info($"t={time,6:0.00} {what,-16} feet {b.FeetPosition:F3} y {minY:0.000}..{maxY:0.000} max {maxSpeed:0.00} m/s now {b.GetVelocity(dt).magnitude:0.00} " +
-                         $"ground {b.IsOnGround} size {b.ActiveSize} cam up {cam.y:0.000} side {Vector3.Dot(cam, b.Right):0.000} " +
-                         $"roll {player.playerCamera.transform.eulerAngles.z:0.0}");
-            }
 
-            foreach (string raw in script.Split(';', StringSplitOptions.RemoveEmptyEntries))
-            {
-                string[] p = raw.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (p.Length == 0) continue;
-                float arg = p.Length > 1 && float.TryParse(p[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float a) ? a : 1f;
-                int steps = Mathf.RoundToInt(arg / dt);
-                player.held = default;
-                switch (p[0])
+                float dt = Time.fixedDeltaTime;
+                log.Info($"Fixed step {dt:0.#####} s; start feet {player.Body.FeetPosition:F3} yaw {player.Body.Yaw * Mathf.Rad2Deg:0.#}°");
+
+                int shot = 0;
+                float maxSpeed = 0f, minY = float.MaxValue, maxY = float.MinValue;
+                void Step(int count, float logInterval = 0f)
                 {
-                    case "idle": Step(steps); break;
-                    case "w": player.held.forward = true; Step(steps); break;
-                    case "s": player.held.backward = true; Step(steps); break;
-                    case "a": player.held.left = true; Step(steps); break;
-                    case "d": player.held.right = true; Step(steps); break;
-                    case "run":
-                        player.held.forward = true;
-                        player.Run(true);
-                        Step(steps);
-                        player.Run(false);
-                        break;
-                    case "turn": player.AddLook(arg * Mathf.Deg2Rad, 0f); Step(1); break;
-                    case "pitch": player.AddLook(0f, arg * Mathf.Deg2Rad); Step(1); break;
-                    case "crouch": player.Crouch(true); Step(1); break;
-                    case "jump": player.Jump(true); Step(1); player.Jump(false); break;
-                    case "leanr": player.held.leanRight = true; Step(steps); break;
-                    case "leanl": player.held.leanLeft = true; Step(steps); break;
-                    case "start":
-                        var area = Array.Find(UnityEngine.Object.FindObjectsByType<RTXMnesia.World.AmnesiaArea>(FindObjectsInactive.Exclude),
-                                              x => x.name == (p.Length > 1 ? p[1] : ""));
-                        if (area == null) { log.Warn($"No area '{raw.Trim()}'"); continue; }
-                        player.PlaceAtStart(area);
-                        Step(1);
-                        break;
-                    case "goto":
-                        float F(int i) => float.Parse(p[i], System.Globalization.CultureInfo.InvariantCulture);
-                        player.PlaceAt(new Vector3(F(1), F(2), F(3)), p.Length > 4 ? F(4) * Mathf.Deg2Rad : 0f);
-                        Step(1);
-                        break;
-                    case "shot":
-                        if (shots)
+                    maxSpeed = 0f;
+                    minY = float.MaxValue;
+                    maxY = float.MinValue;
+                    float nextLog = time + logInterval;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (map != null) map.Step(dt);
+                        else Call(player, "FixedUpdate");
+                        time += dt;
+                        Vector3 v = player.Body.GetVelocity(dt);
+                        maxSpeed = Mathf.Max(maxSpeed, new Vector2(v.x, v.z).magnitude);
+                        minY = Mathf.Min(minY, player.Body.FeetPosition.y);
+                        maxY = Mathf.Max(maxY, player.Body.FeetPosition.y);
+                        if (logInterval > 0f && time >= nextLog - 1e-4f)
                         {
-                            string file = Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"Player_{mapName}_{shot++:00}_{(p.Length > 1 ? p[1] : "shot")}.png");
-                            ImportMenu.RenderToFile(player.playerCamera, file);
+                            ScriptState(log, map, player, time);
+                            nextLog += logInterval;
                         }
-                        break;
-                    default: log.Warn($"Unknown command '{raw.Trim()}'"); continue;
+                    }
+                    player.SnapCamera();
+                    if (map != null) map.hud.Refresh();
                 }
-                State(raw.Trim());
+                void State(string what)
+                {
+                    var b = player.Body;
+                    Vector3 cam = player.playerCamera.transform.position - b.FeetPosition;
+                    log.Info($"t={time,6:0.00} {what,-16} feet {b.FeetPosition:F3} y {minY:0.000}..{maxY:0.000} max {maxSpeed:0.00} m/s now {b.GetVelocity(dt).magnitude:0.00} " +
+                             $"ground {b.IsOnGround} size {b.ActiveSize} cam up {cam.y:0.000} side {Vector3.Dot(cam, b.Right):0.000} " +
+                             $"roll {player.playerCamera.transform.eulerAngles.z:0.0}");
+                }
+
+                foreach (string raw in script.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string[] p = raw.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (p.Length == 0) continue;
+                    float Arg(int i, float fallback) =>
+                        p.Length > i && float.TryParse(p[i], NumberStyles.Float, CultureInfo.InvariantCulture, out float a) ? a : fallback;
+                    float arg = Arg(1, 1f);
+                    int steps = Mathf.RoundToInt(arg / dt);
+                    player.held = default;
+                    // The input handler gives an inactive player no input (cLuxInputHandler).
+                    bool input = player.active;
+                    switch (p[0])
+                    {
+                        case "idle": Step(steps); break;
+                        case "watch": Step(steps, Arg(2, 1f)); break;
+                        case "w": player.held.forward = true; Step(steps); break;
+                        case "s": player.held.backward = true; Step(steps); break;
+                        case "a": player.held.left = true; Step(steps); break;
+                        case "d": player.held.right = true; Step(steps); break;
+                        case "run":
+                            player.held.forward = true;
+                            if (input) player.Run(true);
+                            Step(steps);
+                            player.Run(false);
+                            break;
+                        case "turn": if (input) player.AddLook(arg * Mathf.Deg2Rad, 0f); Step(1); break;
+                        case "pitch": if (input) player.AddLook(0f, arg * Mathf.Deg2Rad); Step(1); break;
+                        case "crouch": if (input) player.Crouch(true); Step(1); break;
+                        case "jump": if (input) player.Jump(true); Step(1); player.Jump(false); break;
+                        case "leanr": player.held.leanRight = true; Step(steps); break;
+                        case "leanl": player.held.leanLeft = true; Step(steps); break;
+                        case "start":
+                            var area = Array.Find(UnityEngine.Object.FindObjectsByType<RTXMnesia.World.AmnesiaArea>(FindObjectsInactive.Include),
+                                                  x => x.name == (p.Length > 1 ? p[1] : ""));
+                            if (area == null) { log.Warn($"No area '{raw.Trim()}'"); continue; }
+                            player.PlaceAtStart(area);
+                            Step(1);
+                            break;
+                        case "goto":
+                            float F(int i) => float.Parse(p[i], CultureInfo.InvariantCulture);
+                            player.PlaceAt(new Vector3(F(1), F(2), F(3)), p.Length > 4 ? F(4) * Mathf.Deg2Rad : 0f);
+                            Step(1);
+                            break;
+                        case "fx":
+                            // fx sepia|trail|fade|blur|flash|off value [blurStartDist]: set a screen effect at once.
+                            if (map == null) { log.Warn("fx needs an HplMap"); continue; }
+                            var fx = map.effects;
+                            string which = p.Length > 1 ? p[1] : "";
+                            float v = Arg(2, 1f);
+                            switch (which)
+                            {
+                                case "sepia": fx.Sepia.FadeTo(v, 1000f); break;
+                                case "trail": fx.ImageTrail.FadeTo(v, 1000f); break;
+                                case "fade": fx.Fade.FadeOut(0f); fx.Fade.Alpha = v; break;
+                                case "blur": fx.RadialBlur.FadeTo(v, 1000f); fx.RadialBlur.SetBlurStartDist(Arg(3, 0f)); break;
+                                case "flash": fx.Flash.Start(0.001f, 10f, 0.001f); break;
+                                case "off": fx.ResetAll(); break;
+                                default: log.Warn($"Unknown effect '{which}'"); continue;
+                            }
+                            Step(1);
+                            break;
+                        case "shot":
+                            if (shots)
+                            {
+                                string file = Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"Player_{mapName}_{shot++:00}_{(p.Length > 1 ? p[1] : "shot")}.png");
+                                ImportMenu.RenderToFile(player.playerCamera, file);
+                            }
+                            break;
+                        default: log.Warn($"Unknown command '{raw.Trim()}'"); continue;
+                    }
+                    State(raw.Trim());
+                    if (map != null) ScriptState(log, map, player, time);
+                }
+            }
+            finally
+            {
+                Application.logMessageReceived -= OnLog;
             }
             log.Save($"Player simulation: {mapName}");
+        }
+
+        /// <summary>What the level script controls: player state, camera fades, screen effects, texts, timers.</summary>
+        static void ScriptState(ImportLog log, HplMap map, AmnesiaPlayer player, float time)
+        {
+            if (map == null) return;
+            var e = map.effects;
+            var hud = map.hud;
+            string voice = e.PlayVoice.Active ? e.PlayVoice.CurrentVoice : "-";
+            string Short(string s) => string.IsNullOrEmpty(s) ? "-" : (s.Length > 40 ? s.Substring(0, 40) + "…" : s).Replace('\n', ' ');
+            log.Info($"t={time,6:0.00}   script: active {player.active} feet {player.Body.FeetPosition:F2} yaw {player.Yaw * Mathf.Rad2Deg:0} " +
+                     $"pitch {player.Pitch * Mathf.Rad2Deg:0} roll {player.Roll * Mathf.Rad2Deg:0} fov×{player.FovMul:0.00} " +
+                     $"aspect×{player.AspectMul:0.00} move×{player.scriptMoveSpeedMul:0.00} look×{player.lookSpeedMul:0.00} lookAt {player.LookAt.Active} | " +
+                     $"fade {e.Fade.Alpha:0.00} trail {e.ImageTrail.Amount:0.00} sepia {e.Sepia.Amount:0.00} blur {e.RadialBlur.Size:0.00} " +
+                     $"flash {e.Flash.Alpha:0.00} | voice {voice} \"{Short(e.PlayVoice.Active ? e.PlayVoice.CurrentText : "")}\" | " +
+                     $"msg \"{Short(hud.Messages.Alpha > 0f ? hud.Messages.Text : "")}\" hint \"{Short(hud.Hints.Alpha > 0f ? hud.Hints.Text : "")}\" " +
+                     $"quest {hud.Messages.QuestAlpha:0.00} | timers {map.TimerCount} sanity {player.sanity:0}");
         }
 
         static void Call(object target, string method) =>

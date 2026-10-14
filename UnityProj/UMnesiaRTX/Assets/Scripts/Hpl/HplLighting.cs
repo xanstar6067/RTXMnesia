@@ -43,5 +43,24 @@ namespace RTXMnesia.Hpl
             float k = UnitRadiance;
             return new Color(linear.r * k, linear.g * k, linear.b * k, hplColor.a);
         }
+
+        /// <summary>
+        /// HPL2 fog (deferred_fog_frag.glsl: alpha = ((d - start) / (end - start))^falloff × color.a, constant color)
+        /// as HDRP fog: 1 - exp(-d / meanFreePath), capped at maxFogDistance. Matched at the fog end.
+        /// </summary>
+        public static void ApplyFog(UnityEngine.Rendering.HighDefinition.Fog fog, bool active, Color color, float fogEnd)
+        {
+            fog.enabled.Override(active);
+            if (!active) return;
+            float end = Mathf.Max(1f, fogEnd);
+            float alpha = Mathf.Clamp(color.a, 0.01f, 0.99f);
+            fog.colorMode.Override(UnityEngine.Rendering.HighDefinition.FogColorMode.ConstantColor);
+            fog.color.Override(Radiance(new Color(color.r, color.g, color.b, 1f)));
+            fog.meanFreePath.Override(-end / Mathf.Log(1f - alpha));
+            fog.maxFogDistance.Override(end);
+            fog.baseHeight.Override(10000f);
+            fog.maximumHeight.Override(10001f);
+            fog.enableVolumetricFog.Override(false);
+        }
     }
 }

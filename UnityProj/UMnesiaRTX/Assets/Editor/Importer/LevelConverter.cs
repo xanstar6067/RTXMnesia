@@ -4,8 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using RTXMnesia.Dev;
+using RTXMnesia.Effects;
 using RTXMnesia.Hpl;
 using RTXMnesia.Player;
+using RTXMnesia.ScriptApi;
+using RTXMnesia.Ui;
 using RTXMnesia.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -106,7 +109,14 @@ namespace RTXMnesia.Importer
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = new GameObject(_mapName);
-            root.AddComponent<AmnesiaLevel>().mapFile = _mapRelative;
+            var level = root.AddComponent<AmnesiaLevel>();
+            level.mapFile = _mapRelative;
+            level.fogActive = mapData.Bool("FogActive");
+            level.fogColor = mapData.Color("FogColor", Color.white);
+            level.fogStart = mapData.Float("FogStart");
+            level.fogEnd = mapData.Float("FogEnd", 40f);
+            level.fogFalloffExp = mapData.Float("FogFalloffExp", 1f);
+            level.fogCulling = mapData.Bool("FogCulling", true);
             Transform Group(string name)
             {
                 var group = new GameObject(name).transform;
@@ -142,6 +152,7 @@ namespace RTXMnesia.Importer
             }
 
             BuildEnvironment(mapData, root.transform);
+            BuildScriptRuntime(root);
 
             AssetDatabase.SaveAssets();
             EditorSceneManager.MarkSceneDirty(scene);
@@ -978,24 +989,8 @@ namespace RTXMnesia.Importer
             var tonemapping = profile.Add<Tonemapping>(true);
             tonemapping.mode.Override(TonemappingMode.None);
 
-            // deferred_fog_frag.glsl: alpha = ((d - start) / (end - start))^falloff × color.a, constant color.
-            // HDRP fog: 1 - exp(-d / meanFreePath), capped at maxFogDistance. Matched at the fog end.
             var fog = profile.Add<Fog>(true);
-            bool fogActive = mapData.Bool("FogActive");
-            fog.enabled.Override(fogActive);
-            if (fogActive)
-            {
-                Color color = mapData.Color("FogColor", Color.white);
-                float end = Mathf.Max(1f, mapData.Float("FogEnd", 40f));
-                float alpha = Mathf.Clamp(color.a, 0.01f, 0.99f);
-                fog.colorMode.Override(FogColorMode.ConstantColor);
-                fog.color.Override(HplLighting.Radiance(new Color(color.r, color.g, color.b, 1f)));
-                fog.meanFreePath.Override(-end / Mathf.Log(1f - alpha));
-                fog.maxFogDistance.Override(end);
-                fog.baseHeight.Override(10000f);
-                fog.maximumHeight.Override(10001f);
-                fog.enableVolumetricFog.Override(false);
-            }
+            HplLighting.ApplyFog(fog, mapData.Bool("FogActive"), mapData.Color("FogColor", Color.white), mapData.Float("FogEnd", 40f));
             foreach (var component in profile.components) AssetDatabase.AddObjectToAsset(component, profile);
             EditorUtility.SetDirty(profile);
 
@@ -1041,6 +1036,60 @@ namespace RTXMnesia.Importer
             playerObject.transform.SetPositionAndRotation(start.position + new Vector3(0f, 0.05f, 0f),
                 forward.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(forward) : Quaternion.identity);
             cameraObject.transform.localPosition = new Vector3(0f, EyeHeight(), 0f);
+        }
+
+        /// <summary>
+        /// The level's runtime for scripts: <see cref="HplMap"/> (finds the C# port of the .hps by its map path),
+        /// screen effects with their shader and sepia table, the HUD with the quest icon, game / menu configs and
+        /// the texts of the language.
+        /// </summary>
+        void BuildScriptRuntime(GameObject root)
+        {
+            var map = root.AddComponent<HplMap>();
+            map.mapFile = _mapRelative;
+            map.gameConfig = _gameConfig;
+            map.menuConfig = ConfigConverter.Convert(ConfigConverter.MenuConfig, _log);
+            map.keysConfig = ConfigConverter.Convert(ConfigConverter.KeysConfig, _log);
+            map.language = LanguageConverter.Convert(LanguageConverter.DefaultLanguage, _log);
+            map.player = Object.FindAnyObjectByType<AmnesiaPlayer>();
+
+            var effects = root.AddComponent<HplEffects>();
+            effects.screenEffectsShader = Shader.Find(HplScreenEffectsPass.ShaderName);
+            if (effects.screenEffectsShader == null) _log.Error($"Shader {HplScreenEffectsPass.ShaderName} not found");
+            effects.sepiaLookup = RuntimeTexture("colorconv_sepia.tga", TextureRole.Lookup);
+            map.effects = effects;
+
+            var hud = root.AddComponent<HplHud>();
+            string questIcon = map.menuConfig != null ? map.menuConfig.GetString("Messages", "QuestAddedIcon") : "";
+            hud.questAddedIcon = RuntimeTexture(questIcon, TextureRole.Gui);
+            map.hud = hud;
+
+            var script = HplScript.FindScriptType(_mapRelative);
+            if (script != null) _log.Info($"Level script: {script.FullName}");
+            else _log.Warn($"No level script port for {_mapRelative} yet (the level runs without its events)");
+        }
+
+        /// <summary>A game texture the runtime needs (lookup tables, HUD images), converted if missing.</summary>
+        Texture2D RuntimeTexture(string reference, TextureRole role)
+        {
+            if (string.IsNullOrEmpty(reference)) return null;
+            string file = _index.Find(reference);
+            if (file == null)
+            {
+                _log.Warn($"Texture '{reference}' not found in source/");
+                return null;
+            }
+            try
+            {
+                string assetPath = TextureConverter.Convert(file, role, null, false, out bool written);
+                if (written) AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+                return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn($"Texture {AmnesiaPaths.ToSourceRelative(file)}: {ex.Message}");
+                return null;
+            }
         }
 
         // Camera above the feet when standing: body height + CameraPosAdd (CharacterBody::UpdateCamera).

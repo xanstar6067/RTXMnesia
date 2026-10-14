@@ -7,7 +7,7 @@ namespace RTXMnesia.World
     /// <summary>
     /// An HPL2 point or spot light. Keeps the original parameters, because level scripts work in HPL2 terms
     /// (FadeLightTo(color, radius, time)), and drives the HDRP light from them via <see cref="HplLighting"/>.
-    /// Flicker parameters are stored for later; the light is static for now.
+    /// At runtime it does what iLight::UpdateLight does each step: color / radius fades and flickering.
     /// </summary>
     [RequireComponent(typeof(Light))]
     public class AmnesiaLight : MonoBehaviour
@@ -19,7 +19,7 @@ namespace RTXMnesia.World
         public string falloffMap;
         public string gobo;
 
-        [Header("Flicker (stored, not simulated yet)")]
+        [Header("Flicker")]
         public bool flickerActive;
         public Color flickerOffColor = Color.black;
         public float flickerOffRadius;
@@ -29,6 +29,17 @@ namespace RTXMnesia.World
         public Vector2 flickerOnFadeLength;
         public Vector2 flickerOffFadeLength;
         public string flickerOnSound, flickerOffSound, flickerOnPS, flickerOffPS;
+
+        // Runtime state (iLight): current color / radius, fade and flicker.
+        Color _color, _colorAdd, _destColor, _flickerOnColor;
+        float _radius, _radiusAdd, _destRadius, _fadeTime, _flickerOnRadius;
+        bool _flickering, _flickerOn;
+        float _flickerTime, _flickerStateLength;
+        bool _runtime;
+
+        public Color CurrentColor => _runtime ? _color : diffuseColor;
+        public float CurrentRadius => _runtime ? _radius : radius;
+        public bool Visible => TryGetComponent(out Light l) && l.enabled;
 
         public void Apply() => Apply(diffuseColor, radius);
 
@@ -47,6 +58,88 @@ namespace RTXMnesia.World
             target.lightUnit = LightUnit.Candela;
             target.intensity = HplLighting.Candela(lightRadius) * Mathf.GammaToLinearSpace(max);
             target.range = lightRadius;
+        }
+
+        /// <summary>Start of the map: current values from the map data, flicker as iLight::SetFlicker leaves it.</summary>
+        public void InitRuntime()
+        {
+            _runtime = true;
+            _color = diffuseColor;
+            _radius = radius;
+            _fadeTime = 0f;
+            _flickerOnColor = _color;
+            _flickerOnRadius = _radius;
+            _flickerOn = true;
+            _flickerTime = 0f;
+            _flickerStateLength = HplMath.RandRectf(flickerOnLength.x, flickerOnLength.y);
+            _flickering = flickerActive;
+        }
+
+        /// <summary>iLight::FadeTo: linear change of color and radius over the time.</summary>
+        public void FadeTo(Color color, float toRadius, float time)
+        {
+            if (time <= 0f) time = 0.0001f;
+            _fadeTime = time;
+            _colorAdd = (color - _color) / time;
+            _radiusAdd = (toRadius - _radius) / time;
+            _destRadius = toRadius;
+            _destColor = color;
+        }
+
+        public void SetVisible(bool visible)
+        {
+            if (TryGetComponent(out Light l)) l.enabled = visible;
+        }
+
+        public void SetFlickerActive(bool active) => _flickering = active;
+
+        void SetColorAndRadius(Color color, float lightRadius)
+        {
+            _color = color;
+            _radius = lightRadius;
+            Apply(_color, _radius);
+        }
+
+        /// <summary>iLight::UpdateLight, every world step.</summary>
+        public void UpdateLight(float timeStep)
+        {
+            if (!_runtime) return;
+
+            if (_fadeTime > 0f)
+            {
+                SetColorAndRadius(_color + _colorAdd * timeStep, _radius + _radiusAdd * timeStep);
+                _fadeTime -= timeStep;
+                if (_fadeTime <= 0f)
+                {
+                    _fadeTime = 0f;
+                    SetColorAndRadius(_destColor, _destRadius);
+                }
+            }
+
+            if (_flickering && _fadeTime <= 0f)
+            {
+                if (_flickerOn)
+                {
+                    if (_flickerTime >= _flickerStateLength)
+                    {
+                        _flickerOn = false;
+                        if (!flickerFade) SetColorAndRadius(flickerOffColor, flickerOffRadius);
+                        else FadeTo(flickerOffColor, flickerOffRadius, HplMath.RandRectf(flickerOffFadeLength.x, flickerOffFadeLength.y));
+                        // TODO step 6 (sound) / particles: FlickerOffSound, FlickerOffPS.
+                        _flickerTime = 0f;
+                        _flickerStateLength = HplMath.RandRectf(flickerOffLength.x, flickerOffLength.y);
+                    }
+                }
+                else if (_flickerTime >= _flickerStateLength)
+                {
+                    _flickerOn = true;
+                    if (!flickerFade) SetColorAndRadius(_flickerOnColor, _flickerOnRadius);
+                    else FadeTo(_flickerOnColor, _flickerOnRadius, HplMath.RandRectf(flickerOnFadeLength.x, flickerOnFadeLength.y));
+                    _flickerTime = 0f;
+                    _flickerStateLength = HplMath.RandRectf(flickerOnLength.x, flickerOnLength.y);
+                }
+                _flickerTime += timeStep;
+            }
         }
     }
 }

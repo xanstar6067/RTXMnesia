@@ -20,7 +20,7 @@
 
 ## Состояние Unity-проекта
 
-HDRP-база (`Assets/Editor/ConfigureHDRP.cs`, меню Tools > RTXMnesia > Configure HDRP, `Assets/Settings/*`, `SampleScene`), импортёры ресурсов и уровней (`Assets/Editor/Importer`), компоненты уровня и игрок (`Assets/Scripts`). Первый уровень: `Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity` (генерируется, не в git), в нём игрок — Play и ходить.
+HDRP-база (`Assets/Editor/ConfigureHDRP.cs`, меню Tools > RTXMnesia > Configure HDRP, `Assets/Settings/*`, `SampleScene`), импортёры ресурсов и уровней (`Assets/Editor/Importer`), компоненты уровня, игрок и рантайм скриптов уровней (`Assets/Scripts`). Первый уровень: `Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity` (генерируется, не в git). В нём Play запускает скрипт уровня — вступление, пробуждение, события по зонам; без звука и частиц.
 Fixed Timestep = 1/60 (как шаг логики HPL2, `EngineInitVars mlUpdateRate`).
 Hardware RT не включён. Подробности: `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.
 Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe -batchmode -nographics -quit -projectPath ... -executeMethod ...`.
@@ -70,7 +70,7 @@ Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Edito
 - Объём: в итоге вся игра, но идём по шагам; первая цель — **глава 1** (`maps/main/ch01`, 15 карт, начиная с `00_rainy_hall`).
 - Скрипты уровней портируются **вручную на C#** (без встраивания AngelScript). Каждая карта документируется в `docs/ScriptPort/` по шаблону из README; код оригинала туда не копируется, только ссылки `файл:строка`.
 - После переноса функции API обновлять её статус в `docs/ScriptPort/api.md`.
-- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели ✓; префабы .ent → вместе с шагом 4) → 3) импорт одного уровня ✓ (`00_rainy_hall`; частицы .ps — заглушки) → 4) игрок: 4.1 передвижение ✓, 4.2 физика сущностей (Rigidbody, джоинты, физ. материалы), 4.3 взаимодействие (фокус/прицел, Grab, двери, ящики, рычаги, колёса), 4.4 лестницы, фонарь → 5) скрипты уровней → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
+- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели ✓; префабы .ent → вместе с шагом 4) → 3) импорт одного уровня ✓ (`00_rainy_hall`; частицы .ps — заглушки) → 4) игрок: 4.1 передвижение ✓, 4.2 физика сущностей (Rigidbody, джоинты, физ. материалы), 4.3 взаимодействие (фокус/прицел, Grab, двери, ящики, рычаги, колёса), 4.4 лестницы, фонарь → 5) скрипты уровней (идёт: рантайм, эффекты, HUD, `00_rainy_hall` ✓; к шагу 5 перешли до шагов 4.2–4.4, их функции в API пока заглушки) → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
 
 ## Импортёры (Assets/Editor/Importer, namespace RTXMnesia.Importer)
 
@@ -114,7 +114,8 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
 - Свет → HDRP через `AmnesiaLight` (хранит параметры HPL, включая flicker — пока не симулируется). Пересчёт яркости — `Assets/Scripts/Hpl/HplLighting.cs`: фиксированная экспозиция EV100 = 3; HPL-свет почти не затухает в радиусе, HDRP — 1/d², совпадение на 0.5 радиуса (`ReferenceDistance`); `Candela = π·d²·1.2·2^EV`. Spot с gobo → Pyramid + cookie (роль текстуры `Cookie`, перевёрнута по вертикали, как проецирует HPL).
 - Эмиссия Lit и цвет тумана в HDRP экспонируются → × `UnitRadiance` (1.2·2^EV); **цвет HDRP/Unlit не экспонируется** (ShaderPassForwardUnlit: `_DeExposureMultiplier` = 1) → цвет HPL как есть. При смене EV — перегнать материалы и уровень.
 - Билборды: FixedAxis — обычный MeshRenderer; Point/Axis рисует скрытый несохраняемый дочерний объект `AmnesiaBillboard` ([ExecuteAlways], поворот к камере в `beginCameraRendering`, работает и в Scene view). TODO: ореолы (IsHalo) в HPL рисуются без depth test с затуханием по occlusion query — пока с обычным depth test; связь билборда со светом (ConnectLight).
-- Окружение: Volume — без неба (HPL без скайбокса не даёт ambient), фикс. экспозиция, без тонмаппинга, туман HDRP подобран так, что на FogEnd непрозрачность = alpha цвета тумана. Игрок (`AmnesiaPlayer` + камера, фон чёрный) на PlayerStartArea_1; `config/game.cfg` → `Assets/AmnesiaImported/Config/game.asset` (`HplConfig`) при каждом импорте уровня.
+- Окружение: Volume — без неба (HPL без скайбокса не даёт ambient), фикс. экспозиция, без тонмаппинга, туман HDRP подобран так, что на FogEnd непрозрачность = alpha цвета тумана (`HplLighting.ApplyFog`; параметры тумана карты — в `AmnesiaLevel`, скрипты меняют их в игре). Игрок (`AmnesiaPlayer` + камера, фон чёрный) на PlayerStartArea_1; `config/game.cfg`, `config/menu.cfg` и `config/default_user_keys.cfg` → `Assets/AmnesiaImported/Config/*.asset` (`HplConfig`) при каждом импорте уровня.
+- На корне сцены — рантайм скриптов: `HplMap` (+ `HplEffects` с шейдером и таблицей сепии, `HplHud` с иконкой записи). Тексты — `LanguageConverter` → `Assets/AmnesiaImported/Lang/russian.asset` (`HplLanguage`). Порядок файлов как в HPL2, первая запись имени побеждает: `config/lang_main/russian.lang`, `config/base_russian.lang`, затем английские для недостающих. Ещё в нём список `.ogg` папки языка (`lang/rus`) с длительностями из заголовков Ogg (`OggInfo`). Нужные рантайму текстуры игры конвертируются ролями `Lookup` (линейная, без мипов) и `Gui`.
 - PlayerStart: игрок смотрит вдоль **+Z** зоны (`cLuxAreaNodeLoader_PlayerStart`: forward = R·(0,0,1)), без разворота на 180°.
 
 ## Игрок (шаг 4, Assets/Scripts/Player, namespace RTXMnesia.Player)
@@ -123,12 +124,92 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
 - `HplCharacterBody` — порт `iCharacterBody` (CharacterBody.cpp): не Rigidbody, а вертикальный цилиндр, который двигается скоростями по направлениям (ускорение/торможение/разворот), гравитацией и силами, и выталкивается из мира после каждого шага; ступени — лучами (AccurateClimbing: 3 луча), камера на высоте стоячего тела + `CameraPosAdd`, сглаживание по `CameraSmoothPosNum` шагам. Формы — выпуклые MeshCollider-цилиндры на слое 2 (Ignore Raycast: их не видят запросы по умолчанию); неактивный размер (присед/стоя) — trigger. Не портировано: прилипание к движущимся телам (GravityAttachment), соединение с телом (Push).
 - `HplPhysics.CheckShapeWorldCollision` — аналог `iPhysicsWorld::CheckShapeWorldCollision`: OverlapBox + `Physics.ComputePenetration`, вектор выталкивания = покомпонентный максимум по контактам; с одним коллайдером до 4 итераций (PhysX даёт одно разделение на пару, Newton — список контактов). Тела с `CollideCharacter=false` и триггеры игнорируются.
 - `PlayerMoveNormal` — `cLuxMoveState_Normal`: ходьба/бег/присед/прыжок (сила прыжка + ослабление гравитации 0.22 с), покачивание головы и шаги на минимуме, отскок головы при приземлении, урон от падения. `PlayerLean` — `cLuxPlayerLean` (до 0.5 м и 15°, голова-цилиндр останавливается о стены).
-- `AmnesiaPlayer` — `cLuxPlayer` + `cLuxInputHandler`: логика в FixedUpdate (60 Гц), камера интерполируется между шагами, мышь — каждый кадр: пиксели × чувствительность / (1.7 × высота экрана) × 2 рад, сглаживание как `GetSmoothMousePos` (веса 0.7^возраст в шагах 60 Гц — не зависит от FPS), питч ±70°. Смещения головы `HeadPosAdd` (Main/Bob/Lean/…) как `MoveHeadPosAdd`. Клавиши: WASD, Shift, Space, Ctrl (переключает присед), Q/E наклон, F2 свободная камера (`FlyCamera`), Esc отпускает мышь. Звуки (шаги, прыжок) — пока события/заглушки до шага 6.
+- `AmnesiaPlayer` — `cLuxPlayer` + `cLuxInputHandler`:
+  - логика 60 Гц разделена на `StepLogic` и `StepPhysics`. На уровне со скриптом их вызывает `HplMap` в порядке движка (`steppedByMap`), иначе FixedUpdate;
+  - камера интерполируется между шагами;
+  - мышь — каждый кадр: пиксели × чувствительность / (1.7 × высота экрана) × 2 рад, сглаживание как `GetSmoothMousePos` (веса 0.7^возраст в шагах 60 Гц — не зависит от FPS), питч ±70°;
+  - смещения головы `HeadPosAdd` (Main/Bob/Lean/Script/ScreenShake/…) как `MoveHeadPosAdd`: x — вдоль правой оси тела, z — вдоль forward, без зеркала;
+  - для скриптов: `active` (неактивный игрок не получает ввода), затухания FOV/aspect/крена как `cLuxPlayer::UpdateCamera`, `PlayerLookAt` (порт `cLuxPlayerLookAt`; углы считаются в терминах HPL2: yaw_HPL = π − yaw, pitch_HPL = −pitch, крен совпадает), здоровье/рассудок/масло с событиями для эффектов;
+  - клавиши: WASD, Shift, Space, Ctrl (переключает присед), Q/E наклон, F2 свободная камера (`FlyCamera`), Esc отпускает мышь;
+  - звуки (шаги, прыжок) — заглушки до шага 6.
 - Проверка без Play: `-executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch [-amnesiaMap ...] [-script "start PlayerStartArea_x2; turn 90; w 6; run 4; crouch; jump; leanr 1; shot name"]` → состояние в `Logs/AmnesiaImport.log`, снимки `Logs/Player_*.png` (без `-nographics`). Проверено на 00_rainy_hall: шаг 2.5 м/с, бег 4.25, лестница PlayerStartArea_x2 вниз/вверх, камера 1.75 / 1.15 (присед), прыжок ~1 м. PlayerStartArea_x1 — отладочный старт снаружи уровня (оттуда можно уйти в пустоту, как и в оригинале).
+
+## Скрипты уровней (шаг 5, Assets/Scripts/ScriptApi, Effects, Ui, Levels)
+
+**Порт уровня.** Класс `: HplScript` с атрибутом `[HplMapScript("maps/main/chXX/<карта>.map")]` в `Assets/Scripts/Levels/ChXX/`. `HplMap` находит его по пути карты, переимпорт не нужен. Журнал — `docs/ScriptPort/chXX/<карта>.md`, статусы функций — `docs/ScriptPort/api.md`.
+- Функции движка — в `HplScript*.cs` с оригинальными именами и параметрами (порт `LuxScriptHandler.cpp`). Порт читается как `.hps`.
+- Колбэки вызываются по имени, как в AngelScript. В порте имена писать через `nameof(...)`; динамические имена остаются строками.
+- Преобразования AngelScript → C#:
+  - `int x = RandFloat(...)` → `(int)RandFloat(...)` (отбрасывание);
+  - `or`/`and` → `||`/`&&`;
+  - `0.7` → `0.7f`.
+- Глобальные переменные скрипта — поля класса. Локальные и глобальные переменные хранятся строками, как в HPL2 (`HplMath`: atoi/atof, `%.20f`).
+- Части движка, которых ещё нет (звук, частицы `.ps`, физика пропов 4.2, взаимодействие 4.3, фонарь 4.4, враги/безумие/журнал/инвентарь/сохранения 6), — `NotPorted`: одно предупреждение `[Script] X: skipped, needs …` на функцию. Состояние (двери, лампы, предметы, квесты) при этом хранится, `Get*` возвращают заданное.
+- Ошибки, которые пишет сам движок (`Error()` HPL2 — в `hpl.log`, игра продолжается; например, скрипт просит свет, которого нет в карте), — `HplLog.Error` → предупреждение `[Script] ERROR: …`. Ошибка Unity при включённом в консоли Error Pause ставит Play на паузу. Настоящие ошибки Unity (`HplLog.PortError`, исключения) — только для ошибок порта.
+
+**`HplMap` (порт `cLuxMap` и порядка обновления).**
+- Реестр сущностей скрипта, имена без учёта регистра:
+  - области, кроме PlayerStart/PathNode/PosNode;
+  - пропы и враги из `.ent` с Lux-типами; StaticProp не сущность.
+- Тела `<сущность>_<тело>`, свет по имени, PlayerStart.
+- Таймеры: `cLuxMap::UpdateTimers` — сначала все счётчики, потом вызовы; добавленные в колбэке не срабатывают в тот же шаг.
+- Шаг 60 Гц:
+  1. таймеры;
+  2. логика активных сущностей: коллбэки столкновений и взгляда;
+  3. игрок (`StepLogic`), в его конце коллбэки «Player»;
+  4. HUD;
+  5. эффекты;
+  6. тело игрока (`StepPhysics`);
+  7. свет (`AmnesiaLight.UpdateLight`: `FadeTo`, мерцание).
+- `OnStart`/`OnEnter` — после постановки игрока.
+- Флаги: `scriptDebug` (`ScriptDebugOn`), `logDebugMessages` (`AddDebugMessage` в консоль; в HPL2 видно только в отладке), `runScript`.
+
+**Коллбэки столкновений** (`HplCollideCallbacks`, порт `iLuxCollideCallbackContainer`).
+- Тест — `Physics.ComputePenetration` по текущим transform, без `Collider.bounds`: bounds обновляются только синхронизацией PhysX и отстают у тела, которое двигает код.
+- Сохранена особенность HPL2: тело i владельца сравнивается с телом i другой сущности; области и персонажи отдают своё единственное тело для любого i.
+
+**Эффекты** (`HplEffects`, порт `cLuxEffectHandler`) рисует `HplScreenEffectsPass`: HDRP custom pass AfterPostProcess, создаётся в рантайме, глобальные настройки HDRP не нужны. Шейдер `Assets/Shaders/HplScreenEffects.shader`.
+- Порядок HPL2: ImageTrail → RadialBlur → Sepia (1D LUT `colorconv_sepia.tga`, по каналам) → затемнение (× (1 − alpha)) и вспышки (+).
+- Расчёт в sRGB-значениях, как в гамма-рендере HPL2.
+- Вес нового кадра следа: `exp(-amount / frameTime × 0.015)`, frameTime — реальное время между рендерами.
+- Тряска экрана — `HeadPosAdd.ScreenShake`.
+- Голоса (`PlayVoiceEffect`) до шага 6 не звучат: реплика длится как её `.ogg` и показывает субтитры. Поэтому колбэк окончания голоса срабатывает вовремя.
+
+**HUD** (`HplHud`, порты `cLuxMessageHandler` и `cLuxHintHandler`).
+- Субтитры, `SetMessage`, подсказки (данные/заблокированные — в `HplGame`), иконка «запись добавлена», текст emotion flash.
+- `ParseString` (порт `cLuxHelpFuncs`) — `$ButJournal` → клавиша из `default_user_keys.cfg`, название из категории `ButtonNames`.
+- Виртуальный экран 800×600 по центру. Unity UI overlay со встроенным шрифтом, пока не сконвертированы шрифты игры.
+- В снимки `RenderToFile` HUD не попадает.
+
+**Общее состояние игры** — `HplGame`: глобальные переменные, квесты, подсказки, предметы по имени.
+
+**Прогон** — `PlayerSimulation`: на уровне с `HplMap` шаги идут через карту, сообщения `[Script…]` копируются в лог.
+- Флаги:
+  - `-scriptDebug` — области вступления активны сразу, вступление пропускается;
+  - `-noScript`;
+  - `-seed N` — повторяемые `RandFloat`.
+- Команды:
+  - `watch t интервал` — шаги со строкой состояния скрипта: игрок, FOV/aspect/крен, затемнение/след/сепия, реплика, сообщения, таймеры;
+  - `fx sepia|trail|fade|blur|flash|off значение`;
+  - `goto x y z yaw`;
+  - `start Зона`.
+- Пример: вступление `00_rainy_hall` — `-seed 1 -script "watch 80 2; shot awake"` (~70 с до первого квеста).
 
 ## Соглашения
 
-- Код пишем на C# в `UnityProj/UMnesiaRTX/Assets/Scripts/` (наш код: `Hpl/` — конвертации HPL→Unity, конфиг, физ. запросы, `World/` — компоненты уровня, `Player/` — игрок, `Dev/` — отладка; редакторные проверки — `Assets/Editor/Dev`) и `Assets/Editor/` (конвертеры). Импортёры — Editor-скрипты, запускаемые также через `-executeMethod`.
+- Код на C#:
+  - `UnityProj/UMnesiaRTX/Assets/Scripts/`:
+    - `Hpl/` — конвертации HPL→Unity, конфиг, язык, физ. запросы, `HplMath`;
+    - `World/` — компоненты уровня;
+    - `Player/` — игрок;
+    - `ScriptApi/` — карта и API скриптов;
+    - `Effects/` — эффекты экрана;
+    - `Ui/` — HUD;
+    - `Levels/ChXX/` — порты скриптов уровней;
+    - `Dev/` — отладка;
+  - `Assets/Shaders/` — наши шейдеры;
+  - `Assets/Editor/` — конвертеры; редакторные проверки — `Assets/Editor/Dev`.
+- Импортёры — Editor-скрипты, запускаемые также через `-executeMethod`.
 - Числа из XML HPL парсить только с `CultureInfo.InvariantCulture` (`HplXml`): в русской локали разделитель — запятая.
 - Не изменять ничего в папке установленной игры и в `src/`.
 - Перед первым импортом ресурсов: убедиться, что `.gitignore` исключает импортированные папки (`git status` не должен показывать контент Amnesia).

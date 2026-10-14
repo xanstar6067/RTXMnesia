@@ -14,6 +14,8 @@ namespace RTXMnesia.Importer
         Height,    // HDRP height map (R) from Amnesia Height (alpha channel).
         Emissive,  // Amnesia Illumination. sRGB.
         Cookie,    // Spot light gobo. Stored upside down: HPL2 projects the top image row onto the light's -Y side.
+        Lookup,    // Data texture read by a shader (color conversion tables): linear, no mip maps, uncompressed.
+        Gui,       // HUD / menu image: sRGB, no mip maps, uncompressed, as drawn by the HPL2 GUI.
     }
 
     /// <summary>
