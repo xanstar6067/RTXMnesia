@@ -14,6 +14,10 @@ namespace RTXMnesia.World
         public bool collideCharacter = true;
         public bool collideNonCharacter = true;
         public bool hasGravity = true;
+        [Tooltip("A character standing on it presses it down with its weight.")]
+        public bool pushedByCharacterGravity;
+        [Tooltip("A character standing on it moves with it.")]
+        public bool canAttachCharacter;
         public float linearDamping;
         public float angularDamping;
         public bool blocksSound;

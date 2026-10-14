@@ -23,7 +23,8 @@ namespace RTXMnesia.World
             if (areaType == "PlayerStart")
             {
                 Gizmos.DrawWireSphere(Vector3.up * 0.9f, 0.3f);
-                Gizmos.DrawLine(Vector3.up * 0.9f, Vector3.up * 0.9f + Vector3.back * 0.6f);
+                // The player looks along the area's +Z (cLuxAreaNodeLoader_PlayerStart).
+                Gizmos.DrawLine(Vector3.up * 0.9f, Vector3.up * 0.9f + Vector3.forward * 0.6f);
             }
             else Gizmos.DrawWireCube(Vector3.zero, size);
         }

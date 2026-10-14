@@ -34,7 +34,7 @@ namespace RTXMnesia.Importer
             public Vector3 Position, Rotation;
             public float Mass;
             public string Material;
-            public bool CollideCharacter, CollideNonCharacter, HasGravity, BlocksSound;
+            public bool CollideCharacter, CollideNonCharacter, HasGravity, BlocksSound, PushedByCharacterGravity, CanAttachCharacter;
             public float LinearDamping, AngularDamping;
             public readonly List<int> ShapeIds = new();
             public readonly List<int> ChildIds = new();
@@ -119,6 +119,8 @@ namespace RTXMnesia.Importer
                     CollideNonCharacter = e.Bool("CollideNonCharacter", true),
                     HasGravity = e.Bool("HasGravity", true),
                     BlocksSound = e.Bool("BlocksSound"),
+                    PushedByCharacterGravity = e.Bool("PushedByCharacterGravity"),
+                    CanAttachCharacter = e.Bool("CanAttachCharacter"),
                     LinearDamping = e.Float("LinearDamping"),
                     AngularDamping = e.Float("AngularDamping"),
                 };

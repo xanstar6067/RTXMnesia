@@ -5,6 +5,7 @@ using System.Linq;
 using System.Xml;
 using RTXMnesia.Dev;
 using RTXMnesia.Hpl;
+using RTXMnesia.Player;
 using RTXMnesia.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -28,6 +29,7 @@ namespace RTXMnesia.Importer
     /// - Point/Spot lights → HDRP lights through <see cref="AmnesiaLight"/>; spot gobos → cookies (pyramid lights).
     /// - Area → <see cref="AmnesiaArea"/> (+ trigger box). Particle systems and sounds → placeholders.
     /// - Fog, fixed exposure and "no sky" (HPL2 has no ambient light) → level volume profile.
+    /// - <see cref="AmnesiaPlayer"/> with its camera at the first player start, settings from config/game.cfg.
     /// </summary>
     public class LevelConverter
     {
@@ -35,7 +37,6 @@ namespace RTXMnesia.Importer
 
         // Spots without a gobo use the "short fade" falloff over the cone: full strength until ~80% of the angle.
         const float SpotInnerAngleFraction = 0.8f;
-        const float CameraEyeHeight = 1.6f;
         const StaticEditorFlags StaticFlags =
             StaticEditorFlags.BatchingStatic | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic;
 
@@ -58,6 +59,7 @@ namespace RTXMnesia.Importer
         readonly List<Transform> _playerStarts = new();
 
         Mesh _container;
+        HplConfig _gameConfig;
         Mesh _quad, _cylinder;
 
         public string ScenePath => _levelFolder + ".unity";
@@ -94,6 +96,7 @@ namespace RTXMnesia.Importer
             _decalFiles = FileIndex(contents, "FileIndex_Decals");
 
             PrepareResources(contents);
+            _gameConfig = ConfigConverter.Convert(ConfigConverter.GameConfig, _log);
 
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(_levelFolder));
             AssetDatabase.Refresh();
@@ -698,6 +701,8 @@ namespace RTXMnesia.Importer
                 data.linearDamping = body.LinearDamping;
                 data.angularDamping = body.AngularDamping;
                 data.blocksSound = body.BlocksSound;
+                data.pushedByCharacterGravity = body.PushedByCharacterGravity;
+                data.canAttachCharacter = body.CanAttachCharacter;
 
                 foreach (int id in body.ShapeIds)
                 {
@@ -1047,9 +1052,20 @@ namespace RTXMnesia.Importer
             volume.isGlobal = true;
             volume.sharedProfile = profile;
 
-            // Free camera at the first player start, eye height, looking where the player would (-Z in HPL2).
-            var cameraObject = new GameObject("Camera (fly: RMB + WASD)") { tag = "MainCamera" };
+            BuildPlayer();
+        }
+
+        // The player at the first player start; in edit mode its camera shows the start view at eye height.
+        void BuildPlayer()
+        {
+            var playerObject = new GameObject("Player");
+            var player = playerObject.AddComponent<AmnesiaPlayer>();
+            player.gameConfig = _gameConfig;
+
+            var cameraObject = new GameObject("PlayerCamera") { tag = "MainCamera" };
+            cameraObject.transform.SetParent(playerObject.transform, false);
             var camera = cameraObject.AddComponent<Camera>();
+            camera.fieldOfView = _gameConfig != null ? _gameConfig.GetFloat("Player_General", "FOV", 70f) : 70f;
             camera.nearClipPlane = 0.05f;
             camera.farClipPlane = 500f;
             var cameraData = cameraObject.AddComponent<HDAdditionalCameraData>();
@@ -1058,10 +1074,25 @@ namespace RTXMnesia.Importer
             cameraData.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color;
             cameraData.backgroundColorHDR = Color.black;
             cameraObject.AddComponent<AudioListener>();
-            cameraObject.AddComponent<FlyCamera>();
+            // Free camera for looking around (F2 in play mode), off by default.
+            cameraObject.AddComponent<FlyCamera>().enabled = false;
+            player.playerCamera = camera;
+
             var start = _playerStarts.FirstOrDefault(t => t.name == "PlayerStartArea_1") ?? _playerStarts.FirstOrDefault();
-            if (start != null)
-                cameraObject.transform.SetPositionAndRotation(start.position + Vector3.up * CameraEyeHeight, start.rotation * Quaternion.Euler(0f, 180f, 0f));
+            if (start == null)
+            {
+                _log.Warn("Map has no PlayerStart area: player at the origin");
+                return;
+            }
+            player.startArea = start.name;
+            Vector3 forward = Vector3.ProjectOnPlane(start.forward, Vector3.up);
+            playerObject.transform.SetPositionAndRotation(start.position + new Vector3(0f, 0.05f, 0f),
+                forward.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(forward) : Quaternion.identity);
+            cameraObject.transform.localPosition = new Vector3(0f, EyeHeight(), 0f);
         }
+
+        // Camera above the feet when standing: body height + CameraPosAdd (CharacterBody::UpdateCamera).
+        float EyeHeight() => _gameConfig == null ? 1.75f
+            : _gameConfig.GetVector3("Player_Body", "Size").y + _gameConfig.GetVector3("Player_Body", "CameraPosAdd").y;
     }
 }

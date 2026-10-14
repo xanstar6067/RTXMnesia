@@ -17,7 +17,7 @@ namespace RTXMnesia.Importer
         const string PreviewFolder = AmnesiaPaths.ImportedAssetsRoot + "/Preview";
         const string SampleScene = "Assets/Scenes/SampleScene.unity";
         const string TestMapName = "00_rainy_hall";
-        const string TestMap = "maps/main/ch01/" + TestMapName + ".map";
+        internal const string TestMap = "maps/main/ch01/" + TestMapName + ".map";
 
         enum Kind { Materials, Models }
 
@@ -101,14 +101,14 @@ namespace RTXMnesia.Importer
 
         static string ArgFolder() => Arg("-amnesiaFolder", TestFolder);
 
-        static string Arg(string name, string fallback)
+        internal static string Arg(string name, string fallback)
         {
             string[] args = Environment.GetCommandLineArgs();
             int i = Array.IndexOf(args, name);
             return i >= 0 && i + 1 < args.Length ? args[i + 1] : fallback;
         }
 
-        static bool HasArg(string name) => Environment.GetCommandLineArgs().Contains(name);
+        internal static bool HasArg(string name) => Environment.GetCommandLineArgs().Contains(name);
 
         // ---------- Implementation ----------
 
@@ -237,7 +237,7 @@ namespace RTXMnesia.Importer
             RenderToFile(camera, Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"{kind}Preview.png"));
         }
 
-        static void RenderToFile(Camera camera, string file)
+        internal static void RenderToFile(Camera camera, string file)
         {
             var rt = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             camera.targetTexture = rt;
@@ -290,7 +290,8 @@ namespace RTXMnesia.Importer
             };
             foreach (var area in UnityEngine.Object.FindObjectsByType<RTXMnesia.World.AmnesiaArea>(FindObjectsInactive.Include))
                 if (area.areaType == "PlayerStart")
-                    views.Add((area.name, area.transform.position + Vector3.up * 1.6f, area.transform.rotation * Quaternion.Euler(0f, 180f, 0f)));
+                    views.Add((area.name, area.transform.position + Vector3.up * 1.75f,
+                        Quaternion.LookRotation(Vector3.ProjectOnPlane(area.transform.forward, Vector3.up))));
             foreach (string view in Arg("-views", "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
                 float[] v = HplXml.ParseFloats(view.Replace(',', ' '));
