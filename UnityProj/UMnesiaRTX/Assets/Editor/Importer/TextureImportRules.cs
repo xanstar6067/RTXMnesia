@@ -36,6 +36,11 @@ namespace RTXMnesia.Importer
                 case TextureRole.Specular:
                     importer.sRGBTexture = false;
                     break;
+                case TextureRole.Cookie:
+                    importer.sRGBTexture = true;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                    importer.alphaSource = TextureImporterAlphaSource.None;
+                    break;
                 case TextureRole.Height:
                     importer.textureType = TextureImporterType.SingleChannel;
                     importer.sRGBTexture = false;

@@ -16,6 +16,8 @@ namespace RTXMnesia.Importer
         const string TestFolder = "static_objects/castlebase";
         const string PreviewFolder = AmnesiaPaths.ImportedAssetsRoot + "/Preview";
         const string SampleScene = "Assets/Scenes/SampleScene.unity";
+        const string TestMapName = "00_rainy_hall";
+        const string TestMap = "maps/main/ch01/" + TestMapName + ".map";
 
         enum Kind { Materials, Models }
 
@@ -53,6 +55,17 @@ namespace RTXMnesia.Importer
         [MenuItem(Menu + "Preview: models (castlebase)", priority = 21)]
         static void PreviewModels() => BuildPreview(Kind.Models, TestFolder);
 
+        [MenuItem(Menu + "Level: " + TestMapName + " (ch01)", priority = 30)]
+        static void LevelTestMap() => ConvertLevel(TestMap);
+
+        [MenuItem(Menu + "Level: choose .map...", priority = 31)]
+        static void LevelChosenMap()
+        {
+            string abs = EditorUtility.OpenFilePanel("Map inside source/maps", Path.Combine(AmnesiaPaths.SourceRoot, "maps"), "map");
+            if (string.IsNullOrEmpty(abs)) return;
+            ConvertLevel(AmnesiaPaths.ToSourceRelative(abs));
+        }
+
         [MenuItem(Menu + "Open import log", priority = 40)]
         static void OpenLog()
         {
@@ -65,16 +78,34 @@ namespace RTXMnesia.Importer
         //   [-amnesiaFolder static_objects/castlebase] [-forceTextures]
         // Render* methods need a GPU: run them without -nographics. Results: Logs/AmnesiaImport.log, Logs/*Preview.png.
 
+        //   ConvertLevelBatch / RenderLevelBatch [-amnesiaMap maps/main/ch01/00_rainy_hall.map] [-convert]
+        //   DescribeModelsBatch -describe static_objects/a/b.dae,entities/c/d.dae (already imported models)
+
         public static void ConvertMaterialsBatch() => Convert(Kind.Materials, ArgFolder(), HasArg("-forceTextures"));
         public static void ConvertModelsBatch() => Convert(Kind.Models, ArgFolder(), false);
         public static void RenderMaterialsBatch() => RenderPreview(Kind.Materials, ArgFolder());
         public static void RenderModelsBatch() => RenderPreview(Kind.Models, ArgFolder());
+        public static void ConvertLevelBatch() => ConvertLevel(Arg("-amnesiaMap", TestMap));
+        public static void RenderLevelBatch() => RenderLevel(Arg("-amnesiaMap", TestMap), HasArg("-convert"));
 
-        static string ArgFolder()
+        public static void DescribeModelsBatch()
+        {
+            var log = new ImportLog();
+            foreach (string path in Arg("-describe", "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>(AmnesiaPaths.ModelsRoot + "/" + path.Trim());
+                log.Info(model != null ? ModelConverter.DescribeHierarchy(model) : $"{path}: not imported");
+            }
+            log.Save("Describe models");
+        }
+
+        static string ArgFolder() => Arg("-amnesiaFolder", TestFolder);
+
+        static string Arg(string name, string fallback)
         {
             string[] args = Environment.GetCommandLineArgs();
-            int i = Array.IndexOf(args, "-amnesiaFolder");
-            return i >= 0 && i + 1 < args.Length ? args[i + 1] : TestFolder;
+            int i = Array.IndexOf(args, name);
+            return i >= 0 && i + 1 < args.Length ? args[i + 1] : fallback;
         }
 
         static bool HasArg(string name) => Environment.GetCommandLineArgs().Contains(name);
@@ -203,7 +234,11 @@ namespace RTXMnesia.Importer
             BuildPreview(kind, relativeFolder);
             var camera = Camera.main;
             if (camera == null) { Debug.LogError("[RTXMnesia] Preview scene has no main camera"); return; }
+            RenderToFile(camera, Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"{kind}Preview.png"));
+        }
 
+        static void RenderToFile(Camera camera, string file)
+        {
             var rt = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             camera.targetTexture = rt;
             // Several frames so HDRP history (exposure, TAA) settles.
@@ -216,11 +251,58 @@ namespace RTXMnesia.Importer
             RenderTexture.active = previous;
             camera.targetTexture = null;
 
-            string file = Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"{kind}Preview.png");
             File.WriteAllBytes(file, image.EncodeToPNG());
             UnityEngine.Object.DestroyImmediate(image);
             rt.Release();
-            Debug.Log($"[RTXMnesia] Preview rendered: {file}");
+            Debug.Log($"[RTXMnesia] Rendered: {file}");
+        }
+
+        /// <param name="mapRelative">Map path relative to source/, e.g. maps/main/ch01/00_rainy_hall.map.</param>
+        static void ConvertLevel(string mapRelative)
+        {
+            string abs = Path.Combine(AmnesiaPaths.SourceRoot, mapRelative);
+            if (!File.Exists(abs))
+            {
+                Debug.LogError($"[RTXMnesia] Map not found: {abs}. Run tools/Copy-AmnesiaResources.ps1 first.");
+                return;
+            }
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            string scene = LevelConverter.Convert(abs);
+            if (!Application.isBatchMode) EditorSceneManager.OpenScene(scene);
+        }
+
+        /// <summary>
+        /// Renders the level from its camera and from every PlayerStart area to Logs/Level_&lt;map&gt;_&lt;n&gt;.png.
+        /// Extra viewpoints: -views "x,y,z,yaw,pitch;..." in Unity coordinates.
+        /// </summary>
+        static void RenderLevel(string mapRelative, bool convert)
+        {
+            string abs = Path.Combine(AmnesiaPaths.SourceRoot, mapRelative);
+            string scenePath = LevelConverter.ScenePathFor(abs);
+            if (convert || !File.Exists(AmnesiaPaths.ToAbsolute(scenePath))) LevelConverter.Convert(abs);
+            EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+
+            var camera = Camera.main;
+            if (camera == null) { Debug.LogError("[RTXMnesia] Level scene has no main camera"); return; }
+            var views = new List<(string name, Vector3 position, Quaternion rotation)>
+            {
+                ("camera", camera.transform.position, camera.transform.rotation),
+            };
+            foreach (var area in UnityEngine.Object.FindObjectsByType<RTXMnesia.World.AmnesiaArea>(FindObjectsInactive.Include))
+                if (area.areaType == "PlayerStart")
+                    views.Add((area.name, area.transform.position + Vector3.up * 1.6f, area.transform.rotation * Quaternion.Euler(0f, 180f, 0f)));
+            foreach (string view in Arg("-views", "").Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                float[] v = HplXml.ParseFloats(view.Replace(',', ' '));
+                if (v.Length >= 5) views.Add(($"view{views.Count}", new Vector3(v[0], v[1], v[2]), Quaternion.Euler(v[4], v[3], 0f)));
+            }
+
+            string mapName = Path.GetFileNameWithoutExtension(mapRelative);
+            for (int i = 0; i < views.Count; i++)
+            {
+                camera.transform.SetPositionAndRotation(views[i].position, views[i].rotation);
+                RenderToFile(camera, Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"Level_{mapName}_{i:00}_{views[i].name}.png"));
+            }
         }
     }
 }

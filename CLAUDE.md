@@ -20,7 +20,7 @@
 
 ## Состояние Unity-проекта
 
-Только HDRP-база: `Assets/Editor/ConfigureHDRP.cs` (меню Tools > RTXMnesia > Configure HDRP), `Assets/Settings/*`, `SampleScene`.
+HDRP-база (`Assets/Editor/ConfigureHDRP.cs`, меню Tools > RTXMnesia > Configure HDRP, `Assets/Settings/*`, `SampleScene`), импортёры ресурсов и уровней (`Assets/Editor/Importer`), компоненты уровня (`Assets/Scripts`). Первый уровень: `Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity` (генерируется, не в git).
 Hardware RT не включён. Подробности: `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.
 Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe -batchmode -nographics -quit -projectPath ... -executeMethod ...`.
 
@@ -69,7 +69,7 @@ Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Edito
 - Объём: в итоге вся игра, но идём по шагам; первая цель — **глава 1** (`maps/main/ch01`, 15 карт, начиная с `00_rainy_hall`).
 - Скрипты уровней портируются **вручную на C#** (без встраивания AngelScript). Каждая карта документируется в `docs/ScriptPort/` по шаблону из README; код оригинала туда не копируется, только ссылки `файл:строка`.
 - После переноса функции API обновлять её статус в `docs/ScriptPort/api.md`.
-- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели ✓; префабы .ent → вместе с шагом 4) → 3) импорт одного уровня → 4) игрок → 5) скрипты уровней → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
+- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели ✓; префабы .ent → вместе с шагом 4) → 3) импорт одного уровня ✓ (`00_rainy_hall`; частицы .ps — заглушки) → 4) игрок → 5) скрипты уровней → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
 
 ## Импортёры (Assets/Editor/Importer, namespace RTXMnesia.Importer)
 
@@ -96,12 +96,28 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
 - Height — в альфа-канале. Юнит `Alpha` = alpha test по альфе диффуза. `Illumination` = emissive (у ламп регулируется в игре).
 - Имя материала у меша = имя текстуры из `<library_images>` `.dae` с расширением `.mat`.
 - Height-карта Amnesia — это **глубина** (белое = глубже, relief mapping) → инвертируется для HDRP. Проверено численно: градиент инвертированной карты совпадает с normal map по знаку в обоих каналах (заодно подтверждает инверсию G).
-- **Оси**: Unity-импорт Collada отражает X: HPL `(x,y,z)` → Unity `(-x,y,z)` (проверено на `corner_concave_round.dae`). Позиции из `.map`/`.ent` переводить так же; повороты (Euler XYZ, радианы) — отражением: угол X сохраняется, Y и Z меняют знак (проверить на уровне в шаге 3).
+- **Оси**: Unity-импорт Collada отражает X: HPL `(x,y,z)` → Unity `(-x,y,z)` (проверено на `corner_concave_round.dae`). Позиции из `.map`/`.ent` переводятся так же, повороты (Euler XYZ, радианы, M = Rz·Ry·Rx) — отражением: угол X сохраняется, Y и Z меняют знак; порядок вершин треугольников не меняется. Всё это — `Assets/Scripts/Hpl/HplSpace.cs`; проверено на уровне (стены стыкуются, двери/люстры на местах). Свет и камеры HPL смотрят в локальный −Z (Unity +Z) → `HplSpace.LookRotation`. UV из .map (плоскости, декали, билборды): v = 1 − v.
+- **Z_UP Collada** (157 файлов, в основном сущности): Unity оставляет вершины узла в осях файла (X отражён) и добавляет Rx(−90°) сверху (на корень или на узлы верхнего уровня); HPL2 переписывает вершины как (−x, z, y), трансляции/масштаб узлов как (x, z, y), а rotate-элементы оставляет как есть. Поправка для узла: Unity-вершина (−x,y,z) → (x,z,y) (`LevelConverter.ZUpNodeCorrection`). Для сущностей узел целиком задаётся трансформом подмеша из `.ent`, для статики — пересобирается из трансляции узла.
 - TODO: блендинг Mul/MulX2 (нет в HDRP, 14 материалов: бутылки, стёкла, лужи), вода, DissolveAlpha, кубкарты отражений (заменяются HDRP/RT). ~10 моделей с материалом без .mat (кости, паук) — вероятно, материал задаётся в `.ent` (`SubMesh Material=`).
 - `.ent` (сущности): `ModelData` = Mesh + SubMesh (материал-override), Shapes, Bodies (масса, физ. материал, какие подмеши привязаны), Joints (двери — JointHinge), Bones, Animations; `UserDefinedVariables EntityType="SwingDoor|..."` + звуки/поведение. Префабы из .ent делать на шаге 4 вместе с механиками.
+  Важно: SubMesh в `.ent` хранит трансформ подмеша относительно сущности, он **заменяет** трансформ узла Collada (масштаб узла остаётся). Пример: дверь `castle` развёрнута там на 180°. Внутри `.ent` есть свои свет/билборды/частицы/звуки (`ModelData/Entities`), их позиции × масштаб экземпляра.
+
+## Импорт уровня (LevelConverter, шаг 3)
+
+Меню: **Tools > RTXMnesia > Import > Level: 00_rainy_hall (ch01)** / **Level: choose .map...**. Batch: `ConvertLevelBatch`, `RenderLevelBatch [-amnesiaMap maps/main/ch01/X.map] [-convert] [-views "x,y,z,yaw,pitch;..."]` (рендер с камеры, всех PlayerStart и доп. точек → `Logs/Level_<map>_NN_*.png`, без `-nographics`), `DescribeModelsBatch -describe a.dae,b.dae`. Перед уровнем недостающие модели/материалы/cookie импортируются сами. 00_rainy_hall: ~20 с.
+Результат: `Assets/AmnesiaImported/Levels/<путь карты>.unity` + `<карта>/<карта>_generated.asset` (меши плоскостей/декалей/квад билбордов/цилиндр коллизии, варианты материалов по цвету) + `<карта>_volume.asset`.
+
+- StaticObject → экземпляр префаба модели; коллизия по правилу HPL2: если `Collides` и в модели нет узлов `_collider*` — MeshCollider на визуальные меши. Plane → порт `MeshCreator::CreatePlane`. Decal → готовый мировой меш из .map + HDRP/Decal материал (цвет → вариант материала, без вертекс-цвета).
+- Entity → GameObject с `AmnesiaEntity` (файл, тип, переменные .ent + экземпляра); модель распакована, подмеши по `.ent`; `Body_*` с `AmnesiaBody` и коллайдерами из Shapes (пока всё статично, Rigidbody/джоинты — шаг 4). Цилиндр → выпуклый MeshCollider. `CommentaryIcon` выключены.
+- Area → `AmnesiaArea` (+ триггер BoxCollider размера Scale, кроме PlayerStart). ParticleSystem/Sound → заглушки `AmnesiaParticleSystem`/`AmnesiaSound` (TODO конвертер .ps и звук). BoxLight, FogArea, точечные gobo (кубкарты), скайбокс — пока пропускаются с предупреждением.
+- Свет → HDRP через `AmnesiaLight` (хранит параметры HPL, включая flicker — пока не симулируется). Пересчёт яркости — `Assets/Scripts/Hpl/HplLighting.cs`: фиксированная экспозиция EV100 = 3; HPL-свет почти не затухает в радиусе, HDRP — 1/d², совпадение на 0.5 радиуса (`ReferenceDistance`); `Candela = π·d²·1.2·2^EV`. Spot с gobo → Pyramid + cookie (роль текстуры `Cookie`, перевёрнута по вертикали, как проецирует HPL).
+- Эмиссия Lit и цвет тумана в HDRP экспонируются → × `UnitRadiance` (1.2·2^EV); **цвет HDRP/Unlit не экспонируется** (ShaderPassForwardUnlit: `_DeExposureMultiplier` = 1) → цвет HPL как есть. При смене EV — перегнать материалы и уровень.
+- Билборды: FixedAxis — обычный MeshRenderer; Point/Axis рисует скрытый несохраняемый дочерний объект `AmnesiaBillboard` ([ExecuteAlways], поворот к камере в `beginCameraRendering`, работает и в Scene view). TODO: ореолы (IsHalo) в HPL рисуются без depth test с затуханием по occlusion query — пока с обычным depth test; связь билборда со светом (ConnectLight).
+- Окружение: Volume — без неба (HPL без скайбокса не даёт ambient), фикс. экспозиция, без тонмаппинга, туман HDRP подобран так, что на FogEnd непрозрачность = alpha цвета тумана. Камера на PlayerStartArea_1 с `FlyCamera` (ПКМ + WASD/QE, Shift, колесо — скорость), фон чёрный.
 
 ## Соглашения
 
-- Код пишем на C# в `UnityProj/UMnesiaRTX/Assets/Scripts/` (наш код) и `Assets/Editor/` (конвертеры). Импортёры — Editor-скрипты, запускаемые также через `-executeMethod`.
+- Код пишем на C# в `UnityProj/UMnesiaRTX/Assets/Scripts/` (наш код: `Hpl/` — конвертации HPL→Unity, `World/` — компоненты уровня, `Dev/` — отладка) и `Assets/Editor/` (конвертеры). Импортёры — Editor-скрипты, запускаемые также через `-executeMethod`.
+- Числа из XML HPL парсить только с `CultureInfo.InvariantCulture` (`HplXml`): в русской локали разделитель — запятая.
 - Не изменять ничего в папке установленной игры и в `src/`.
 - Перед первым импортом ресурсов: убедиться, что `.gitignore` исключает импортированные папки (`git status` не должен показывать контент Amnesia).

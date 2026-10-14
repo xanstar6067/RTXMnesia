@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using RTXMnesia.Hpl;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering.HighDefinition;
@@ -27,8 +28,9 @@ namespace RTXMnesia.Importer
         const float NoSpecularF0 = 0.02f;           // Materials without a specular map had no highlights at all.
         const float NoSpecularSmoothness = 0.2f;
         const float HeightScaleToPomCm = 100f;      // HeightMapScale (UV units) → HDRP POM amplitude in cm.
-        const float EmissiveNits = 50f;
         const float AlphaCutoff = 0.5f;
+        // HPL2 writes emission to the screen as is: scaled to the level exposure (HDRP Lit emission is exposed).
+        static float EmissiveNits => HplLighting.UnitRadiance;
 
         // Values of HDRP's internal SurfaceType / BlendingMode / DisplacementMode enums.
         const float HdrpTransparent = 1f;
@@ -311,6 +313,7 @@ namespace RTXMnesia.Importer
         {
             var m = new Material(FindShader("HDRP/Unlit"));
             if (albedo != null) m.SetTexture("_UnlitColorMap", albedo);
+            SetUnlitColor(m, Color.white);
             m.SetFloat("_SurfaceType", HdrpTransparent);
             m.SetFloat("_BlendMode", (float)blending);
             m.SetFloat("_DoubleSidedEnable", 1f);
@@ -330,6 +333,12 @@ namespace RTXMnesia.Importer
             HDMaterial.ValidateMaterial(m);
             return m;
         }
+
+        /// <summary>
+        /// HDRP/Unlit color that shows the HPL2 color <paramref name="hplColor"/> on screen. HDRP does not expose
+        /// unlit color (ShaderPassForwardUnlit.hlsl: color × _DeExposureMultiplier = 1), so it is used as is.
+        /// </summary>
+        public static void SetUnlitColor(Material m, Color hplColor) => m.SetColor("_UnlitColor", hplColor);
 
         static Shader FindShader(string name) =>
             Shader.Find(name) ?? throw new InvalidOperationException($"Shader '{name}' not found (is HDRP installed?)");

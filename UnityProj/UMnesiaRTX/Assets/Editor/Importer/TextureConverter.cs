@@ -13,6 +13,7 @@ namespace RTXMnesia.Importer
         Specular,  // HDRP specular color map built from Amnesia Specular: RGB = specular intensity.
         Height,    // HDRP height map (R) from Amnesia Height (alpha channel).
         Emissive,  // Amnesia Illumination. sRGB.
+        Cookie,    // Spot light gobo. Stored upside down: HPL2 projects the top image row onto the light's -Y side.
     }
 
     /// <summary>
@@ -105,6 +106,11 @@ namespace RTXMnesia.Importer
                     }
                     break;
                 }
+                case TextureRole.Cookie:
+                    // LightSpot.cpp: gobo uv = projected position * 0.5 + 0.5 without a flip, so v = 0 (first DDS row,
+                    // the top of the image) lands on the light's -Y side. Unity cookies put the image bottom there.
+                    pixels = FlipRows(pixels, image.Width, image.Height);
+                    break;
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(pngAbsolute));
@@ -157,13 +163,18 @@ namespace RTXMnesia.Importer
                 }
         }
 
+        static Color32[] FlipRows(Color32[] pixels, int width, int height)
+        {
+            var flipped = new Color32[pixels.Length];
+            for (int y = 0; y < height; y++)
+                Array.Copy(pixels, y * width, flipped, (height - 1 - y) * width, width);
+            return flipped;
+        }
+
         /// <summary>Pixels are top row first; Unity textures are bottom row first, so rows are flipped.</summary>
         static byte[] EncodePng(Color32[] topDown, int width, int height)
         {
-            var bottomUp = new Color32[topDown.Length];
-            for (int y = 0; y < height; y++)
-                Array.Copy(topDown, y * width, bottomUp, (height - 1 - y) * width, width);
-
+            var bottomUp = FlipRows(topDown, width, height);
             var tex = new Texture2D(width, height, TextureFormat.RGBA32, false, true);
             try
             {
