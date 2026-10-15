@@ -299,11 +299,40 @@ namespace RTXMnesia.Importer
             }
 
             string mapName = Path.GetFileNameWithoutExtension(mapRelative);
+            string[] picks = Arg("-pick", "").Split(';', StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < views.Count; i++)
             {
                 camera.transform.SetPositionAndRotation(views[i].position, views[i].rotation);
                 RenderToFile(camera, Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"Level_{mapName}_{i:00}_{views[i].name}.png"));
+                if (views[i].name.StartsWith("view"))
+                    foreach (string pick in picks) Pick(camera, views[i].name, HplXml.ParseFloats(pick.Replace(',', ' ')));
             }
         }
+
+        /// <summary>
+        /// -pick "u,v;...": the renderers whose bounds the ray through the image point (fractions, v from the top)
+        /// of every extra view crosses, nearest first, with their materials (finding what an odd pixel is).
+        /// </summary>
+        static void Pick(Camera camera, string view, float[] uv)
+        {
+            if (uv.Length < 2) return;
+            camera.aspect = 16f / 9f;
+            var ray = camera.ViewportPointToRay(new Vector3(uv[0], 1f - uv[1], 0f));
+            var hits = new List<(float distance, Renderer renderer)>();
+            foreach (var r in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude))
+                if (r.enabled && r.bounds.IntersectRay(ray, out float d) && d < 30f) hits.Add((d, r));
+            hits.Sort((a, b) => a.distance.CompareTo(b.distance));
+            var sb = new System.Text.StringBuilder($"[RTXMnesia] Pick {view} ({uv[0]:0.##}, {uv[1]:0.##}):");
+            for (int k = 0; k < Math.Min(8, hits.Count); k++)
+            {
+                var r = hits[k].renderer;
+                var materials = string.Join(", ", Array.ConvertAll(r.sharedMaterials,
+                    m => m == null ? "null" : $"{m.name} [{m.shader.name}, q{m.renderQueue}]"));
+                sb.Append($"\n  {hits[k].distance:0.00} m  {Hierarchy(r.transform)}  {materials}");
+            }
+            Debug.Log(sb.ToString());
+        }
+
+        static string Hierarchy(Transform t) => t.parent == null ? t.name : Hierarchy(t.parent) + "/" + t.name;
     }
 }

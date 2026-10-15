@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -237,6 +238,30 @@ namespace RTXMnesia.EditorDev
                             foreach (var j in prop.Joints)
                                 log.Info($"t={time,6:0.00}   joint {j.Name} {j.Type}: angle {j.GetAngle() * Mathf.Rad2Deg:0.0}° dist {j.GetDistance():0.000} " +
                                          $"limits {j.MinAngle * Mathf.Rad2Deg:0.#}..{j.MaxAngle * Mathf.Rad2Deg:0.#}°");
+                            continue;
+                        }
+                        case "overlaps":
+                        {
+                            // overlaps Entity: penetrations of its body colliders with each other and with the world.
+                            if (map?.GetEntityByName(p.Length > 1 ? p[1] : "") is not HplProp prop) { log.Warn($"No prop '{raw.Trim()}'"); continue; }
+                            var own = new HashSet<Collider>();
+                            foreach (var b in prop.PhysicsBodies) foreach (var c in b.Colliders) if (c != null) own.Add(c);
+                            var buffer = new Collider[64];
+                            foreach (var b in prop.PhysicsBodies)
+                                foreach (var c in b.Colliders)
+                                {
+                                    if (c == null) continue;
+                                    var bounds = c.bounds;
+                                    int n = Physics.OverlapBoxNonAlloc(bounds.center, bounds.extents + Vector3.one * 0.01f, buffer, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+                                    for (int i = 0; i < n; i++)
+                                    {
+                                        var o = buffer[i];
+                                        if (o == c || map.PhysicsWorld.BodyOf(o) == b) continue;
+                                        if (Physics.ComputePenetration(c, c.transform.position, c.transform.rotation, o, o.transform.position, o.transform.rotation, out Vector3 dir, out float depth))
+                                            log.Info($"t={time,6:0.00}   overlap {b.Name}/{c.name} ↔ {(own.Contains(o) ? "own " : "")}{o.transform.parent?.name}/{o.name} " +
+                                                     $"layer {o.gameObject.layer}: depth {depth:0.000} dir {dir:F2}");
+                                    }
+                                }
                             continue;
                         }
                         case "call":

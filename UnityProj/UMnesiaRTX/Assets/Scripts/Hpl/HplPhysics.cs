@@ -68,6 +68,7 @@ namespace RTXMnesia.Hpl
                     total += direction * distance;
                 }
                 if (total == Vector3.zero) continue;
+                if (total.x != 0f || total.z != 0f) total = LiftOverLowEdge(shape, position, rotation, other, total);
 
                 collided = true;
                 if (Mathf.Abs(pushBack.x) < Mathf.Abs(total.x)) pushBack.x = total.x;
@@ -76,6 +77,31 @@ namespace RTXMnesia.Hpl
             }
             return collided;
         }
+
+        /// <summary>
+        /// Port adjustment for edges at the bottom of the shape lower than <see cref="LowEdgeHeight"/>: a 1.7 cm
+        /// carpet, a threshold. A PhysX mesh also pushes along the normal of such low side faces, and the character
+        /// stops at the edge (the step climbing of CharacterBody.cpp only sees steps above 2.5 cm). Newton pushed the
+        /// shape up onto them. When the shape is free of <paramref name="other"/> that little higher, the push is
+        /// the lift that frees it (a binary search to 0.1 mm).
+        /// </summary>
+        static Vector3 LiftOverLowEdge(Collider shape, Vector3 position, Quaternion rotation, Collider other, Vector3 push)
+        {
+            Transform t = other.transform;
+            bool Inside(float lift) => Physics.ComputePenetration(shape, position + new Vector3(0f, lift, 0f), rotation,
+                                                                  other, t.position, t.rotation, out _, out float d) && d > 0f;
+            if (Inside(LowEdgeHeight)) return push;
+            float low = 0f, high = LowEdgeHeight;
+            for (int i = 0; i < 9; i++)
+            {
+                float mid = (low + high) * 0.5f;
+                if (Inside(mid)) low = mid;
+                else high = mid;
+            }
+            return new Vector3(0f, high, 0f);
+        }
+
+        const float LowEdgeHeight = 0.03f;
 
         /// <summary>Closest hit along start → end that a character collides with (cCharacterBodyRay).</summary>
         public static bool Raycast(Vector3 start, Vector3 end, out float distance, out Vector3 normal, out Collider collider)

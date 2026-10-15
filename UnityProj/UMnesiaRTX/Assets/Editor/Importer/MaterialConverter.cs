@@ -4,6 +4,7 @@ using System.IO;
 using RTXMnesia.Hpl;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.HighDefinition;
 
 namespace RTXMnesia.Importer
@@ -16,8 +17,8 @@ namespace RTXMnesia.Importer
     ///   Diffuse → base color, NMap → normal, Specular → specular color map (intensity) + mask map (smoothness),
     ///   Height → pixel displacement (POM), Alpha → alpha clipping, Illumination → emission.
     /// - Translucent Add → HDRP/Unlit additive; Alpha / PremulAlpha → HDRP/Lit transparent.
-    ///   Mul / MulX2 have no HDRP blend mode: approximated with alpha blending (TODO custom shader).
-    /// - Decal → HDRP/Decal (mesh decals). Water → HDRP/Lit transparent placeholder (TODO proper water).
+    ///   Mul / MulX2 (no HDRP blend mode) → Assets/Shaders/HplMultiply.shader, also for decals.
+    /// - Decal → HDRP/Decal (mesh decals), Add → HDRP/Unlit additive. Water → HDRP/Lit transparent placeholder (TODO proper water).
     /// - CubeMap / CubeMapAlpha are ignored: HDRP reflection probes / ray-traced reflections replace them.
     /// Existing materials are updated in place so prefabs and scenes keep their references.
     /// </summary>
@@ -210,6 +211,13 @@ namespace RTXMnesia.Importer
 
             switch (src.Type)
             {
+                case AmnesiaMaterial.Kind.Decal when blend is "mul" or "mulx2":
+                    return CreateMultiply(tex(TextureRole.Albedo), blend == "mulx2", true);
+
+                case AmnesiaMaterial.Kind.Decal when blend == "add":
+                    log.Info($"{rel}: additive decal drawn as unlit additive (HPL2 adds to the albedo)");
+                    return CreateUnlitTransparent(tex(TextureRole.Albedo), HdrpBlend.Additive);
+
                 case AmnesiaMaterial.Kind.Decal:
                     return CreateDecal(tex);
 
@@ -217,8 +225,7 @@ namespace RTXMnesia.Importer
                     return CreateUnlitTransparent(tex(TextureRole.Albedo), HdrpBlend.Additive);
 
                 case AmnesiaMaterial.Kind.Translucent when blend is "mul" or "mulx2":
-                    log.Warn($"{rel}: blend mode '{src.BlendMode}' approximated with alpha blending");
-                    return CreateUnlitTransparent(tex(TextureRole.Albedo), HdrpBlend.Alpha);
+                    return CreateMultiply(tex(TextureRole.Albedo), blend == "mulx2", false);
 
                 case AmnesiaMaterial.Kind.Translucent:
                 {
@@ -320,6 +327,23 @@ namespace RTXMnesia.Importer
             HDMaterial.ValidateMaterial(m);
             return m;
         }
+
+        /// <summary>
+        /// Mul / MulX2 blending (Assets/Shaders/HplMultiply.shader). Decals draw before other transparent objects,
+        /// as HPL2 draws them into the G-buffer, and keep its alpha test (RenderDecals: limit 0.01).
+        /// </summary>
+        static Material CreateMultiply(Texture2D albedo, bool x2, bool decal)
+        {
+            var m = new Material(FindShader(MultiplyShader));
+            if (albedo != null) m.SetTexture(BaseColorMap, albedo);
+            m.SetColor(BaseColor, Color.white);
+            m.SetFloat("_HplScale", x2 ? 2f : 1f);
+            m.SetFloat("_HplAlphaLimit", decal ? 0.01f : 0f);
+            m.renderQueue = decal ? (int)RenderQueue.Transparent - 100 : (int)RenderQueue.Transparent;
+            return m;
+        }
+
+        public const string MultiplyShader = "RTXMnesia/HplMultiply";
 
         static Material CreateDecal(Func<TextureRole, Texture2D> tex)
         {

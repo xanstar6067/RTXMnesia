@@ -51,16 +51,33 @@ namespace RTXMnesia.Hpl
         public static void ApplyFog(UnityEngine.Rendering.HighDefinition.Fog fog, bool active, Color color, float fogEnd)
         {
             fog.enabled.Override(active);
+            SetMultiplyFog(active, color, fogEnd);
             if (!active) return;
-            float end = Mathf.Max(1f, fogEnd);
-            float alpha = Mathf.Clamp(color.a, 0.01f, 0.99f);
             fog.colorMode.Override(UnityEngine.Rendering.HighDefinition.FogColorMode.ConstantColor);
             fog.color.Override(Radiance(new Color(color.r, color.g, color.b, 1f)));
-            fog.meanFreePath.Override(-end / Mathf.Log(1f - alpha));
-            fog.maxFogDistance.Override(end);
+            fog.meanFreePath.Override(MeanFreePath(color, fogEnd));
+            fog.maxFogDistance.Override(FogDistance(fogEnd));
             fog.baseHeight.Override(10000f);
             fog.maximumHeight.Override(10001f);
             fog.enableVolumetricFog.Override(false);
         }
+
+        /// <summary>
+        /// The same fog opacity for HplMultiply.shader (_HplFog): HPL2 fogs after the decals, so their factor fades
+        /// to 1 with the fog. A shader global, set in edit mode too.
+        /// </summary>
+        public static void SetMultiplyFog(bool active, Color color, float fogEnd)
+        {
+            Shader.SetGlobalVector(MultiplyFogId, active
+                ? new Vector4(1f, 1f / MeanFreePath(color, fogEnd), FogDistance(fogEnd), 0f)
+                : Vector4.zero);
+        }
+
+        static float FogDistance(float fogEnd) => Mathf.Max(1f, fogEnd);
+
+        static float MeanFreePath(Color color, float fogEnd) =>
+            -FogDistance(fogEnd) / Mathf.Log(1f - Mathf.Clamp(color.a, 0.01f, 0.99f));
+
+        static readonly int MultiplyFogId = Shader.PropertyToID("_HplFog");
     }
 }

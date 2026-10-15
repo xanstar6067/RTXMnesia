@@ -327,6 +327,9 @@ namespace RTXMnesia.ScriptApi
                     _lightList.Remove(light);
                     if (_lights.TryGetValue(light.name, out var l) && l == light) _lights.Remove(light.name);
                 }
+                // Destroy waits for the end of the frame: off now, so the next physics step no longer sees its bodies
+                // (the pieces of a broken pot would be pushed out of the whole one).
+                entity.GameObject.SetActive(false);
                 if (Application.isPlaying) Destroy(entity.GameObject);
                 else DestroyImmediate(entity.GameObject);
             }
@@ -492,6 +495,7 @@ namespace RTXMnesia.ScriptApi
                 FogEnd = _level.fogEnd;
                 FogFalloffExp = _level.fogFalloffExp;
             }
+            HplLighting.SetMultiplyFog(FogActive, FogColor, FogEnd);
             var volume = GetComponentInChildren<Volume>(true);
             // Only in play mode: Volume.profile copies the shared profile there, edits must not reach the asset.
             if (volume != null && Application.isPlaying && volume.profile.TryGet(out Fog fog)) _fog = fog;

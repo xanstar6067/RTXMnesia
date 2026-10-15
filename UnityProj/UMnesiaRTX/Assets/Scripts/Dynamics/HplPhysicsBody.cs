@@ -36,7 +36,7 @@ namespace RTXMnesia.Dynamics
         public readonly HplSurfaces.Surface Surface;
 
         float _mass;
-        bool _gravity, _collide = true, _active = true, _collideCharacter;
+        bool _gravity, _collide = true, _active = true, _collideCharacter, _continuous;
         Vector3 _staticLinearVel, _staticAngularVel;
         bool _staticMovement, _disableAfterSimulation;
         readonly int[] _layers;
@@ -60,8 +60,7 @@ namespace RTXMnesia.Dynamics
             Rigidbody.maxAngularVelocity = 100f;
             Rigidbody.solverIterations = 12;
             Rigidbody.solverVelocityIterations = 4;
-            Rigidbody.collisionDetectionMode = data.continuousCollision
-                ? CollisionDetectionMode.ContinuousSpeculative : CollisionDetectionMode.Discrete;
+            _continuous = data.continuousCollision;
             SetLinearDamping(data.linearDamping);
             SetAngularDamping(data.angularDamping);
             Gravity = data.hasGravity;
@@ -79,7 +78,12 @@ namespace RTXMnesia.Dynamics
             {
                 _mass = value;
                 bool kinematic = value <= 0f;
+                // Continuous collision (ContinuousCollision in .ent): a sweep for moving bodies. Speculative
+                // contacts miss thin floors under fast spinning pieces (a broken pot inherits the throw speed);
+                // kinematic bodies only support the speculative mode.
+                if (kinematic) Rigidbody.collisionDetectionMode = _continuous ? CollisionDetectionMode.ContinuousSpeculative : CollisionDetectionMode.Discrete;
                 if (Rigidbody.isKinematic != kinematic) Rigidbody.isKinematic = kinematic;
+                if (!kinematic) Rigidbody.collisionDetectionMode = _continuous ? CollisionDetectionMode.ContinuousDynamic : CollisionDetectionMode.Discrete;
                 if (!kinematic) Rigidbody.mass = value;
                 Rigidbody.useGravity = _gravity && !kinematic;
             }
