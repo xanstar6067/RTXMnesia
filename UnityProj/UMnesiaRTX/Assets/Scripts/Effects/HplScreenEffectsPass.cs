@@ -37,6 +37,8 @@ namespace RTXMnesia.Effects
 
         protected override void Setup(ScriptableRenderContext renderContext, CommandBuffer cmd)
         {
+            _clearTrail = true;
+            _lastRenderTime = -1.0;
             if (shader == null) shader = Shader.Find(ShaderName);
             if (shader != null) _material = CoreUtils.CreateEngineMaterial(shader);
             _source = Alloc("HPL effects source");
@@ -45,7 +47,17 @@ namespace RTXMnesia.Effects
 
         static RTHandle Alloc(string name) =>
             RTHandles.Alloc(Vector2.one, TextureXR.slices, dimension: TextureXR.dimension,
-                            colorFormat: GraphicsFormat.R8G8B8A8_UNorm, useDynamicScale: true, name: name);
+                            colorFormat: GraphicsFormat.R16G16B16A16_SFloat, useDynamicScale: true, name: name);
+
+        // Preserve HPL2's appearance at 60 Hz, then decay the history by elapsed time.
+        // The original exp(-amount * FPS * 0.015) nearly freezes the image at high FPS.
+        internal static float CalculateTrailAlpha(float amount, double frameTime)
+        {
+            if (amount <= 0f) return 1f;
+            if (frameTime <= 0.0) return 0f;
+            double referenceAlpha = Math.Exp(-amount * 60.0 * 0.015);
+            return (float)(1.0 - Math.Exp(Math.Log(1.0 - referenceAlpha) * frameTime * 60.0));
+        }
 
         protected override void Execute(CustomPassContext ctx)
         {
@@ -76,13 +88,13 @@ namespace RTXMnesia.Effects
             // Frame time of the renderer: real time since the previous render of this pass (also right for
             // renders outside the player loop, where Time.deltaTime does not advance).
             double now = Time.realtimeSinceStartupAsDouble;
-            float frameTime = _lastRenderTime < 0.0 ? 1f / 60f : Mathf.Clamp((float)(now - _lastRenderTime), 1e-3f, 0.25f);
+            double frameTime = _lastRenderTime < 0.0 ? 1.0 / 60.0 : Math.Max(0.0, now - _lastRenderTime);
             _lastRenderTime = now;
 
             if (trailOn)
             {
-                // Blend weight of the new image: exp(-(amount / frame time) × 0.015), 1 right after a reset.
-                float alpha = _clearTrail ? 1f : Mathf.Exp(-(1f / frameTime) * trail * 0.015f);
+                // Floating-point history keeps small updates instead of rounding back to an old 8-bit frame.
+                float alpha = _clearTrail ? 1f : CalculateTrailAlpha(trail, frameTime);
                 _clearTrail = false;
                 props.SetTexture(SourceId, _source);
                 props.SetFloat(TrailAlphaId, alpha);
