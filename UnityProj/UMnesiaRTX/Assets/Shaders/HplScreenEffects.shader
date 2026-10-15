@@ -10,6 +10,8 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     #include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/RenderPass/CustomPass/CustomPassCommon.hlsl"
 
     TEXTURE2D_X(_HplSource);
+    TEXTURE2D_X(_HplMenuSharp);
+    float _HplMenuBlend;
     TEXTURE2D(_HplSepiaLookup);
     float _HplTrailAlpha;
     float4 _HplRadialBlur;  // x: size in pixels, y: blur start distance (fraction of half the width)
@@ -92,6 +94,31 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
 
         return float4(SRGBToLinear(saturate(color)), 1.0);
     }
+    // HPL mainmenu_screen_blur_frag.glsl: the original seven bilinear taps, in gamma space.
+    float4 MenuBlur(Varyings v, float2 axis)
+    {
+        const float weights[7] = { 0.1, 0.25, 0.3, 0.5, 0.3, 0.25, 0.1 };
+        const float offsets[7] = { -4.35, -2.5, -0.75, 0.0, 0.75, 2.5, 4.35 };
+        float3 color = 0;
+        for (int i = 0; i < 7; i++) color += SampleSource(v.positionCS.xy + axis * offsets[i]) * weights[i];
+        return float4(color / 1.8, 1);
+    }
+    float4 MenuBlurH(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        return MenuBlur(v, float2(1, 0));
+    }
+    float4 MenuBlurV(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        return MenuBlur(v, float2(0, 1));
+    }
+    float4 MenuComposite(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float3 sharp = LOAD_TEXTURE2D_X(_HplMenuSharp, uint2(v.positionCS.xy)).rgb;
+        return float4(SRGBToLinear(lerp(sharp, LoadSource(int2(v.positionCS.xy)), _HplMenuBlend)), 1);
+    }
     ENDHLSL
 
     SubShader
@@ -122,6 +149,30 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment CompositeFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Menu blur H"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment MenuBlurH
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Menu blur V"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment MenuBlurV
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Menu background"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment MenuComposite
             ENDHLSL
         }
     }

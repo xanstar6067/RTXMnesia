@@ -14,6 +14,64 @@ namespace RTXMnesia.EditorDev
     /// </summary>
     static class HudSnapshot
     {
+        /// <summary>Canvas snapshot from the actual generated quad meshes (including skin images), after rendering the world.</summary>
+        public static void DrawCanvas(Texture2D image, Canvas canvas, Camera camera)
+        {
+            var textures = new Dictionary<Texture2D, Texture2D>();
+            var pixels = image.GetPixels32();
+            foreach (var graphic in canvas.GetComponentsInChildren<UnityEngine.UI.Graphic>())
+            {
+                if (!graphic.isActiveAndEnabled || graphic.canvasRenderer == null) continue;
+                var mesh = graphic.canvasRenderer.GetMesh();
+                if (mesh == null || mesh.vertexCount == 0) continue;
+                var texture = graphic.mainTexture as Texture2D;
+                if (texture == null) continue;
+                if (!textures.TryGetValue(texture, out var source))
+                    textures[texture] = source = texture == Texture2D.whiteTexture ? texture : Readable(texture);
+                if (source == null) continue;
+                var vertices = mesh.vertices;
+                var uvs = mesh.uv;
+                var colors = mesh.colors32;
+                for (int start = 0; start + 3 < vertices.Length; start += 4)
+                {
+                    var points = new Vector2[4];
+                    float left = float.MaxValue, right = float.MinValue, bottom = float.MaxValue, top = float.MinValue;
+                    for (int j = 0; j < 4; j++)
+                    {
+                        points[j] = camera.WorldToScreenPoint(graphic.transform.TransformPoint(vertices[start + j]));
+                        left = Mathf.Min(left, points[j].x); right = Mathf.Max(right, points[j].x);
+                        bottom = Mathf.Min(bottom, points[j].y); top = Mathf.Max(top, points[j].y);
+                    }
+                    if (right <= left || top <= bottom) continue;
+                    Vector2 UvAt(float x, float y)
+                    {
+                        int nearest = 0;
+                        for (int j = 1; j < 4; j++)
+                            if ((points[j] - new Vector2(x, y)).sqrMagnitude < (points[nearest] - new Vector2(x, y)).sqrMagnitude) nearest = j;
+                        return uvs[start + nearest];
+                    }
+                    Vector2 bl = UvAt(left, bottom), br = UvAt(right, bottom), tl = UvAt(left, top), tr = UvAt(right, top);
+                    Color tint = colors.Length > start ? colors[start] : Color.white;
+                    for (int y = Mathf.Max(0, Mathf.FloorToInt(bottom)); y < Mathf.Min(image.height, Mathf.CeilToInt(top)); y++)
+                    {
+                        float v = (y + 0.5f - bottom) / (top - bottom);
+                        for (int x = Mathf.Max(0, Mathf.FloorToInt(left)); x < Mathf.Min(image.width, Mathf.CeilToInt(right)); x++)
+                        {
+                            float u = (x + 0.5f - left) / (right - left);
+                            Vector2 uv = Vector2.Lerp(Vector2.Lerp(bl, br, u), Vector2.Lerp(tl, tr, u), v);
+                            Color color = source.GetPixelBilinear(uv.x, uv.y) * tint;
+                            int i = y * image.width + x;
+                            pixels[i] = Color.Lerp(pixels[i], new Color(color.r, color.g, color.b, 1), color.a);
+                        }
+                    }
+                }
+            }
+            image.SetPixels32(pixels);
+            image.Apply();
+            foreach (var texture in textures.Values)
+                if (texture != null && texture != Texture2D.whiteTexture) Object.DestroyImmediate(texture);
+        }
+
         public static void Draw(Texture2D image, HplHud hud)
         {
             if (hud == null) return;

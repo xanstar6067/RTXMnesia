@@ -19,8 +19,13 @@ namespace RTXMnesia.EditorDev
             float originalTimeScale = Time.timeScale;
             var originalCursorLock = Cursor.lockState;
             bool originalCursorVisible = Cursor.visible;
+            float originalVolume = AudioListener.volume;
+            int originalVSync = QualitySettings.vSyncCount;
             var root = new GameObject("Pause checks") { hideFlags = HideFlags.HideAndDontSave };
             HplFont font = ScriptableObject.CreateInstance<HplFont>();
+            font.lastChar = 1200;
+            foreach (char letter in "Вернуться в игруНастройкиВыходRTXMnesia")
+                font.glyphs.Add(new HplFont.Glyph { id = letter, size = Vector2.one, advance = 1f, uv = new Rect(0, 0, 1, 1) });
             HplSoundBank bank = ScriptableObject.CreateInstance<HplSoundBank>();
             AudioClip clip = AudioClip.Create("pause_test", 44100, 1, 44100, false);
             int checks = 0;
@@ -58,7 +63,17 @@ namespace RTXMnesia.EditorDev
                 Check(map.player.UiInputBlocked && !map.player.held.forward, "Input was not cleared and blocked");
                 Check(!map.player.active, "Pause changed the script's player activation flag");
                 Check(!map.hud.Canvas.enabled, "HUD is still visible over the menu");
-                Check(Cursor.lockState == CursorLockMode.None && Cursor.visible, "Menu cursor unavailable");
+                Check(Cursor.lockState == CursorLockMode.None, "Menu cursor locked");
+                Canvas.ForceUpdateCanvases();
+                int renderedGlyphs = 0;
+                foreach (var text in root.GetComponentsInChildren<HplGuiText>())
+                {
+                    if (text.CommandCount == 0) continue;
+                    Check(text.canvasRenderer != null, "Text has no CanvasRenderer");
+                    var mesh = text.canvasRenderer.GetMesh();
+                    if (mesh != null) renderedGlyphs += mesh.vertexCount;
+                }
+                Check(renderedGlyphs > 0, "Menu text did not produce any rendered glyph geometry");
                 Check(world.IsPaused && voice.IsPaused && map.sound.Music.IsPaused, "Audio did not pause");
                 var duringPause = map.sound.PlayGui("pause_test", true, 1f);
                 Check(duringPause.IsPaused, "A sound created during pause was not paused");
@@ -75,6 +90,22 @@ namespace RTXMnesia.EditorDev
                 Check(map.hud.Canvas.enabled, "HUD was not restored");
                 Check(!world.IsPaused && !duringPause.IsPaused && voice.IsPaused, "Resume lost independent sound pause reasons");
                 Check(!map.sound.Music.IsPaused, "Music was not resumed");
+
+                ui.Pause();
+                float originalSensitivity = ui.Settings.mouseSensitivity;
+                ui.OpenOptions();
+                ui.DraftSettings.mouseSensitivity = 4.5f;
+                Check(ui.Settings.mouseSensitivity == originalSensitivity, "Editing options modified applied settings");
+                ui.Resume();
+                Check(!ui.ShowingOptions && ui.Settings.mouseSensitivity == originalSensitivity, "Discarded options were applied");
+                var invalidSettings = new HplUserSettings { mouseSensitivity = float.NaN, masterVolume = float.PositiveInfinity };
+                invalidSettings.Validate();
+                Check(invalidSettings.mouseSensitivity == 1f && invalidSettings.masterVolume == 1f, "Invalid preference values were not sanitized");
+                var applied = new HplUserSettings { mouseSensitivity = 2.2f, masterVolume = 0.25f, invertMouse = true, subtitles = false, hints = false, crosshair = false, vSync = true };
+                applied.Apply(map);
+                Check(map.player.mouseSensitivity == 2.2f && map.player.invertMouse && !map.player.active, "Settings did not apply to input or changed the script lock");
+                Check(!map.hud.showSubtitles && !map.hud.showHints && !map.hud.showCrossHair, "HUD settings were not applied");
+                Check(AudioListener.volume == 0.25f && QualitySettings.vSyncCount == 1, "Audio / VSync settings were not applied");
 
                 map.sound.Music.Pause();
                 map.hud.Canvas.enabled = false;
@@ -104,6 +135,8 @@ namespace RTXMnesia.EditorDev
                 Time.timeScale = originalTimeScale;
                 Cursor.lockState = originalCursorLock;
                 Cursor.visible = originalCursorVisible;
+                AudioListener.volume = originalVolume;
+                QualitySettings.vSyncCount = originalVSync;
             }
         }
 

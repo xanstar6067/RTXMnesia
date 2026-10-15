@@ -24,6 +24,8 @@ namespace RTXMnesia.Effects
 
         Material _material;
         RTHandle _source, _trail;
+        RTHandle _menuSharp, _menuBlur, _menuTemp;
+        int _menuGeneration = -1, _menuWidth, _menuHeight;
         bool _clearTrail = true;
         double _lastRenderTime = -1.0;
 
@@ -34,6 +36,8 @@ namespace RTXMnesia.Effects
         static readonly int SepiaId = Shader.PropertyToID("_HplSepia");
         static readonly int FadeId = Shader.PropertyToID("_HplFade");
         static readonly int AddId = Shader.PropertyToID("_HplAdd");
+        static readonly int MenuSharpId = Shader.PropertyToID("_HplMenuSharp");
+        static readonly int MenuBlendId = Shader.PropertyToID("_HplMenuBlend");
 
         protected override void Setup(ScriptableRenderContext renderContext, CommandBuffer cmd)
         {
@@ -74,8 +78,13 @@ namespace RTXMnesia.Effects
 
             // cPostEffect_ImageTrail: turning it off resets it, the next frame starts from the current image.
             bool trailOn = trail > 0f;
+            bool menuOn = effects.Map != null && effects.Map.IsMenuPaused;
             if (!trailOn) _clearTrail = true;
-            if (!trailOn && blur <= 0f && sepia <= 0f && fade <= 0f && add.maxColorComponent <= 0f) return;
+            if (!trailOn && blur <= 0f && sepia <= 0f && fade <= 0f && add.maxColorComponent <= 0f)
+            {
+                if (menuOn) RenderMenu(ctx); else ReleaseMenu();
+                return;
+            }
 
             var cmd = ctx.cmd;
             var props = ctx.propertyBlock;
@@ -115,6 +124,53 @@ namespace RTXMnesia.Effects
             props.SetVector(AddId, add);
             CoreUtils.SetRenderTarget(cmd, ctx.cameraColorBuffer, ClearFlag.None);
             CoreUtils.DrawFullScreen(cmd, _material, props, CompositePass);
+            if (menuOn) RenderMenu(ctx); else ReleaseMenu();
+        }
+
+        void RenderMenu(CustomPassContext ctx)
+        {
+            var ui = effects.Map.GameUi;
+            var cmd = ctx.cmd;
+            var props = ctx.propertyBlock;
+            if (_menuSharp == null)
+            {
+                _menuSharp = Alloc("HPL menu screenshot");
+                _menuBlur = Alloc("HPL menu blur");
+                _menuTemp = Alloc("HPL menu blur temp");
+            }
+            if (_menuGeneration != ui.PauseGeneration || _menuWidth != ctx.hdCamera.actualWidth || _menuHeight != ctx.hdCamera.actualHeight)
+            {
+                _menuGeneration = ui.PauseGeneration;
+                _menuWidth = ctx.hdCamera.actualWidth;
+                _menuHeight = ctx.hdCamera.actualHeight;
+                CoreUtils.SetRenderTarget(cmd, _menuSharp, ClearFlag.None);
+                CoreUtils.DrawFullScreen(cmd, _material, props, CopyPass);
+                RTHandle input = _menuSharp;
+                // LuxMainMenu::RenderBlurTexture: one blur plus six further H/V pairs.
+                for (int i = 0; i < 7; i++)
+                {
+                    props.SetTexture(SourceId, input);
+                    CoreUtils.SetRenderTarget(cmd, _menuTemp, ClearFlag.None);
+                    CoreUtils.DrawFullScreen(cmd, _material, props, 3);
+                    props.SetTexture(SourceId, _menuTemp);
+                    CoreUtils.SetRenderTarget(cmd, _menuBlur, ClearFlag.None);
+                    CoreUtils.DrawFullScreen(cmd, _material, props, 4);
+                    input = _menuBlur;
+                }
+            }
+            props.SetTexture(MenuSharpId, _menuSharp);
+            props.SetTexture(SourceId, _menuBlur);
+            props.SetFloat(MenuBlendId, ui.MenuOpacity);
+            CoreUtils.SetRenderTarget(cmd, ctx.cameraColorBuffer, ClearFlag.None);
+            CoreUtils.DrawFullScreen(cmd, _material, props, 5);
+        }
+
+        void ReleaseMenu()
+        {
+            _menuSharp?.Release(); _menuSharp = null;
+            _menuBlur?.Release(); _menuBlur = null;
+            _menuTemp?.Release(); _menuTemp = null;
+            _menuGeneration = -1;
         }
 
         protected override void Cleanup()
@@ -122,6 +178,7 @@ namespace RTXMnesia.Effects
             CoreUtils.Destroy(_material);
             _source?.Release();
             _trail?.Release();
+            ReleaseMenu();
         }
     }
 }

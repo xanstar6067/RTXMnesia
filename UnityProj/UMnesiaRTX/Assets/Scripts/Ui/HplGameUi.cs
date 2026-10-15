@@ -14,6 +14,11 @@ namespace RTXMnesia.Ui
     {
         public bool IsPaused { get; private set; }
         public bool ConfirmingQuit { get; private set; }
+        public bool ShowingOptions { get; private set; }
+        public float MenuOpacity { get; private set; }
+        public int PauseGeneration { get; private set; }
+        public HplUserSettings Settings { get; private set; }
+        public HplUserSettings DraftSettings { get; private set; }
         /// <summary>Real render time excluding menu pauses, including pauses with no rendered frames.</summary>
         public double RenderTime => (IsPaused ? _pauseStartedAt : Time.realtimeSinceStartupAsDouble) - _pausedDuration;
 
@@ -24,11 +29,16 @@ namespace RTXMnesia.Ui
         bool _previousCursorVisible, _hudWasEnabled;
         int _selected;
         double _pauseStartedAt, _pausedDuration;
+        int _optionsTab;
+        bool _closing;
+        MenuControl? _dragSlider;
 
         public void Init(HplMap map)
         {
             if (_map != null) return;
             _map = map;
+            Settings = HplUserSettings.Load(map);
+            if (Application.isPlaying) Settings.Apply(map);
             _menu = new HplPauseMenu(map, transform);
         }
 
@@ -39,24 +49,43 @@ namespace RTXMnesia.Ui
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
             {
                 if (!IsPaused) Pause();
-                else if (ConfirmingQuit) ShowPauseMenu();
-                else Resume();
+                else if (ConfirmingQuit || ShowingOptions) ShowPauseMenu();
+                else _closing = true;
                 return;
             }
             if (!IsPaused) return;
+            float fadeTime = _map.menuConfig != null ? _map.menuConfig.GetFloat("Main", _closing ? "MainFadeOutTimeFast" : "MainFadeInTime", _closing ? 0.3f : 1f) : (_closing ? 0.3f : 1f);
+            MenuOpacity = Mathf.MoveTowards(MenuOpacity, _closing ? 0f : 1f, Time.unscaledDeltaTime / Mathf.Max(0.001f, fadeTime));
+            if (_closing && MenuOpacity <= 0f) { Resume(); return; }
 
             // Keep the UI cursor available even if the editor or a focus transition relocks it.
             Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            Cursor.visible = !_menu.HasCursor;
             var mouse = Mouse.current;
+            Refresh();
+            if (_closing) return;
+            if (mouse != null && ShowingOptions)
+            {
+                if (mouse.leftButton.wasPressedThisFrame && _menu.TrySlider(mouse.position.ReadValue(), out var slider)) _dragSlider = slider;
+                if (_dragSlider.HasValue && mouse.leftButton.isPressed)
+                {
+                    float value = _menu.SliderValue(_dragSlider.Value, mouse.position.ReadValue());
+                    if (_dragSlider == MenuControl.VolumeSlider) DraftSettings.masterVolume = Mathf.Round(value * 100) / 100f;
+                    else DraftSettings.mouseSensitivity = Mathf.Round((0.2f + value * 4.8f) * 10) / 10f;
+                }
+                if (!mouse.leftButton.isPressed) _dragSlider = null;
+            }
             int hovered = mouse != null ? _menu.HitTest(mouse.position.ReadValue()) : -1;
             if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0f && hovered >= 0) _selected = hovered;
             if (keyboard != null)
             {
-                if (keyboard.upArrowKey.wasPressedThisFrame || keyboard.downArrowKey.wasPressedThisFrame ||
-                    keyboard.tabKey.wasPressedThisFrame) _selected = 1 - _selected;
+                if (keyboard.upArrowKey.wasPressedThisFrame) _selected = (_selected + _menu.ButtonCount - 1) % _menu.ButtonCount;
+                if (keyboard.downArrowKey.wasPressedThisFrame) _selected = (_selected + 1) % _menu.ButtonCount;
+                if (keyboard.tabKey.wasPressedThisFrame) _selected = (_selected + _menu.ButtonCount + (keyboard.shiftKey.isPressed ? -1 : 1)) % _menu.ButtonCount;
+                if (ShowingOptions && keyboard.leftArrowKey.wasPressedThisFrame) AdjustSelected(-1);
+                if (ShowingOptions && keyboard.rightArrowKey.wasPressedThisFrame) AdjustSelected(1);
             }
-            _menu.Refresh(ConfirmingQuit, _selected);
+            Refresh();
 
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && hovered >= 0) Activate(hovered);
             else if (keyboard != null && (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame))
@@ -72,13 +101,17 @@ namespace RTXMnesia.Ui
             _hudWasEnabled = _map.hud != null && _map.hud.Canvas != null && _map.hud.Canvas.enabled;
             _pauseStartedAt = Time.realtimeSinceStartupAsDouble;
             IsPaused = true;
+            PauseGeneration++;
+            MenuOpacity = 0.01f;
+            _closing = false;
+            _dragSlider = null;
             _map.player?.SetUiInputBlocked(true);
             _map.sound?.SetMenuPaused(true);
             // Stops Unity's automatic physics too; HplMap also guards explicit Step calls.
             Time.timeScale = 0f;
             if (_map.hud != null && _map.hud.Canvas != null) _map.hud.Canvas.enabled = false;
             Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            Cursor.visible = !_menu.HasCursor;
             ShowPauseMenu();
         }
 
@@ -88,6 +121,11 @@ namespace RTXMnesia.Ui
             _pausedDuration += Time.realtimeSinceStartupAsDouble - _pauseStartedAt;
             IsPaused = false;
             ConfirmingQuit = false;
+            ShowingOptions = false;
+            DraftSettings = null;
+            _dragSlider = null;
+            MenuOpacity = 0f;
+            _closing = false;
             Time.timeScale = _previousTimeScale;
             if (_map != null)
             {
@@ -103,32 +141,84 @@ namespace RTXMnesia.Ui
         void ShowPauseMenu()
         {
             ConfirmingQuit = false;
+            ShowingOptions = false;
+            DraftSettings = null;
+            _dragSlider = null;
             _selected = 0;
             _menu.SetVisible(true);
-            _menu.Refresh(false, _selected);
+            Refresh();
         }
 
-        void Activate(int index)
+        void Refresh() => _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? Settings,
+            _selected, MenuOpacity, Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
+
+        public void OpenOptions(int tab = -1)
         {
-            if (!ConfirmingQuit)
+            if (!IsPaused) return;
+            if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, 3);
+            ShowingOptions = true;
+            _dragSlider = null;
+            DraftSettings = Settings.Copy();
+            _selected = _optionsTab;
+            Refresh();
+        }
+
+        void AdjustSelected(int direction)
+        {
+            var control = _menu.ControlAt(_selected);
+            if (control >= MenuControl.GameTab && control <= MenuControl.InputTab)
             {
-                if (index == 0) Resume();
-                else
-                {
+                _optionsTab = (_optionsTab + 4 + direction) % 4;
+                _selected = _optionsTab;
+                _dragSlider = null;
+                Refresh();
+            }
+            else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse) Activate(_selected, direction);
+        }
+
+        void Activate(int index, int direction = 0)
+        {
+            if (index < 0 || index >= _menu.ButtonCount) return;
+            var control = _menu.ControlAt(index);
+            switch (control)
+            {
+                case MenuControl.Resume: _closing = true; break;
+                case MenuControl.Options: OpenOptions(); break;
+                case MenuControl.Quit:
                     ConfirmingQuit = true;
                     _selected = 1;
-                    _menu.Refresh(true, _selected);
-                }
-            }
-            else if (index == 1) ShowPauseMenu();
-            else
-            {
+                    break;
+                case MenuControl.Cancel: ShowPauseMenu(); break;
+                case MenuControl.Apply:
+                    Settings = DraftSettings.Copy();
+                    Settings.Apply(_map);
+                    Settings.Save();
+                    ShowPauseMenu();
+                    break;
+                case MenuControl.GameTab: case MenuControl.GraphicsTab: case MenuControl.SoundTab: case MenuControl.InputTab:
+                    _optionsTab = (int)control - (int)MenuControl.GameTab;
+                    _selected = _optionsTab;
+                    break;
+                case MenuControl.Subtitles: DraftSettings.subtitles = !DraftSettings.subtitles; break;
+                case MenuControl.Hints: DraftSettings.hints = !DraftSettings.hints; break;
+                case MenuControl.Crosshair: DraftSettings.crosshair = !DraftSettings.crosshair; break;
+                case MenuControl.Fullscreen: DraftSettings.fullscreen = !DraftSettings.fullscreen; break;
+                case MenuControl.VSync: DraftSettings.vSync = !DraftSettings.vSync; break;
+                case MenuControl.InvertMouse: DraftSettings.invertMouse = !DraftSettings.invertMouse; break;
+                case MenuControl.SmoothMouse: DraftSettings.smoothMouse = !DraftSettings.smoothMouse; break;
+                case MenuControl.VolumeLess: DraftSettings.masterVolume = Mathf.Clamp01(DraftSettings.masterVolume + 0.05f * (direction == 0 ? -1 : direction)); break;
+                case MenuControl.VolumeMore: DraftSettings.masterVolume = Mathf.Clamp01(DraftSettings.masterVolume + 0.05f * (direction == 0 ? 1 : direction)); break;
+                case MenuControl.SensitivityLess: DraftSettings.mouseSensitivity = Mathf.Clamp(DraftSettings.mouseSensitivity + 0.1f * (direction == 0 ? -1 : direction), 0.2f, 5f); break;
+                case MenuControl.SensitivityMore: DraftSettings.mouseSensitivity = Mathf.Clamp(DraftSettings.mouseSensitivity + 0.1f * (direction == 0 ? 1 : direction), 0.2f, 5f); break;
+                case MenuControl.ConfirmQuit:
 #if UNITY_EDITOR
-                UnityEditor.EditorApplication.isPlaying = false;
+                    UnityEditor.EditorApplication.isPlaying = false;
 #else
-                Application.Quit();
+                    Application.Quit();
 #endif
+                    break;
             }
+            Refresh();
         }
 
         void OnApplicationFocus(bool focused)

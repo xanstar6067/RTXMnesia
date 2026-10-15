@@ -10,6 +10,7 @@ namespace RTXMnesia.Ui
     /// top left of the row, the alignment moves it by the length). The RectTransform covers the virtual screen, so
     /// positions are virtual pixels from its top left, y down.
     /// </summary>
+    [RequireComponent(typeof(CanvasRenderer))]
     public class HplGuiText : MaskableGraphic
     {
         public HplFont font;

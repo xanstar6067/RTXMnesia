@@ -1360,6 +1360,7 @@ namespace RTXMnesia.Importer
             hud.focusFont = string.IsNullOrEmpty(focusFont) || focusFont == "game_default.fnt" ? hud.defaultFont
                 : FontConverter.Convert(focusFont, map.language, _index, _log);
             map.hud = hud;
+            MenuConverter.Convert(_index, map.language, map.menuConfig, _log);
 
             var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
             sound.bank = SoundConverter.Convert(_log, map.language);
