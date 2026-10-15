@@ -36,6 +36,8 @@ namespace RTXMnesia.ScriptApi
         public Sound.HplSoundHandler sound;
         [Tooltip("materials.cfg: physics materials and surface data.")]
         public HplSurfaces surfaces;
+        [Tooltip("All particle systems (.ps), see ParticleConverter.")]
+        public Particles.HplParticleBank particles;
 
         [Tooltip("ScriptDebugOn() in the level script (the original skips intros and runs test code).")]
         public bool scriptDebug;
@@ -48,6 +50,7 @@ namespace RTXMnesia.ScriptApi
 
         public HplScript Script { get; private set; }
         public Dynamics.HplPhysicsWorld PhysicsWorld { get; private set; }
+        public Particles.HplParticleWorld ParticleWorld { get; private set; }
         public float GameTime { get; private set; }
         public Camera PlayerCamera => player != null ? player.playerCamera : null;
         public readonly HplCollideCallbacks PlayerCollideCallbacks = new();
@@ -91,6 +94,8 @@ namespace RTXMnesia.ScriptApi
         {
             if (Current == this) Current = null;
         }
+
+        void OnDestroy() => ParticleWorld?.DestroyAll();
 
         void Start() => Begin();
 
@@ -145,9 +150,12 @@ namespace RTXMnesia.ScriptApi
                 _checkPlayerCallbacks = () => PlayerCollideCallbacks.Check("Player", _playerBodies, this);
             }
 
+            ParticleWorld = new Particles.HplParticleWorld(particles);
+            if (particles == null) HplLog.Warn("No particle bank: re-import the level to get particle systems");
             PhysicsWorld = new Dynamics.HplPhysicsWorld();
             PhysicsWorld.SurfaceSounds.Sound = sound;
             PhysicsWorld.SurfaceSounds.Surfaces = surfaces;
+            PhysicsWorld.SurfaceSounds.Particles = ParticleWorld;
             _templateRoot = transform.Find("EntityTemplates");
             _entityRoot = transform.Find("Entities") ?? transform;
 
@@ -173,10 +181,12 @@ namespace RTXMnesia.ScriptApi
                 if (IsTemplate(light.transform)) continue;
                 if (_lights.TryAdd(light.name, light)) _lightList.Add(light);
                 light.sound = sound;
+                light.particles = ParticleWorld;
                 light.InitRuntime();
             }
             ConnectBillboards(transform);
             CreateSoundEntities(transform);
+            CreateParticleSystems(transform);
             foreach (var entity in GetComponentsInChildren<AmnesiaEntity>(true))
             {
                 if (IsTemplate(entity.transform)) continue;
@@ -250,6 +260,9 @@ namespace RTXMnesia.ScriptApi
         {
             Begin();
 
+            // cLuxMapHandler::Update: the effect renderer's flash list is rebuilt by this update.
+            effects.Renderer.ClearRenderLists();
+
             // cLuxMap::Update
             UpdateTimers(timeStep);
             for (int i = 0; i < _entities.Count; i++)
@@ -270,6 +283,7 @@ namespace RTXMnesia.ScriptApi
         public void StepAfterSimulate(float timeStep)
         {
             PhysicsWorld.AfterSimulate(timeStep);
+            ParticleWorld.Update(timeStep);
             for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
             sound.Step(timeStep);
             if (player != null) player.StepPostUpdate(timeStep);
@@ -376,6 +390,50 @@ namespace RTXMnesia.ScriptApi
                 if (s.Parent != null && s.Parent.IsChildOf(root)) s.Detach();
         }
 
+        // ------------------------------------------------------------------ particle systems
+
+        readonly Dictionary<AmnesiaParticleSystem, Particles.HplParticleSystem> _placedParticles = new();
+
+        /// <summary>
+        /// cEngineFileLoading::LoadParticleSystem for the particle systems of the map and of .ent files: they follow
+        /// their node, with the instance's color and distance fade. One under an inactive node does not update.
+        /// </summary>
+        void CreateParticleSystems(Transform root)
+        {
+            foreach (var placed in root.GetComponentsInChildren<AmnesiaParticleSystem>(true))
+            {
+                if (IsTemplate(placed.transform) || _placedParticles.ContainsKey(placed)) continue;
+                var ps = ParticleWorld.Create(placed.name, placed.file);
+                if (ps == null) continue;
+                ps.Parent = placed.transform;
+                ps.Color = placed.color;
+                ps.FadeAtDistance = placed.fadeAtDistance;
+                ps.MinFadeDistanceStart = placed.minFadeDistance.x;
+                ps.MinFadeDistanceEnd = placed.minFadeDistance.y;
+                ps.MaxFadeDistanceStart = placed.maxFadeDistance.x;
+                ps.MaxFadeDistanceEnd = placed.maxFadeDistance.y;
+                ps.Active = placed.gameObject.activeInHierarchy;
+                _placedParticles[placed] = ps;
+            }
+        }
+
+        /// <summary>The particle systems placed under a node (an entity's own systems), as loaded.</summary>
+        public List<Particles.HplParticleSystem> ParticleSystemsUnder(Transform root)
+        {
+            var list = new List<Particles.HplParticleSystem>();
+            foreach (var placed in root.GetComponentsInChildren<AmnesiaParticleSystem>(true))
+                if (_placedParticles.TryGetValue(placed, out var ps)) list.Add(ps);
+            return list;
+        }
+
+        /// <summary>Before an entity's objects go: systems that follow it stay where they are (its own were killed).</summary>
+        void ReleaseParticleSystems(Transform root)
+        {
+            foreach (var placed in root.GetComponentsInChildren<AmnesiaParticleSystem>(true)) _placedParticles.Remove(placed);
+            foreach (var ps in ParticleWorld.Systems)
+                if (ps.Parent != null && ps.Parent.IsChildOf(root)) ps.Detach();
+        }
+
         /// <summary>cLuxMap::DestroyEntity: the entity goes after this step.</summary>
         public void DestroyEntity(HplEntity entity)
         {
@@ -395,6 +453,7 @@ namespace RTXMnesia.ScriptApi
                 if (entity is HplProp prop)
                 {
                     prop.BeforeDestruction();
+                    prop.KillParticleSystems();
                     PhysicsWorld.RemoveBodies(prop.PhysicsBodies);
                 }
                 _entities.Remove(entity);
@@ -409,6 +468,7 @@ namespace RTXMnesia.ScriptApi
                 // Destroy waits for the end of the frame: off now, so the next physics step no longer sees its bodies
                 // (the pieces of a broken pot would be pushed out of the whole one).
                 ReleaseSounds(entity.GameObject.transform);
+                ReleaseParticleSystems(entity.GameObject.transform);
                 entity.GameObject.SetActive(false);
                 if (Application.isPlaying) Destroy(entity.GameObject);
                 else DestroyImmediate(entity.GameObject);
@@ -446,10 +506,12 @@ namespace RTXMnesia.ScriptApi
             {
                 if (_lights.TryAdd(light.name, light)) _lightList.Add(light);
                 light.sound = sound;
+                light.particles = ParticleWorld;
                 light.InitRuntime();
             }
             ConnectBillboards(go.transform);
             CreateSoundEntities(go.transform);
+            CreateParticleSystems(go.transform);
             var prop = Props.PropFactory.Create(go.GetComponent<AmnesiaEntity>());
             if (prop == null) return null;
             prop.Load(this, PhysicsWorld);
@@ -578,6 +640,7 @@ namespace RTXMnesia.ScriptApi
                 FogFalloffExp = _level.fogFalloffExp;
             }
             HplLighting.SetMultiplyFog(FogActive, FogColor, FogEnd);
+            HplLighting.SetTranslucentFog(FogActive, FogColor, FogStart, FogEnd, FogFalloffExp);
             var volume = GetComponentInChildren<Volume>(true);
             // Only in play mode: Volume.profile copies the shared profile there, edits must not reach the asset.
             if (volume != null && Application.isPlaying && volume.profile.TryGet(out Fog fog)) _fog = fog;
@@ -590,6 +653,7 @@ namespace RTXMnesia.ScriptApi
             FogStart = start ?? FogStart;
             FogEnd = end ?? FogEnd;
             FogFalloffExp = falloffExp ?? FogFalloffExp;
+            HplLighting.SetTranslucentFog(FogActive, FogColor, FogStart, FogEnd, FogFalloffExp);
             if (_fog != null) HplLighting.ApplyFog(_fog, FogActive, FogColor, FogEnd);
         }
 

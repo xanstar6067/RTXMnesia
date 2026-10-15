@@ -11,7 +11,7 @@ namespace RTXMnesia.Dynamics
     /// the scrape bookkeeping of iPhysicsBody::UpdateAfterSimulate. Contacts come from <see cref="HplBodyContacts"/>
     /// (OnCollisionEnter / Stay) of every body; the speeds are taken from the velocities before the step, as
     /// Newton's contact callback saw them. Static geometry has its own scrape state, like its Newton bodies.
-    /// Impact particle systems (CreateImpactEffect): with the particle converter.
+    /// The impact particle systems (CreateImpactEffect) come from the same contacts.
     /// </summary>
     public sealed class HplSurfaceSounds
     {
@@ -36,6 +36,7 @@ namespace RTXMnesia.Dynamics
 
         public HplSoundHandler Sound;
         public HplSurfaces Surfaces;
+        public Particles.HplParticleWorld Particles;
 
         public HplSurfaceSounds(HplPhysicsWorld world) => _world = world;
 
@@ -142,7 +143,7 @@ namespace RTXMnesia.Dynamics
             if (count == 0) return;
             position /= count;
 
-            // CreateImpactEffect: impact particle systems come with the particle converter.
+            CreateImpactEffect(surfaceA, normalSpeed, position, surfaceB);
             int prioA = surfaceA.priority, prioB = surfaceB.priority;
             if (prioA >= prioB)
             {
@@ -168,6 +169,31 @@ namespace RTXMnesia.Dynamics
             if (Surfaces == null) return null;
             var pm = c.sharedMaterial;
             return Surfaces.GetOrDefault(pm != null ? pm.name : null);
+        }
+
+        static HplSurfaces.Effect FirstImpact(HplSurfaces.Surface surface, float speed)
+        {
+            foreach (var impact in surface.impacts)
+                if (impact.minSpeed <= speed) return impact;
+            return null;
+        }
+
+        /// <summary>
+        /// cSurfaceData::CreateImpactEffect: the particle system of the impact the speed reaches on either surface
+        /// (higher PSPrio wins, the first surface on a tie), at the contact. Not limited like the impact sounds.
+        /// </summary>
+        void CreateImpactEffect(HplSurfaces.Surface surface, float speed, Vector3 position, HplSurfaces.Surface second)
+        {
+            if (speed == 0f || Particles == null) return;
+            var a = FirstImpact(surface, speed);
+            var b = second != surface && second != null ? FirstImpact(second, speed) : null;
+            string ps = "";
+            if (a != null && b == null) ps = a.psName;
+            else if (a == null && b != null) ps = b.psName;
+            else if (a != null) ps = a.psPrio >= b.psPrio ? a.psName : b.psName;
+            if (string.IsNullOrEmpty(ps)) return;
+            var system = Particles.Create("ImpactPS", ps);
+            if (system != null) system.LocalMatrix = Matrix4x4.Translate(position);
         }
 
         /// <summary>cSurfaceData::OnImpact: the first impact (fastest first) the speed reaches, within the limit.</summary>

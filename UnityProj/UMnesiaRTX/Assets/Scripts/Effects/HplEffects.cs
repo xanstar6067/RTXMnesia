@@ -34,6 +34,9 @@ namespace RTXMnesia.Effects
         public readonly RadialBlurEffect RadialBlur = new();
         public readonly EmotionFlashEffect EmotionFlash = new();
 
+        /// <summary>cLuxEffectRenderer: focus outline and item flash (drawn by HplEffectRendererPass).</summary>
+        public readonly HplEffectRenderer Renderer = new();
+
         readonly List<Effect> _effects = new();
         bool _initialized;
 
@@ -78,6 +81,22 @@ namespace RTXMnesia.Effects
             pass.name = "HPL screen effects";
             pass.effects = this;
             pass.shader = screenEffectsShader;
+
+            var rendererShader = Shader.Find(HplEffectRendererPass.ShaderName);
+            if (rendererShader == null)
+            {
+                Debug.LogError("[RTXMnesia] Shader " + HplEffectRendererPass.ShaderName + " not found: outlines and item flashes are off");
+                return;
+            }
+            var rendererGo = new GameObject("HPL Effect Renderer") { hideFlags = HideFlags.DontSave };
+            rendererGo.transform.SetParent(transform, false);
+            var rendererVolume = rendererGo.AddComponent<CustomPassVolume>();
+            rendererVolume.isGlobal = true;
+            rendererVolume.injectionPoint = CustomPassInjectionPoint.BeforePostProcess;
+            var rendererPass = (HplEffectRendererPass)rendererVolume.AddPassOfType(typeof(HplEffectRendererPass));
+            rendererPass.name = "HPL effect renderer";
+            rendererPass.renderer = Renderer;
+            rendererPass.shader = rendererShader;
         }
 
         public void SetPlayerIsPaused(bool paused)
@@ -91,6 +110,7 @@ namespace RTXMnesia.Effects
         {
             foreach (var e in _effects)
                 if (e.Active) e.Update(timeStep);
+            Renderer.Update(timeStep);
         }
 
         /// <summary>cLuxEffectHandler::Reset (new game, map change).</summary>
@@ -101,6 +121,7 @@ namespace RTXMnesia.Effects
                 e.Reset();
                 e.Active = false;
             }
+            Renderer.Reset();
             PlayerIsPaused = false;
         }
 

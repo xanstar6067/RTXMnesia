@@ -152,21 +152,64 @@ namespace RTXMnesia.ScriptApi
         /// <summary>eLuxGlobalVolumeType_Script.</summary>
         const int GlobalVolumeTypeScript = 0;
 
-        // ------------------------------------------------------------------ particle systems (.ps converter)
+        // ------------------------------------------------------------------ particle systems
 
+        /// <summary>The bank has every system already.</summary>
         protected void PreloadParticleSystem(string asPSFile) { }
 
         protected void CreateParticleSystemAtEntity(string asPSName, string asPSFile, string asEntity, bool abSavePS) =>
-            NotPorted(nameof(CreateParticleSystemAtEntity), "particle systems (.ps converter)");
+            CreateParticleSystemAtEntityExt(asPSName, asPSFile, asEntity, abSavePS, 1, 1, 1, 1, false, 1, 2, 100, 110);
 
+        /// <summary>
+        /// At the player's body position, or on the entity's attach body: following it unless saved (then at its
+        /// matrix of now).
+        /// </summary>
         protected void CreateParticleSystemAtEntityExt(string asPSName, string asPSFile, string asEntity, bool abSavePS, float afR, float afG,
                                                        float afB, float afA, bool abFadeAtDistance, float afFadeMinEnd, float afFadeMinStart,
-                                                       float afFadeMaxStart, float afFadeMaxEnd) =>
-            NotPorted(nameof(CreateParticleSystemAtEntityExt), "particle systems (.ps converter)");
+                                                       float afFadeMaxStart, float afFadeMaxEnd)
+        {
+            Particles.HplParticleSystem ps;
+            if (asEntity == "Player")
+            {
+                ps = Map.ParticleWorld.Create(asPSName, asPSFile);
+                if (ps == null) return;
+                var body = Map.player != null ? Map.player.Body : null;
+                ps.LocalMatrix = Matrix4x4.Translate(body != null ? body.Position : Vector3.zero);
+                ps.IsSaved = abSavePS;
+            }
+            else
+            {
+                var entity = GetEntity(asEntity);
+                if (entity == null) return;
+                ps = Map.ParticleWorld.Create(asPSName, asPSFile);
+                if (ps == null) return;
+                var attach = entity.AttachTransform;
+                if (!abSavePS) ps.Parent = attach;
+                else ps.LocalMatrix = attach.localToWorldMatrix;
+                ps.IsSaved = abSavePS;
+            }
+            ps.Color = new Color(afR, afG, afB, afA);
+            ps.FadeAtDistance = abFadeAtDistance;
+            ps.MinFadeDistanceEnd = afFadeMinEnd;
+            ps.MinFadeDistanceStart = afFadeMinStart;
+            ps.MaxFadeDistanceStart = afFadeMaxStart;
+            ps.MaxFadeDistanceEnd = afFadeMaxEnd;
+        }
 
-        protected void DestroyParticleSystem(string asName) => NotPorted(nameof(DestroyParticleSystem), "particle systems (.ps converter)");
+        /// <summary>Every system with the name stops respawning and goes when its particles are dead.</summary>
+        protected void DestroyParticleSystem(string asName)
+        {
+            bool found = false;
+            foreach (var ps in Map.ParticleWorld.Systems)
+            {
+                if (ps.Name != asName) continue;
+                ps.Kill();
+                found = true;
+            }
+            if (!found) HplLog.Error($"Could not find particle system '{asName}'");
+        }
 
-        protected void StartPlayerSpawnPS(string asSPSFile) => NotPorted(nameof(StartPlayerSpawnPS), "particle systems (.ps converter)");
+        protected void StartPlayerSpawnPS(string asSPSFile) => NotPorted(nameof(StartPlayerSpawnPS), "player spawn particles (.sps)");
 
         protected void StopPlayerSpawnPS() { }
     }

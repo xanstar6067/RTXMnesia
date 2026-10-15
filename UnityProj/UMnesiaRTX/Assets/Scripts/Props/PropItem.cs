@@ -72,6 +72,25 @@ namespace RTXMnesia.Props
         }
 
         public override FocusCrosshair GetFocusCrosshair(HplPhysicsBody body, Vector3 hplFocusPos) => FocusCrosshair.Pick;
+
+        float _flashAlpha;
+
+        /// <summary>
+        /// cLuxProp_Item::UpdatePropSpecific: within 4 m of the camera (on the ground plane) the item's flash fades in
+        /// (1 per second), else out; while above 0 its meshes are flash objects of the effect renderer.
+        /// </summary>
+        protected override void UpdatePropSpecific(float timeStep)
+        {
+            if (InteractionDisabled || Map.player == null || PhysicsBodies.Count == 0) return;
+            Vector3 camera = Map.player.LogicCameraPosition, body = PhysicsBodies[0].Position;
+            camera.y = 0f;
+            body.y = 0f;
+            if ((camera - body).sqrMagnitude < 4f * 4f) _flashAlpha = Mathf.Min(1f, _flashAlpha + timeStep);
+            else _flashAlpha = Mathf.Max(0f, _flashAlpha - timeStep);
+            if (_flashAlpha <= 0f || Map.effects == null) return;
+            foreach (var r in Effects.HplEffectRenderer.MeshRenderers(GameObject.transform))
+                Map.effects.Renderer.AddFlashObject(r, _flashAlpha);
+        }
     }
 
     /// <summary>

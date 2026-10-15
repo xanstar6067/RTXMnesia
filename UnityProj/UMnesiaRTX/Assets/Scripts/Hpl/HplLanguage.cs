@@ -40,6 +40,8 @@ namespace RTXMnesia.Hpl
 
         public string language;
         public List<string> sourceFiles = new();
+        [Tooltip("RESOURCES folders of the language (fonts/rus, lang/rus): searched first for its fonts and voices.")]
+        public List<string> resourceDirs = new();
         public List<Category> categories = new();
         public List<Voice> voices = new();
 

@@ -291,7 +291,12 @@ namespace RTXMnesia.Props
                 Map.CreateEntity(Name + "_item", _containedItem, center, Quaternion.identity, Vector3.one);
 
             PlaySoundAt(Name + "_BreakSound", _breakSound, center);
-            // Break particle system: with the particle converter.
+            if (_breakParticleSystem != "")
+            {
+                var ps = Map.ParticleWorld.Create(Name + "_BreakPS", _breakParticleSystem);
+                if (ps != null)
+                    ps.LocalMatrix = _breakDestroyJoints ? Matrix4x4.Translate(center) : Matrix4x4.TRS(baseBody.Position, baseBody.Rotation, Vector3.one);
+            }
             RunCallbackFunc("Break");
         }
 

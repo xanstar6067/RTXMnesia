@@ -59,11 +59,13 @@ namespace RTXMnesia.Props
             _interactLockedSound = VarString("InteractLockedSound", "");
             _damageSound = VarString("DamageSound", "");
             _breakSound = VarString("BreakSound", "");
+            _damagePS = VarString("DamagePS", "");
+            _breakPS = VarString("BreakPS", "");
             // Damage meshes and their particle systems: later.
         }
 
         string _closeOnSound = "", _closeOffSound = "", _lockOnSound = "", _lockOffSound = "", _interactLockedSound = "";
-        string _damageSound = "", _breakSound = "";
+        string _damageSound = "", _breakSound = "", _damagePS = "", _breakPS = "";
 
         protected override void OnSetupAfterLoad()
         {
@@ -207,11 +209,12 @@ namespace RTXMnesia.Props
         protected override void OnHealthChange()
         {
             if (!_breakable || _disableBreakable || _broken) return;
-            string sound = "";
+            string sound = "", ps = "";
             var mainBody = PhysicsBodies.Find(b => !b.IsStatic);
             if (Health <= 0f)
             {
                 sound = _breakSound;
+                ps = _breakPS;
                 _broken = true;
                 HplPhysicsBody main = null;
                 foreach (var body in PhysicsBodies)
@@ -235,14 +238,21 @@ namespace RTXMnesia.Props
             {
                 _currentMeshEntity = 2; // damage meshes: later
                 sound = _damageSound;
+                ps = _damagePS;
             }
             else if (Health < _healthDamage[0] && _currentMeshEntity == 0)
             {
                 _currentMeshEntity = 1;
                 sound = _damageSound;
+                ps = _damagePS;
             }
-            // Break / damage particle systems: with the particle converter.
-            if (mainBody != null) PlaySoundAt(Name + "_BreakSound", sound, mainBody.Position);
+            if (mainBody == null) return;
+            PlaySoundAt(Name + "_BreakSound", sound, mainBody.Position);
+            if (ps != "")
+            {
+                var system = Map.ParticleWorld.Create(Name + "_BreakPS", ps);
+                if (system != null) system.LocalMatrix = Matrix4x4.TRS(mainBody.Position, mainBody.Rotation, Vector3.one);
+            }
         }
     }
 }

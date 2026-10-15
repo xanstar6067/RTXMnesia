@@ -73,6 +73,20 @@ namespace RTXMnesia.Hpl
                 : Vector4.zero);
         }
 
+        /// <summary>
+        /// HPL2's fade of translucent objects in fog (deferred_transparent_frag.glsl, UseFog) for HplParticle.shader
+        /// (_HplTranslucentFog): the world fog is drawn before them, so their alpha goes to 1 - fog alpha at
+        /// ((depth - start) / (end - start))^falloff. Off: no fade.
+        /// </summary>
+        public static void SetTranslucentFog(bool active, Color color, float start, float end, float falloffExp)
+        {
+            Shader.SetGlobalVector(TranslucentFogId, active
+                ? new Vector4(start, end - start, 1f - color.a, falloffExp)
+                : new Vector4(0f, 1f, 1f, 1f));
+        }
+
+        static readonly int TranslucentFogId = Shader.PropertyToID("_HplTranslucentFog");
+
         static float FogDistance(float fogEnd) => Mathf.Max(1f, fogEnd);
 
         static float MeanFreePath(Color color, float fogEnd) =>

@@ -8,7 +8,8 @@ namespace RTXMnesia.World
     /// FixedAxis billboards are plain mesh renderers on this object (scale = size).
     /// Point (faces the camera) and Axis (turns around <see cref="axis"/> towards the camera) billboards are drawn
     /// by a hidden, unsaved child that is re-oriented before every camera renders, also in the editor.
-    /// Halos (occlusion-faded glows, drawn without depth test in HPL2) and light connections are stored for later.
+    /// Halos (IsHalo) use Assets/Shaders/HplHalo.shader: the glow (usually without depth test) fades by the visible part
+    /// of its source box, as HPL2 does with occlusion queries.
     /// </summary>
     [ExecuteAlways]
     public class AmnesiaBillboard : MonoBehaviour
@@ -73,12 +74,20 @@ namespace RTXMnesia.World
             ApplyColor();
         }
 
+        public const string HaloShader = "RTXMnesia/HplHalo";
+        static readonly int HplColorId = Shader.PropertyToID("_HplColor");
+        static readonly int HaloBoxId = Shader.PropertyToID("_HplHaloBox");
+        static readonly int HaloActiveId = Shader.PropertyToID("_HplHaloActive");
+
         void ApplyColor()
         {
             if (material == null) return;
             _block ??= new MaterialPropertyBlock();
-            _block.Clear();
-            if (material.shader.name == "HDRP/Unlit")
+            if (material.shader.name == HaloShader)
+            {
+                _block.SetVector(HplColorId, color);
+            }
+            else if (material.shader.name == "HDRP/Unlit")
             {
                 // Additive HPL2 blending ignores alpha; HDRP multiplies additive color by it (as the import does).
                 bool additive = Mathf.Approximately(material.GetFloat("_BlendMode"), 1f);
@@ -114,6 +123,21 @@ namespace RTXMnesia.World
                 if (forward.sqrMagnitude > 1e-8f) _quad.rotation = Quaternion.LookRotation(forward, up);
             }
             _quad.position = transform.position + toCamera * forwardOffset;
+            if (isHalo) UpdateHaloSource();
+        }
+
+        /// <summary>
+        /// The halo's source box (HaloSourceSize at the billboard's matrix) for HplHalo.shader, which fades the glow by
+        /// the visible part of it (cBillboard::AssignOcclusionQuery / RetrieveOcculsionQuery).
+        /// </summary>
+        void UpdateHaloSource()
+        {
+            if (material == null || material.shader.name != HaloShader) return;
+            _block ??= new MaterialPropertyBlock();
+            if (!_runtimeColor) _block.SetVector(HplColorId, color);
+            _block.SetMatrix(HaloBoxId, Matrix4x4.TRS(transform.position, transform.rotation, Vector3.Scale(transform.lossyScale, haloSourceSize)));
+            _block.SetFloat(HaloActiveId, 1f);
+            if (_quad != null && _quad.TryGetComponent(out Renderer r)) r.SetPropertyBlock(_block);
         }
     }
 }

@@ -10,8 +10,8 @@ namespace RTXMnesia.Ui
     /// <summary>
     /// Game HUD texts: cLuxMessageHandler (SetMessage, quest added icon), cLuxHintHandler (hints) and the subtitles
     /// of cLuxEffect_PlayVoice / the emotion flash text. Positions are HPL2's 800×600 virtual screen, centered and
-    /// scaled with the window height. Drawn with Unity UI (overlay canvas, not saved with the scene) and the
-    /// built-in font until the game's bitmap fonts are converted (step 6, menus).
+    /// scaled with the window height. Drawn with Unity UI (overlay canvas, not saved with the scene); texts in the game
+    /// bitmap fonts (<see cref="HplFont"/>, <see cref="HplGuiText"/>) laid out like the original OnDraw code.
     /// </summary>
     public class HplHud : MonoBehaviour
     {
@@ -27,9 +27,27 @@ namespace RTXMnesia.Ui
         public readonly MessageHandler Messages = new();
         public readonly HintHandler Hints = new();
 
+        /// <summary>The overlay canvas (simulation snapshots draw it through the camera).</summary>
+        public Canvas Canvas => _canvas;
+
+        /// <summary>The text layers in drawing order (for tools).</summary>
+        public IEnumerable<HplGuiText> TextLayers => new[] { _focusText, _gameText, _hintText };
+
+        /// <summary>Text draw calls of the frame per layer (for tools).</summary>
+        public string DescribeText() =>
+            $"text: game {(_gameText != null ? _gameText.CommandCount : -1)} hint {(_hintText != null ? _hintText.CommandCount : -1)} focus {(_focusText != null ? _focusText.CommandCount : -1)}" +
+            $" fonts {(defaultFont != null ? defaultFont.name : "-")}/{(hintsFont != null ? hintsFont.name : "-")} canvas {(_canvas != null ? _canvas.renderMode.ToString() : "-")}";
+
+        [Tooltip("game_default.fnt: messages, voice subtitles, emotion flash text.")]
+        public HplFont defaultFont;
+        [Tooltip("menu.cfg Hints DefaultFont (game_hints.fnt).")]
+        public HplFont hintsFont;
+        [Tooltip("game.cfg Player_General FocusTextFont (game_default.fnt).")]
+        public HplFont focusFont;
+
         HplMap _map;
         Canvas _canvas;
-        Text _subtitles, _message, _hintTitle, _hintText, _emotionText, _focusText;
+        HplGuiText _gameText, _hintText, _focusText;
         RawImage _questIcon, _questGlow, _crosshair;
         Vector2 _voiceFontSize = new(18f, 18f);
         float _voiceRowWidth = 600f;
@@ -149,21 +167,67 @@ namespace RTXMnesia.Ui
         {
             if (_canvas == null) return;
             var effects = _map != null ? _map.effects : null;
+            _gameText.Clear();
+            _hintText.Clear();
+            _focusText.Clear();
 
-            // Voice subtitles: rows above y = 580, left aligned at 400 - width/2 (cLuxEffect_PlayVoice::OnDraw).
+            // cLuxEffect_PlayVoice::OnDraw: rows ending at y = 580, left aligned at 400 - width / 2.
             string voice = effects != null && effects.PlayVoice.Active && showSubtitles ? effects.PlayVoice.CurrentText : "";
-            SetText(_subtitles, voice, 1f);
+            if (!string.IsNullOrEmpty(voice) && defaultFont != null)
+            {
+                var rows = defaultFont.GetWordWrapRows(_voiceRowWidth, _voiceFontSize, voice);
+                var pos = new Vector2(400f - _voiceRowWidth / 2f, 580f - rows.Count * (_voiceFontSize.y + 2f));
+                foreach (string row in rows)
+                {
+                    _gameText.DrawFont(row, pos, _voiceFontSize, Color.white);
+                    pos.y += _voiceFontSize.y + 2f;
+                }
+            }
 
+            // cLuxMessageHandler::DrawMessage: centered rows from y = 345 (rows of 700).
             float messageAlpha = Messages.Alpha;
-            SetText(_message, messageAlpha > 0f ? Messages.Text : "", messageAlpha);
+            if (messageAlpha > 0f && defaultFont != null)
+            {
+                var pos = new Vector2(400f, 345f);
+                foreach (string row in defaultFont.GetWordWrapRows(700f, Messages.fontSize, Messages.Text))
+                {
+                    _gameText.DrawFont(row, pos, Messages.fontSize, new Color(1f, 1f, 1f, messageAlpha), HplFontAlign.Center);
+                    pos.y += Messages.fontSize.y + 2f;
+                }
+            }
 
-            bool hint = Hints.Active && Hints.Alpha > 0f;
-            float glow = Hints.Oscillation * 0.5f;
-            SetText(_hintTitle, hint ? " " + Translate("Hints", "HINT:") : "", Hints.Alpha, new Color(1f, glow, glow));
-            SetText(_hintText, hint ? " " + Hints.Text : "", Hints.Alpha);
+            // cLuxHintHandler::DrawHintText: " HINT:" glowing red, then one centered row or left aligned rows of 680.
+            if (Hints.Active && Hints.Alpha > 0f && hintsFont != null)
+            {
+                float glow = Hints.Oscillation * 0.5f;
+                Vector2 size = Hints.fontSize;
+                _hintText.DrawFont(" " + Translate("Hints", "HINT:"), new Vector2(400f, Hints.yPos), size, new Color(1f, glow, glow, Hints.Alpha), HplFontAlign.Center);
+                const float maxWidth = 680f;
+                float startY = Hints.yPos + size.y + 3f;
+                var rows = hintsFont.GetWordWrapRows(maxWidth, size, Hints.Text);
+                var color = new Color(1f, 1f, 1f, Hints.Alpha);
+                if (rows.Count == 1) _hintText.DrawFont(" " + Hints.Text, new Vector2(400f, startY), size, color, HplFontAlign.Center);
+                else
+                    for (int i = 0; i < rows.Count; i++)
+                        _hintText.DrawFont(" " + rows[i], new Vector2(400f - maxWidth * 0.5f, startY + i * (size.y + 2f)), size, color);
+            }
 
+            // cLuxEffect_EmotionFlash::OnDraw: black text on the white flash, one centered row or rows from x = 150.
             var emotion = effects != null ? effects.EmotionFlash : null;
-            SetText(_emotionText, emotion != null && emotion.Active && emotion.TextAlpha > 0f ? emotion.Text : "", emotion?.TextAlpha ?? 0f, Color.black);
+            if (emotion != null && emotion.Active && emotion.TextAlpha > 0f && defaultFont != null)
+            {
+                var size = new Vector2(20f, 20f);
+                var rows = defaultFont.GetWordWrapRows(500f, size, emotion.Text);
+                float y = 300f - (size.y + 2f) * 0.5f * rows.Count;
+                var color = new Color(0f, 0f, 0f, emotion.TextAlpha);
+                if (rows.Count == 1) _gameText.DrawFont(rows[0], new Vector2(400f, y), size, color, HplFontAlign.Center);
+                else
+                    foreach (string row in rows)
+                    {
+                        _gameText.DrawFont(row, new Vector2(150f, y), size, color);
+                        y += size.y + 2f;
+                    }
+            }
 
             float quest = Messages.QuestAlpha;
             _questIcon.enabled = _questGlow.enabled = quest > 0f && questAddedIcon != null;
@@ -207,17 +271,14 @@ namespace RTXMnesia.Ui
                 focus = player.FocusText != "" ? player.FocusText : player.LastFocusText;
                 alpha = player.FocusTextAlpha;
             }
-            SetText(_focusText, focus, alpha, new Color(1f - fade, 1f - fade, 1f - fade));
-        }
-
-        static void SetText(Text text, string value, float alpha, Color? color = null)
-        {
-            text.enabled = !string.IsNullOrEmpty(value) && alpha > 0f;
-            if (!text.enabled) return;
-            text.text = value;
-            Color c = color ?? Color.white;
-            c.a = Mathf.Clamp01(alpha);
-            text.color = c;
+            // cLuxPlayer::DrawHud: centered rows of 500 at size 22 from y = 450, 24 apart.
+            if (!string.IsNullOrEmpty(focus) && alpha > 0f && focusFont != null)
+            {
+                var rows = focusFont.GetWordWrapRows(500f, new Vector2(22f, 22f), focus);
+                for (int i = 0; i < rows.Count; i++)
+                    _focusText.DrawFont(rows[i], new Vector2(400f, 450f + i * 24f), new Vector2(22f, 22f),
+                                        new Color(1f - fade, 1f - fade, 1f - fade, Mathf.Clamp01(alpha)), HplFontAlign.Center);
+            }
         }
 
         void BuildUi()
@@ -239,22 +300,8 @@ namespace RTXMnesia.Ui
             screen.anchorMin = screen.anchorMax = new Vector2(0.5f, 0.5f);
             screen.sizeDelta = new Vector2(800f, 600f);
 
-            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
-            float voiceRow = _voiceFontSize.y + 2f;
-            _subtitles = CreateText(screen, "Subtitles", font, (int)_voiceFontSize.y, TextAnchor.LowerLeft,
-                                    new Rect(400f - _voiceRowWidth * 0.5f, 580f - voiceRow * 6f, _voiceRowWidth, voiceRow * 6f));
-            _message = CreateText(screen, "Message", font, (int)Messages.fontSize.y, TextAnchor.UpperCenter, new Rect(50f, 345f, 700f, 200f));
-            _hintTitle = CreateText(screen, "Hint title", font, (int)Hints.fontSize.y, TextAnchor.UpperCenter, new Rect(60f, Hints.yPos, 680f, Hints.fontSize.y + 4f));
-            _hintText = CreateText(screen, "Hint", font, (int)Hints.fontSize.y, TextAnchor.UpperCenter,
-                                   new Rect(60f, Hints.yPos + Hints.fontSize.y + 3f, 680f, 120f));
-            _emotionText = CreateText(screen, "Emotion flash", font, 20, TextAnchor.MiddleCenter, new Rect(150f, 200f, 500f, 200f));
-            foreach (var t in new[] { _subtitles, _message, _hintTitle, _hintText })
-            {
-                var shadow = t.gameObject.AddComponent<Shadow>();
-                shadow.effectColor = new Color(0f, 0f, 0f, 0.8f);
-                shadow.effectDistance = new Vector2(1f, -1f);
-            }
+            if (defaultFont == null || hintsFont == null || focusFont == null)
+                HplLog.Warn("HUD fonts missing: re-import the level to convert the game fonts");
 
             // Quest added: icon in the bottom right corner, 20 px from the edges, with an additive glow.
             Vector2 iconSize = questAddedIcon != null ? new Vector2(questAddedIcon.width, questAddedIcon.height) : new Vector2(64f, 64f);
@@ -264,28 +311,24 @@ namespace RTXMnesia.Ui
 
             // cLuxPlayer::DrawHud: the crosshair image centered at its size, focus text rows from y = 450.
             _crosshair = CreateImage(screen, "Crosshair", new Rect(384f, 284f, 32f, 32f), null);
-            _focusText = CreateText(screen, "Focus text", font, 22, TextAnchor.UpperCenter, new Rect(150f, 450f - 2f, 500f, 120f));
-            _focusText.lineSpacing = 24f / 22f;
-            var focusShadow = _focusText.gameObject.AddComponent<Shadow>();
-            focusShadow.effectColor = new Color(0f, 0f, 0f, 0.8f);
-            focusShadow.effectDistance = new Vector2(1f, -1f);
+
+            // Text layers in the HUD set's depth order: focus text (z 1), messages / voices / emotion text (4), hints (20).
+            _focusText = CreateText(screen, "Focus text", focusFont);
+            _gameText = CreateText(screen, "Game text", defaultFont);
+            _hintText = CreateText(screen, "Hint text", hintsFont);
             Refresh();
         }
 
-        static Text CreateText(RectTransform parent, string name, Font font, int size, TextAnchor anchor, Rect virtualRect)
+        /// <summary>A text layer over the whole virtual screen.</summary>
+        static HplGuiText CreateText(RectTransform parent, string name, HplFont font)
         {
             var go = new GameObject(name, typeof(RectTransform));
             var rect = go.GetComponent<RectTransform>();
             rect.SetParent(parent, false);
-            Place(rect, virtualRect);
-            var text = go.AddComponent<Text>();
+            Place(rect, new Rect(0f, 0f, 800f, 600f));
+            var text = go.AddComponent<HplGuiText>();
             text.font = font;
-            text.fontSize = size;
-            text.alignment = anchor;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
             text.raycastTarget = false;
-            text.enabled = false;
             return text;
         }
 

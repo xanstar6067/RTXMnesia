@@ -30,7 +30,8 @@ namespace RTXMnesia.Importer
     /// - Entity → .ent: model (unpacked) with the .ent sub mesh transforms, bodies with collider shapes (static for
     ///   now), and the lights / billboards / particle systems / sounds of the .ent.
     /// - Point/Spot lights → HDRP lights through <see cref="AmnesiaLight"/>; spot gobos → cookies (pyramid lights).
-    /// - Area → <see cref="AmnesiaArea"/> (+ trigger box). Particle systems and sounds → placeholders.
+    /// - Area → <see cref="AmnesiaArea"/> (+ trigger box). Particle systems → <see cref="AmnesiaParticleSystem"/>,
+    ///   sounds → <see cref="AmnesiaSound"/> (created at runtime by HplMap from the particle / sound banks).
     /// - Fog, fixed exposure and "no sky" (HPL2 has no ambient light) → level volume profile.
     /// - <see cref="AmnesiaPlayer"/> with its camera at the first player start, settings from config/game.cfg.
     /// </summary>
@@ -990,7 +991,7 @@ namespace RTXMnesia.Importer
                     ps.fadeAtDistance = e.Bool("FadeAtDistance");
                     ps.minFadeDistance = new Vector2(e.Float("MinFadeDistanceStart"), e.Float("MinFadeDistanceEnd"));
                     ps.maxFadeDistance = new Vector2(e.Float("MaxFadeDistanceStart"), e.Float("MaxFadeDistanceEnd"));
-                    FinishChild(e, go, "particle systems (placeholders)");
+                    FinishChild(e, go, "particle systems");
                     return go;
                 }
                 case "Sound":
@@ -1002,7 +1003,7 @@ namespace RTXMnesia.Importer
                     sound.minDistance = e.Float("MinDistance");
                     sound.maxDistance = e.Float("MaxDistance");
                     sound.volume = e.Float("Volume", 1f);
-                    FinishChild(e, go, "sounds (placeholders)");
+                    FinishChild(e, go, "sounds");
                     return go;
                 }
                 default:
@@ -1094,7 +1095,9 @@ namespace RTXMnesia.Importer
             var go = Child(e, parent, namePrefix, positionScale, HplSpace.Rotation(e.Vec3("Rotation")));
             Vector2 size = e.Vec2("BillboardSize", Vector2.one);
             Color color = e.Color("BillboardColor", Color.white);
-            var material = BillboardVariant(LevelMaterial(e.Str("MaterialFile")), color);
+            var material = e.Bool("IsHalo")
+                ? HaloMaterial(e.Str("MaterialFile"), LevelMaterial(e.Str("MaterialFile")), color)
+                : BillboardVariant(LevelMaterial(e.Str("MaterialFile")), color);
             // Billboard.cpp IsVisible: black billboards are hidden.
             bool visible = color.r > 0f || color.g > 0f || color.b > 0f;
             var kind = e.Str("BillboardType") switch
@@ -1129,6 +1132,30 @@ namespace RTXMnesia.Importer
             billboard.connectLight = connect.Length > 0 ? namePrefix + connect : "";
             FinishChild(e, go, "billboards");
             return go;
+        }
+
+        /// <summary>
+        /// Halo billboards (IsHalo): RTXMnesia/HplHalo with the texture of the converted material, the blend mode and
+        /// depth test of the .mat (halo_torch.mat has DepthTest="False") and the billboard color as is.
+        /// </summary>
+        Material HaloMaterial(string reference, Material baseMaterial, Color color)
+        {
+            if (baseMaterial == null) return null;
+            string key = "halo|" + AssetDatabase.GetAssetPath(baseMaterial) + "|" + ColorKey(color);
+            if (_variants.TryGetValue(key, out var variant)) return variant;
+            string abs = _index.Find(reference);
+            var src = abs != null ? AmnesiaMaterial.Load(abs) : null;
+            var m = new Material(Shader.Find(AmnesiaBillboard.HaloShader)) { name = baseMaterial.name + " halo " + ColorKey(color) };
+            Texture texture = baseMaterial.HasProperty("_UnlitColorMap") ? baseMaterial.GetTexture("_UnlitColorMap")
+                : baseMaterial.HasProperty("_BaseColorMap") ? baseMaterial.GetTexture("_BaseColorMap") : null;
+            m.SetTexture("_BaseColorMap", texture);
+            m.SetVector("_HplColor", color);
+            ParticleConverter.SetBlend(m, src?.BlendMode);
+            bool depthTest = src == null || !src.Variables.TryGetValue("DepthTest", out string dt) || dt.ToLowerInvariant() == "true";
+            m.SetFloat("_ZTest", (float)(depthTest ? CompareFunction.LessEqual : CompareFunction.Always));
+            m.renderQueue = (int)RenderQueue.Transparent;
+            _variants[key] = AddGenerated(m);
+            return m;
         }
 
         /// <summary>The billboard color multiplies the material (vertex color in HPL2); quads are two-sided.</summary>
@@ -1299,7 +1326,8 @@ namespace RTXMnesia.Importer
         /// <summary>
         /// The level's runtime for scripts: <see cref="HplMap"/> (finds the C# port of the .hps by its map path),
         /// screen effects with their shader and sepia table, the HUD with the quest icon, game / menu configs,
-        /// the texts of the language and the sound handler with the sound bank (all game sounds, see SoundConverter).
+        /// the texts of the language, the sound handler with the sound bank (all game sounds, see SoundConverter) and
+        /// the particle bank (all .ps, see ParticleConverter).
         /// </summary>
         void BuildScriptRuntime(GameObject root)
         {
@@ -1324,11 +1352,19 @@ namespace RTXMnesia.Importer
             // iLuxPlayerState_DefaultBase: crosshair images by eLuxFocusCrosshair.
             string[] crosshairs = { "default", "over_grab", "over_push", "over_ignite", "over_pick", "over_leveldoor", "over_ladder" };
             hud.crosshairs = crosshairs.Select(c => RuntimeTexture($"hud_crosshair_{c}.tga", TextureRole.Gui)).ToArray();
+            // The HUD fonts of the language (LuxMessageHandler, LuxHintHandler, cLuxPlayer::LoadFonts).
+            hud.defaultFont = FontConverter.Convert("game_default.fnt", map.language, _index, _log);
+            string hintsFont = map.menuConfig != null ? map.menuConfig.GetString("Hints", "DefaultFont") : "";
+            hud.hintsFont = FontConverter.Convert(string.IsNullOrEmpty(hintsFont) ? "game_hints.fnt" : hintsFont, map.language, _index, _log);
+            string focusFont = _gameConfig != null ? _gameConfig.GetString("Player_General", "FocusTextFont") : "";
+            hud.focusFont = string.IsNullOrEmpty(focusFont) || focusFont == "game_default.fnt" ? hud.defaultFont
+                : FontConverter.Convert(focusFont, map.language, _index, _log);
             map.hud = hud;
 
             var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
             sound.bank = SoundConverter.Convert(_log, map.language);
             map.sound = sound;
+            map.particles = ParticleConverter.Convert(_log);
 
             var script = HplScript.FindScriptType(_mapRelative);
             if (script != null) _log.Info($"Level script: {script.FullName}");

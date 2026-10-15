@@ -174,7 +174,7 @@ namespace RTXMnesia.Importer
         }
 
         /// <summary>Pixels are top row first; Unity textures are bottom row first, so rows are flipped.</summary>
-        static byte[] EncodePng(Color32[] topDown, int width, int height)
+        internal static byte[] EncodePng(Color32[] topDown, int width, int height)
         {
             var bottomUp = FlipRows(topDown, width, height);
             var tex = new Texture2D(width, height, TextureFormat.RGBA32, false, true);

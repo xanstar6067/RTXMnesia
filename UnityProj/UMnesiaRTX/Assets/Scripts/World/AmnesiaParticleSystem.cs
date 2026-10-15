@@ -3,7 +3,8 @@ using UnityEngine;
 namespace RTXMnesia.World
 {
     /// <summary>
-    /// Placeholder for an HPL2 particle system (.ps). Keeps the placement data until the .ps converter exists.
+    /// A particle system placed in the map or an .ent (.ps file, color, distance fade). HplMap creates the running
+    /// system (RTXMnesia.Particles.HplParticleSystem) that follows this node.
     /// </summary>
     public class AmnesiaParticleSystem : MonoBehaviour
     {

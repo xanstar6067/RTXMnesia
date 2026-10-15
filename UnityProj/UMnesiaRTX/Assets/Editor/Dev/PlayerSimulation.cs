@@ -255,6 +255,23 @@ namespace RTXMnesia.EditorDev
                                          $"at {s.WorldPosition:F1} {Vector3.Distance(s.WorldPosition, snd.ListenerPosition):0.0} m");
                             continue;
                         }
+                        case "particles":
+                        {
+                            // particles: the running particle systems, their particles per emitter and state.
+                            var world = map?.ParticleWorld;
+                            if (world == null) { log.Warn("particles needs an HplMap"); continue; }
+                            Vector3 eye = player.playerCamera != null ? player.playerCamera.transform.position : player.transform.position;
+                            log.Info($"t={time,6:0.00}   {world.Systems.Count} particle systems");
+                            foreach (var ps in world.Systems)
+                            {
+                                var counts = new List<string>();
+                                foreach (var e in ps.Emitters) counts.Add($"{e.Data.name}:{e.ParticleCount}");
+                                log.Info($"t={time,6:0.00}   ps {ps.Name} ({ps.DataName}) {string.Join(" ", counts)} " +
+                                         $"{(ps.Active ? "" : "inactive ")}{(ps.Visible ? "" : "hidden ")}{(ps.IsDying ? "dying " : "")}" +
+                                         $"at {ps.UnityWorldPosition:F1} {Vector3.Distance(ps.UnityWorldPosition, eye):0.0} m");
+                            }
+                            continue;
+                        }
                         case "overlaps":
                         {
                             // overlaps Entity: penetrations of its body colliders with each other and with the world.
@@ -298,7 +315,15 @@ namespace RTXMnesia.EditorDev
                             if (shots)
                             {
                                 string file = Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"Player_{mapName}_{shot++:00}_{(p.Length > 1 ? p[1] : "shot")}.png");
-                                ImportMenu.RenderToFile(player.playerCamera, file);
+                                // Canvases are not drawn by camera renders outside the player loop: the HUD text is
+                                // blended into the snapshot (HudSnapshot).
+                                var hudForShot = map != null ? map.hud : null;
+                                if (hudForShot != null)
+                                {
+                                    hudForShot.Refresh();
+                                    log.Info($"t={time,6:0.00}   hud {hudForShot.DescribeText()}");
+                                }
+                                ImportMenu.RenderToFile(player.playerCamera, file, image => HudSnapshot.Draw(image, hudForShot));
                             }
                             break;
                         default: log.Warn($"Unknown command '{raw.Trim()}'"); continue;
@@ -329,7 +354,7 @@ namespace RTXMnesia.EditorDev
                      $"fade {e.Fade.Alpha:0.00} trail {e.ImageTrail.Amount:0.00} sepia {e.Sepia.Amount:0.00} blur {e.RadialBlur.Size:0.00} " +
                      $"flash {e.Flash.Alpha:0.00} | voice {voice} \"{Short(e.PlayVoice.Active ? e.PlayVoice.CurrentText : "")}\" | " +
                      $"msg \"{Short(hud.Messages.Alpha > 0f ? hud.Messages.Text : "")}\" hint \"{Short(hud.Hints.Alpha > 0f ? hud.Hints.Text : "")}\" " +
-                     $"quest {hud.Messages.QuestAlpha:0.00} | timers {map.TimerCount} sanity {player.sanity:0} | snd {map.sound?.Entries.Count ?? 0} music \"{map.sound?.Music?.CurrentSongName}\"");
+                     $"quest {hud.Messages.QuestAlpha:0.00} | timers {map.TimerCount} sanity {player.sanity:0} | snd {map.sound?.Entries.Count ?? 0} music \"{map.sound?.Music?.CurrentSongName}\" | ps {map.ParticleWorld?.Systems.Count ?? 0} outline {map.effects?.Renderer.OutlineObjects.Count ?? 0} flash {map.effects?.Renderer.FlashObjects.Count ?? 0}");
         }
 
         static void Call(object target, string method) =>

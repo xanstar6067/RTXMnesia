@@ -74,18 +74,18 @@ namespace RTXMnesia.Sound
         public List<Clip> clips = new();
         public List<SoundEntityData> soundEntities = new();
 
-        Dictionary<string, List<(string path, AudioClip clip)>> _clips;
-        Dictionary<string, List<(string path, SoundEntityData data)>> _entities;
+        Hpl.HplNameIndex<AudioClip> _clips;
+        Hpl.HplNameIndex<SoundEntityData> _entities;
 
         /// <summary>cSoundManager::CreateSoundData: a sound file by name (extension optional, folders choose).</summary>
         public AudioClip GetClip(string file)
         {
             if (_clips == null)
             {
-                _clips = new Dictionary<string, List<(string, AudioClip)>>(clips.Count);
-                foreach (var c in clips) if (c.clip != null) Add(_clips, c.name, c.path, c.clip);
+                _clips = new Hpl.HplNameIndex<AudioClip>();
+                foreach (var c in clips) if (c.clip != null) _clips.Add(c.name, c.path, c.clip);
             }
-            return Find(_clips, file);
+            return _clips.Find(file);
         }
 
         /// <summary>cSoundEntityManager::CreateSoundEntity: a .snt by name (extension optional, folders choose).</summary>
@@ -93,50 +93,10 @@ namespace RTXMnesia.Sound
         {
             if (_entities == null)
             {
-                _entities = new Dictionary<string, List<(string, SoundEntityData)>>(soundEntities.Count);
-                foreach (var e in soundEntities) Add(_entities, e.name, e.path, e);
+                _entities = new Hpl.HplNameIndex<SoundEntityData>();
+                foreach (var e in soundEntities) _entities.Add(e.name, e.path, e);
             }
-            return Find(_entities, file);
-        }
-
-        static void Add<T>(Dictionary<string, List<(string, T)>> map, string name, string path, T value)
-        {
-            if (!map.TryGetValue(name, out var list)) map[name] = list = new List<(string, T)>(1);
-            list.Add((path ?? name, value));
-        }
-
-        /// <summary>
-        /// FileSearcher::GetFilePath for a reference like "grunt/amb_alert01": among files of that name the one
-        /// whose folders match the reference's folders from the end the most; the first (resources.cfg order) on a
-        /// tie. Old absolute paths of the editor do not hurt: only matching components count.
-        /// </summary>
-        static T Find<T>(Dictionary<string, List<(string path, T value)>> map, string reference) where T : class
-        {
-            string normalized = (reference ?? "").Replace('\\', '/').ToLowerInvariant();
-            string name = System.IO.Path.GetFileNameWithoutExtension(normalized);
-            if (!map.TryGetValue(name, out var list)) return null;
-            if (list.Count == 1) return list[0].value;
-
-            string[] wanted = System.IO.Path.GetDirectoryName(normalized)?.Replace('\\', '/')
-                                  .Split('/', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-            T best = list[0].value;
-            int bestScore = -1;
-            foreach (var (path, value) in list)
-            {
-                string[] folders = path.Split('/');
-                int score = 0;
-                for (int i = wanted.Length - 1, j = folders.Length - 2; i >= 0 && j >= 0; i--, j--)
-                {
-                    if (wanted[i] != folders[j]) break;
-                    score++;
-                }
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    best = value;
-                }
-            }
-            return best;
+            return _entities.Find(file);
         }
     }
 

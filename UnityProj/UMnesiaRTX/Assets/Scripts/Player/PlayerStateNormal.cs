@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using RTXMnesia.Dynamics;
 using RTXMnesia.Hpl;
 using RTXMnesia.ScriptApi;
@@ -10,7 +11,7 @@ namespace RTXMnesia.Player
     /// cLuxPlayerState_Normal + iLuxPlayerState_DefaultBase (LuxPlayerState_DefaultBase.cpp): every step the entity
     /// under the screen center (cLuxMapHelper::GetClosestEntity, a 20 m ray) is the focus; the interact button
     /// calls its OnInteract and interact callback when it is close enough and allows it. The crosshair shows what
-    /// the interaction would be. Outlines of focused items: with the effect renderer. Holster → hand object (4.4).
+    /// the interaction would be. Focused items get the outline of the effect renderer. Holster → hand object (4.4).
     /// </summary>
     public sealed class PlayerStateNormal : PlayerState
     {
@@ -25,7 +26,7 @@ namespace RTXMnesia.Player
             Player.BodyInFocus = null;
         }
 
-        public override void OnLeaveState(PlayerStateType next) { }
+
 
         public override void Update(float timeStep)
         {
@@ -36,8 +37,42 @@ namespace RTXMnesia.Player
             Player.BodyInFocus = body;
             Player.EntityInFocus = entity;
             Player.FocusPos = HplSpace.Position(start + dir * distance);
+            AddOutlineObjects(body, entity);
             Player.SetFocusText(entity != null && CanInteractWithEntity() ? entity.GetFocusText() : "");
         }
+
+        public override void OnLeaveState(PlayerStateType next) => HplMap.Current?.effects?.Renderer.ClearOutlineObjects();
+
+        /// <summary>
+        /// iLuxPlayerState_DefaultBase::AddOutlineObjects: a focused item within its focus distance that can be
+        /// interacted with gets the outline, on the meshes of the focused body and the bodies joined to it
+        /// (ShowOutlinesOnConnectedBodies; grab objects too, other objects only the focused body).
+        /// </summary>
+        void AddOutlineObjects(HplPhysicsBody body, HplEntity entity)
+        {
+            var renderer = HplMap.Current != null && HplMap.Current.effects != null ? HplMap.Current.effects.Renderer : null;
+            if (renderer == null) return;
+            renderer.ClearOutlineObjects();
+            if (entity is not HplProp prop || entity.Type != HplEntityType.Prop || body == null ||
+                Player.FocusDistance > entity.MaxFocusDistance || !ShowOutlineOnEntity(entity, body))
+                return;
+
+            var bodies = new List<HplPhysicsBody> { body };
+            if (prop.ShowOutlinesOnConnectedBodies)
+                for (int i = 0; i < bodies.Count; i++)
+                    foreach (var joint in prop.Joints)
+                    {
+                        if (joint.Parent == bodies[i] && joint.Child != null && !bodies.Contains(joint.Child)) bodies.Add(joint.Child);
+                        if (joint.Child == bodies[i] && joint.Parent != null && !bodies.Contains(joint.Parent)) bodies.Add(joint.Parent);
+                    }
+            foreach (var b in bodies)
+                if (b.Data != null)
+                    foreach (var r in Effects.HplEffectRenderer.MeshRenderers(b.Data.transform)) renderer.AddOutlineObject(r);
+        }
+
+        /// <summary>iLuxPlayerState_DefaultBase::ShowOutlineOnEntity: items that can be picked up.</summary>
+        static bool ShowOutlineOnEntity(HplEntity entity, HplPhysicsBody body) =>
+            entity is Props.PropItem && entity.CanInteract(body) && !entity.InteractionDisabled;
 
         /// <summary>
         /// cLuxClosestEntityCallback: the nearest body along the ray. Inactive entities, characters and areas or

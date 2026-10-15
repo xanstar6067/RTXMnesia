@@ -108,6 +108,8 @@ namespace RTXMnesia.Importer
 
             // Sound files of the language folders (voices, effects), with durations for timing voice lines.
             int failed = 0;
+            asset.resourceDirs.Clear();
+            asset.resourceDirs.AddRange(resourceDirs);
             foreach (string dir in resourceDirs)
             {
                 string abs = Path.Combine(AmnesiaPaths.SourceRoot, dir);

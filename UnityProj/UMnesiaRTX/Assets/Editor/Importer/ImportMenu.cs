@@ -76,6 +76,16 @@ namespace RTXMnesia.Importer
 
         public static void ConvertSoundsBatch() => Sounds();
 
+        [MenuItem(Menu + "Particles (.ps)", priority = 36)]
+        static void Particles()
+        {
+            var log = new ImportLog();
+            ParticleConverter.Convert(log);
+            log.Save("Particles");
+        }
+
+        public static void ConvertParticlesBatch() => Particles();
+
         [MenuItem(Menu + "Open import log", priority = 40)]
         static void OpenLog()
         {
@@ -247,7 +257,7 @@ namespace RTXMnesia.Importer
             RenderToFile(camera, Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"{kind}Preview.png"));
         }
 
-        internal static void RenderToFile(Camera camera, string file)
+        internal static void RenderToFile(Camera camera, string file, Action<Texture2D> compose = null)
         {
             var rt = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             camera.targetTexture = rt;
@@ -260,6 +270,7 @@ namespace RTXMnesia.Importer
             image.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
             RenderTexture.active = previous;
             camera.targetTexture = null;
+            compose?.Invoke(image);
 
             File.WriteAllBytes(file, image.EncodeToPNG());
             UnityEngine.Object.DestroyImmediate(image);

@@ -16,7 +16,7 @@
 | `AddEntityCollideCallback` | 165 | 412 | ✓ | `void AddEntityCollideCallback(string &in asParentName, string &in asChildName, string &in asFunction, bool abDeleteOnCollide, int alStates)` |
 | `RandFloat` | 144 | 275 | ✓ | `float RandFloat(float afMin, float afMax)` |
 | `AddDebugMessage` | 138 | 310 | ✓ | `void AddDebugMessage(string &in asString, bool abCheckForDuplicates)` |
-| `CreateParticleSystemAtEntity` | 119 | 243 | — | `void CreateParticleSystemAtEntity(string &in asPSName, string &in asPSFile, string &in asEntity, bool abSavePS)` |
+| `CreateParticleSystemAtEntity` | 119 | 243 | ✓ | `void CreateParticleSystemAtEntity(string &in asPSName, string &in asPSFile, string &in asEntity, bool abSavePS)` |
 | `SetPlayerMoveSpeedMul` | 118 | 232 | ✓ | `void SetPlayerMoveSpeedMul(float afMul)` |
 | `SetLocalVarInt` | 115 | 352 | ✓ | `void SetLocalVarInt(string &in asName, int alVal)` |
 | `StopSound` | 90 | 281 | ✓ | `void StopSound(string &in asSoundName, float afFadeTime)` |
@@ -28,7 +28,7 @@
 | `SetPlayerRunSpeedMul` | 62 | 149 | ✓ | `void SetPlayerRunSpeedMul(float afMul)` |
 | `FadeImageTrailTo` | 58 | 91 | ✓ | `void FadeImageTrailTo(float afAmount, float afSpeed)` |
 | `FadePlayerFOVMulTo` | 55 | 80 | ✓ | `void FadePlayerFOVMulTo(float afX, float afSpeed)` |
-| `PreloadParticleSystem` | 54 | 65 | — | `void PreloadParticleSystem(string& asPSFile)` |
+| `PreloadParticleSystem` | 54 | 65 | ✓ | `void PreloadParticleSystem(string& asPSFile)` |
 | `StartPlayerLookAt` | 53 | 118 | ✓ | `void StartPlayerLookAt(string &in asEntityName, float afSpeedMul, float afMaxSpeed,string &in asAtTargetCallback)` |
 | `SetPlayerLookSpeedMul` | 52 | 105 | ✓ | `void SetPlayerLookSpeedMul(float afMul)` |
 | `FadePlayerRollTo` | 51 | 90 | ✓ | `void FadePlayerRollTo(float afX, float afSpeedMul, float afMaxSpeed)` |
@@ -56,7 +56,7 @@
 | `CompleteQuest` | 22 | 65 | ~ | `void CompleteQuest(string &in asName, string &in asNameAndTextEntry)` |
 | `SetPropActiveAndFade` | 21 | 87 | ~ | `void SetPropActiveAndFade(string &in asName, bool abActive, float afFadeTime)` |
 | `FadeSepiaColorTo` | 21 | 27 | ✓ | `void FadeSepiaColorTo(float afAmount, float afSpeed)` |
-| `DestroyParticleSystem` | 21 | 59 | — | `void DestroyParticleSystem(string &in asName)` |
+| `DestroyParticleSystem` | 21 | 59 | ✓ | `void DestroyParticleSystem(string &in asName)` |
 | `StopMusic` | 20 | 49 | ✓ | `void StopMusic(float afFadeTime, int alPrio)` |
 | `GiveSanityBoostSmall` | 20 | 39 | ✓ | `void GiveSanityBoostSmall()` |
 | `SetSwingDoorDisableAutoClose` | 18 | 28 | ✓ | `void SetSwingDoorDisableAutoClose(string &in asName, bool abDisableAutoClose)` |
@@ -161,7 +161,7 @@
 
 | Функция | всего | Статус | Сигнатура |
 |---|---:|:---:|---|
-| `CreateParticleSystemAtEntityExt` | 13 | — | `void CreateParticleSystemAtEntityExt(	string &in asPSName, string &in asPSFile, string &in asEntity, bool abSavePS, float afR, float afG, float afB, float afA, bool abFadeAtDistance, float afFadeMinEnd, float afFadeMinStart, float afFadeMaxStart, float afFadeMaxEnd)` |
+| `CreateParticleSystemAtEntityExt` | 13 | ✓ | `void CreateParticleSystemAtEntityExt(	string &in asPSName, string &in asPSFile, string &in asEntity, bool abSavePS, float afR, float afG, float afB, float afA, bool abFadeAtDistance, float afFadeMinEnd, float afFadeMinStart, float afFadeMaxStart, float afFadeMaxEnd)` |
 | `GetPlayerSanity` | 10 | ✓ | `float GetPlayerSanity()` |
 | `RemoveAttachedPropFromProp` | 8 | — | `void RemoveAttachedPropFromProp(string& asPropName, string& asAttachName)` |
 | `AddAttachedPropToProp` | 8 | — | `void AddAttachedPropToProp(string& asPropName, string& asAttachName, string& asAttachFile, float fPosX, float fPosY, float fPosZ, float fRotX, float fRotY, float fRot)` |

@@ -368,6 +368,25 @@ namespace RTXMnesia.ScriptApi
         /// <summary>Called by the map before the entity is removed (iLuxProp::BeforeEntityDestruction).</summary>
         internal virtual void BeforeDestruction() { }
 
+        /// <summary>~iLuxProp: its particle systems that still exist are killed (they live on where they are).</summary>
+        internal void KillParticleSystems()
+        {
+            foreach (var ps in _particleSystems)
+                if (ps != null && Map.ParticleWorld.Exists(ps)) ps.Kill();
+        }
+
+        /// <summary>iLuxProp::OnSetActive: its particle systems show and update with it.</summary>
+        protected override void OnSetActive(bool active)
+        {
+            base.OnSetActive(active);
+            foreach (var ps in _particleSystems)
+            {
+                if (ps == null) continue;
+                ps.SetVisible(active);
+                ps.Active = active;
+            }
+        }
+
         // ------------------------------------------------------------------ update
 
         protected override void OnUpdate(float timeStep)
@@ -393,7 +412,9 @@ namespace RTXMnesia.ScriptApi
         protected readonly List<AmnesiaLight> Lights = new();
         protected readonly List<(Color onColor, float onRadius, bool flickering)> LightData = new();
         readonly List<(AmnesiaBillboard billboard, Color onColor, bool connectedToLight)> _billboards = new();
-        readonly List<GameObject> _particleSystems = new();
+        // mvParticleSystems (null once destroyed) and cLuxProp_PSData to create them again when the effects go on.
+        readonly List<Particles.HplParticleSystem> _particleSystems = new();
+        readonly List<(string name, string dataName, Matrix4x4 local, Transform parent)> _psData = new();
         readonly List<(Renderer renderer, int index, Color emissive)> _illumination = new();
         MaterialPropertyBlock _block;
 
@@ -411,7 +432,11 @@ namespace RTXMnesia.ScriptApi
                 bool connected = !string.IsNullOrEmpty(bb.connectLight) && Lights.Exists(l => l.name == bb.connectLight);
                 _billboards.Add((bb, bb.color, connected));
             }
-            foreach (var ps in GameObject.GetComponentsInChildren<AmnesiaParticleSystem>(true)) _particleSystems.Add(ps.gameObject);
+            foreach (var ps in Map.ParticleSystemsUnder(GameObject.transform))
+            {
+                _particleSystems.Add(ps);
+                _psData.Add((ps.Name, ps.DataName, ps.LocalMatrix, ps.Parent));
+            }
 
             foreach (var renderer in GameObject.GetComponentsInChildren<Renderer>(true))
             {
@@ -437,7 +462,18 @@ namespace RTXMnesia.ScriptApi
 
             if (_effectsActive)
             {
-                foreach (var ps in _particleSystems) ps.SetActive(true);
+                // New systems from the saved data: the color and fade of the instance are not kept (as in HPL2).
+                for (int i = 0; i < _particleSystems.Count; i++)
+                {
+                    var (psName, dataName, local, parent) = _psData[i];
+                    var ps = Map.ParticleWorld.Create(psName, dataName);
+                    if (ps != null)
+                    {
+                        ps.LocalMatrix = local;
+                        ps.Parent = parent;
+                    }
+                    _particleSystems[i] = ps;
+                }
                 for (int i = 0; i < Lights.Count; i++)
                 {
                     var (onColor, onRadius, flickering) = LightData[i];
@@ -453,7 +489,14 @@ namespace RTXMnesia.ScriptApi
             }
             else
             {
-                foreach (var ps in _particleSystems) ps.SetActive(false);
+                for (int i = 0; i < _particleSystems.Count; i++)
+                {
+                    var ps = _particleSystems[i];
+                    _particleSystems[i] = null;
+                    if (ps == null) continue;
+                    if (fadeAndPlaySounds) ps.Kill();
+                    else Map.ParticleWorld.Destroy(ps);
+                }
                 for (int i = 0; i < Lights.Count; i++)
                 {
                     var light = Lights[i];

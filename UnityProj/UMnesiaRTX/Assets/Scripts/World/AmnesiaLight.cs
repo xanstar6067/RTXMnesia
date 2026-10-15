@@ -155,7 +155,8 @@ namespace RTXMnesia.World
                         _flickerOn = false;
                         if (!flickerFade) SetColorAndRadius(flickerOffColor, flickerOffRadius);
                         else FadeTo(flickerOffColor, flickerOffRadius, HplMath.RandRectf(flickerOffFadeLength.x, flickerOffFadeLength.y));
-                        PlayFlickerSound("FlickerOff", flickerOffSound); // FlickerOffPS: with the particle converter
+                        PlayFlickerSound("FlickerOff", flickerOffSound);
+                        CreateFlickerParticles(flickerOffPS);
 
                         _flickerTime = 0f;
                         _flickerStateLength = HplMath.RandRectf(flickerOffLength.x, flickerOffLength.y);
@@ -166,7 +167,8 @@ namespace RTXMnesia.World
                     _flickerOn = true;
                     if (!flickerFade) SetColorAndRadius(_flickerOnColor, _flickerOnRadius);
                     else FadeTo(_flickerOnColor, _flickerOnRadius, HplMath.RandRectf(flickerOnFadeLength.x, flickerOnFadeLength.y));
-                    PlayFlickerSound("FlickerOn", flickerOnSound); // FlickerOnPS: with the particle converter
+                    PlayFlickerSound("FlickerOn", flickerOnSound);
+                    CreateFlickerParticles(flickerOnPS);
                     _flickerTime = 0f;
                     _flickerStateLength = HplMath.RandRectf(flickerOnLength.x, flickerOnLength.y);
                 }
@@ -185,6 +187,18 @@ namespace RTXMnesia.World
             if (s == null) return;
             s.IsSaved = false;
             s.Position = transform.position;
+        }
+
+        /// <summary>The map's particle systems (set by the map) for the flicker particles.</summary>
+        [System.NonSerialized] public RTXMnesia.Particles.HplParticleWorld particles;
+
+        /// <summary>iLight::OnFlickerOn / OnFlickerOff: a particle system "&lt;light&gt;_PS" at the light's matrix.</summary>
+        void CreateFlickerParticles(string file)
+        {
+            if (string.IsNullOrEmpty(file) || particles == null) return;
+            var ps = particles.Create(name + "_PS", file);
+            // HPL2 lights look down their local -Z; the HDRP light is turned to +Z.
+            if (ps != null) ps.LocalMatrix = Matrix4x4.TRS(transform.position, transform.rotation * Quaternion.Euler(0f, 180f, 0f), Vector3.one);
         }
     }
 }
