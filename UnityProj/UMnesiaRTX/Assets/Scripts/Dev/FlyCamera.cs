@@ -24,6 +24,7 @@ namespace RTXMnesia.Dev
 
         void Update()
         {
+            if (ScriptApi.HplMap.Current != null && ScriptApi.HplMap.Current.IsMenuPaused) return;
             var mouse = Mouse.current;
             var keyboard = Keyboard.current;
 

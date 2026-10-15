@@ -32,6 +32,8 @@ namespace RTXMnesia.Sound
 
         public readonly MultipleSettings GlobalVolume = new(), GlobalSpeed = new();
         public HplMusicHandler Music { get; private set; }
+        public bool MenuPaused { get; private set; }
+        bool _musicWasPaused;
         public IReadOnlyList<HplSoundEntity> SoundEntities => _soundEntities;
         public IReadOnlyList<SoundEntry> Entries => _entries;
 
@@ -47,11 +49,27 @@ namespace RTXMnesia.Sound
 
         public void EnsureMusic() => Music ??= new HplMusicHandler(this);
 
+        /// <summary>cLuxMapHandler::PauseSoundsAndMusic, with a separate pause reason for existing voice pauses.</summary>
+        public void SetMenuPaused(bool paused)
+        {
+            if (MenuPaused == paused) return;
+            MenuPaused = paused;
+            EnsureMusic();
+            foreach (var entry in _entries) entry.SetMenuPaused(paused);
+            if (paused)
+            {
+                _musicWasPaused = Music.IsPaused;
+                Music.Pause();
+            }
+            else if (!_musicWasPaused) Music.Resume();
+        }
+
         // ------------------------------------------------------------------ update
 
         /// <summary>One engine step: the world's sound entities, then the sound entries, then the music.</summary>
         public void Step(float timeStep)
         {
+            if (MenuPaused) return;
             EnsureMusic();
             UpdateSoundEntities(timeStep);
             UpdateEntries(timeStep);
@@ -127,6 +145,7 @@ namespace RTXMnesia.Sound
                 Priority = distPriority + priorityModifier,
             };
             if (Silent) entry.Stop();
+            entry.SetMenuPaused(MenuPaused);
             _entries.Add(entry);
             return entry;
         }
@@ -445,7 +464,7 @@ namespace RTXMnesia.Sound
         float _normalVolume, _volumeMul = 1f, _volumeFadeDest = 1f, _volumeFadeSpeed;
         float _normalSpeed = 1f, _speedMul = 1f, _speedFadeDest = 1f, _speedFadeSpeed;
         float _blockMul = 1f, _blockFadeDest = 1f, _blockFadeSpeed;
-        bool _stopAfterFadeOut, _firstTime = true, _stopped, _paused;
+        bool _stopAfterFadeOut, _firstTime = true, _stopped, _paused, _menuPaused;
         float _elapsed;
 
         /// <summary>Still in the handler's list (cSoundHandler::IsValid).</summary>
@@ -471,10 +490,12 @@ namespace RTXMnesia.Sound
         public bool IsPlaying => !_stopped && (Loop || _elapsed < Clip.length);
         public float ElapsedTime => _elapsed;
         public float VolumeMul => _volumeMul;
+        public bool IsPaused => _paused || _menuPaused;
 
         /// <summary>cSoundEntry::Update: false when the sound is over.</summary>
         internal bool Update(float timeStep)
         {
+            if (_menuPaused) return !_stopped;
             UpdateVolumeMulFade(timeStep);
             UpdateSpeedMulFade(timeStep);
 
@@ -583,9 +604,22 @@ namespace RTXMnesia.Sound
 
         public void SetPaused(bool paused)
         {
-            if (_paused == paused || _source == null) return;
+            bool wasPaused = IsPaused;
             _paused = paused;
-            if (paused) _source.Pause();
+            ApplyPause(wasPaused);
+        }
+
+        internal void SetMenuPaused(bool paused)
+        {
+            bool wasPaused = IsPaused;
+            _menuPaused = paused;
+            ApplyPause(wasPaused);
+        }
+
+        void ApplyPause(bool wasPaused)
+        {
+            if (_source == null || wasPaused == IsPaused || _stopped) return;
+            if (IsPaused) _source.Pause();
             else if (!_firstTime) _source.UnPause();
         }
 

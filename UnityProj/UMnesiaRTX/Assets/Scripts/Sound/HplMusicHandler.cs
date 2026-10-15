@@ -48,6 +48,7 @@ namespace RTXMnesia.Sound
 
         public string CurrentSongName => _mainSong?.File ?? "";
         public float CurrentSongVolume => _mainSong?.Volume ?? 0f;
+        public bool IsPaused => _paused;
 
         // ------------------------------------------------------------------ cLuxMusicHandler
 

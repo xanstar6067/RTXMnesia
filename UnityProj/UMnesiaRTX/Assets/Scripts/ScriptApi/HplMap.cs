@@ -51,6 +51,8 @@ namespace RTXMnesia.ScriptApi
         public HplScript Script { get; private set; }
         public Dynamics.HplPhysicsWorld PhysicsWorld { get; private set; }
         public Particles.HplParticleWorld ParticleWorld { get; private set; }
+        public HplGameUi GameUi { get; private set; }
+        public bool IsMenuPaused => GameUi != null && GameUi.IsPaused;
         public float GameTime { get; private set; }
         public Camera PlayerCamera => player != null ? player.playerCamera : null;
         public readonly HplCollideCallbacks PlayerCollideCallbacks = new();
@@ -103,7 +105,7 @@ namespace RTXMnesia.ScriptApi
         // after the simulation runs when the physics step is done (WaitForFixedUpdate).
         void FixedUpdate()
         {
-            if (!Application.isPlaying) return;
+            if (!Application.isPlaying || IsMenuPaused) return;
             if (Physics.simulationMode == SimulationMode.Script)
             {
                 Step(Time.fixedDeltaTime);
@@ -214,6 +216,13 @@ namespace RTXMnesia.ScriptApi
             {
                 HplLog.Warn($"No level script for '{mapFile}' (class with [HplMapScript(\"{mapFile}\")])");
             }
+
+            // Runtime-only: existing imported levels get the UI without regenerating game content.
+            if (Application.isPlaying)
+            {
+                GameUi = gameObject.AddComponent<HplGameUi>();
+                GameUi.Init(this);
+            }
         }
 
         void AddEntity(HplEntity entity)
@@ -247,6 +256,7 @@ namespace RTXMnesia.ScriptApi
         /// <summary>One HPL2 logic step with an explicit physics simulation (edit mode tools, script simulation mode).</summary>
         public void Step(float timeStep)
         {
+            if (IsMenuPaused) return;
             StepBeforeSimulate(timeStep);
             Physics.Simulate(timeStep);
             StepAfterSimulate(timeStep);
@@ -258,6 +268,7 @@ namespace RTXMnesia.ScriptApi
         /// </summary>
         public void StepBeforeSimulate(float timeStep)
         {
+            if (IsMenuPaused) return;
             Begin();
 
             // cLuxMapHandler::Update: the effect renderer's flash list is rebuilt by this update.
@@ -282,6 +293,7 @@ namespace RTXMnesia.ScriptApi
         /// <summary>After the simulation: joints and bodies, lights, the player's post update, destroyed entities.</summary>
         public void StepAfterSimulate(float timeStep)
         {
+            if (IsMenuPaused) return;
             PhysicsWorld.AfterSimulate(timeStep);
             ParticleWorld.Update(timeStep);
             for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);

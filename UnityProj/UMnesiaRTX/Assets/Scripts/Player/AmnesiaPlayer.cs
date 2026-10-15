@@ -18,7 +18,7 @@ namespace RTXMnesia.Player
     /// (<see cref="steppedByMap"/>). The camera is interpolated between steps and turned every frame.
     /// Settings come from game.cfg (<see cref="gameConfig"/>).
     /// Keys as in default_user_keys.cfg: WASD, Shift run, Space jump, Ctrl crouch, Q/E lean.
-    /// F2 toggles a free camera, Esc releases the mouse.
+    /// F2 toggles a free camera, Esc opens the map's pause menu (or releases the mouse without a map).
     /// </summary>
     [DefaultExecutionOrder(-50)]
     public class AmnesiaPlayer : MonoBehaviour
@@ -46,6 +46,9 @@ namespace RTXMnesia.Player
         [Header("Script / state multipliers")]
         [Tooltip("SetPlayerActive: off ignores all player input (cLuxInputHandler).")]
         public bool active = true;
+        /// <summary>UI input lock, independent of SetPlayerActive and scripted effect pauses.</summary>
+        public bool UiInputBlocked { get; private set; }
+        int _uiInputFrame = -1;
         public float scriptMoveSpeedMul = 1f;
         public float scriptRunSpeedMul = 1f;
         public float scriptJumpForceMul = 1f;
@@ -258,7 +261,7 @@ namespace RTXMnesia.Player
             var start = FindStart(startArea);
             if (start != null) PlaceAtStart(start);
             else PlaceAt(transform.position, transform.eulerAngles.y * Mathf.Deg2Rad);
-            LockCursor(true);
+            if (!UiInputBlocked) LockCursor(true);
         }
 
         void OnDisable() => LockCursor(false);
@@ -302,11 +305,14 @@ namespace RTXMnesia.Player
         void Update()
         {
             if (!readDevices) return;
+            // Ignore the opening/closing click and key for this entire frame, including mouse look.
+            if (UiInputBlocked || Time.frameCount == _uiInputFrame) return;
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
 
             if (keyboard != null && keyboard.f2Key.wasPressedThisFrame) SetFreeCamera(!_freeCameraActive);
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) LockCursor(false);
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame &&
+                (ScriptApi.HplMap.Current == null || ScriptApi.HplMap.Current.GameUi == null)) LockCursor(false);
             bool cursorWasLocked = Cursor.lockState == CursorLockMode.Locked;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && !cursorWasLocked) LockCursor(true);
             if (_freeCameraActive) return;
@@ -329,10 +335,9 @@ namespace RTXMnesia.Player
                 held.leanLeft = keyboard.qKey.isPressed;
                 PressedMove |= held.forward || held.backward || held.right || held.left;
 
-                if (keyboard.leftShiftKey.wasPressedThisFrame) Run(true);
-                if (keyboard.leftShiftKey.wasReleasedThisFrame) Run(false);
+                if (keyboard.leftShiftKey.isPressed != PressingRun) Run(keyboard.leftShiftKey.isPressed);
                 if (keyboard.spaceKey.wasPressedThisFrame) Jump(true);
-                if (keyboard.spaceKey.wasReleasedThisFrame) Jump(false);
+                if (!keyboard.spaceKey.isPressed && PressingJump) Jump(false);
                 if (keyboard.leftCtrlKey.wasPressedThisFrame) Crouch(true);
                 RotateHeld = keyboard.rKey.isPressed;
             }
@@ -351,6 +356,26 @@ namespace RTXMnesia.Player
                 }
                 if (mouse.leftButton.wasReleasedThisFrame) DoAction(PlayerAction.Interact, false);
                 UpdateMouseLook(mouse.delta.ReadValue(), Time.unscaledDeltaTime);
+            }
+        }
+
+        public void SetUiInputBlocked(bool blocked)
+        {
+            UiInputBlocked = blocked;
+            _uiInputFrame = Time.frameCount;
+            held = default;
+            RotateHeld = false;
+            PressedMove = false;
+            _mouseSamples.Clear();
+            if (MoveState == null) return;
+            Run(false);
+            Jump(false);
+            // Releases made over a menu must not leave a door / grab interaction stuck after resuming.
+            if (!blocked && readDevices)
+            {
+                var mouse = Mouse.current;
+                if (mouse == null || !mouse.leftButton.isPressed) DoAction(PlayerAction.Interact, false);
+                if (mouse == null || !mouse.rightButton.isPressed) DoAction(PlayerAction.Attack, false);
             }
         }
 
@@ -408,7 +433,7 @@ namespace RTXMnesia.Player
 
         void LateUpdate()
         {
-            if (_freeCameraActive) return;
+            if (_freeCameraActive || UiInputBlocked) return;
             float alpha = Time.fixedDeltaTime > 0f ? Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime) : 1f;
             UpdateCameraTransform(alpha);
         }

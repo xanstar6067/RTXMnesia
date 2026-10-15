@@ -86,15 +86,18 @@ namespace RTXMnesia.Effects
             RTHandle input = _source;
 
             // Frame time of the renderer: real time since the previous render of this pass (also right for
-            // renders outside the player loop, where Time.deltaTime does not advance).
-            double now = Time.realtimeSinceStartupAsDouble;
+            // renders outside the player loop, where Time.deltaTime does not advance). Menu time is excluded
+            // even if rendering was suspended while minimized, so resuming does not erase the trail.
+            double now = effects.Map != null && effects.Map.GameUi != null
+                ? effects.Map.GameUi.RenderTime : Time.realtimeSinceStartupAsDouble;
             double frameTime = _lastRenderTime < 0.0 ? 1.0 / 60.0 : Math.Max(0.0, now - _lastRenderTime);
             _lastRenderTime = now;
 
             if (trailOn)
             {
                 // Floating-point history keeps small updates instead of rounding back to an old 8-bit frame.
-                float alpha = _clearTrail ? 1f : CalculateTrailAlpha(trail, frameTime);
+                float alpha = _clearTrail ? 1f : effects.Map != null && effects.Map.IsMenuPaused
+                    ? 0f : CalculateTrailAlpha(trail, frameTime);
                 _clearTrail = false;
                 props.SetTexture(SourceId, _source);
                 props.SetFloat(TrailAlphaId, alpha);
