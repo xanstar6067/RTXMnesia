@@ -4,12 +4,11 @@ using UnityEngine;
 namespace RTXMnesia.ScriptApi
 {
     // Entities, lights, props, collide callbacks, physics and enemies (LuxScriptHandler.cpp).
-    // Props are static until step 4.2 (entity physics); doors, levers, lamps etc. behave from step 4.3. Their
-    // script state is kept, so Get* functions return what scripts set.
+    // Props are RTXMnesia.Props types over the rigid bodies of RTXMnesia.Dynamics (steps 4.2, 4.3). Not yet: attached
+    // props, sticky areas, multi sliders, buttons, interact connections (ropes / move objects), enemies (step 6).
     public abstract partial class HplScript
     {
-        const string NeedsPhysics = "entity physics (step 4.2)";
-        const string NeedsInteraction = "prop interaction (step 4.3)";
+        const string NeedsConnections = "interact connections";
         const string NeedsEnemies = "enemies (step 6)";
 
         // ------------------------------------------------------------------ lights
@@ -70,14 +69,16 @@ namespace RTXMnesia.ScriptApi
 
         protected bool GetEntityExists(string asName) => Map.GetEntityByName(asName) != null;
 
-        /// <summary>Moves the entity so that its first body is at the position (bodies are not separate until step 4.2).</summary>
+        /// <summary>Moves the first body (enemies: their feet, step 6).</summary>
         protected void SetEntityPos(string asName, float afX, float afY, float afZ)
         {
             Vector3 position = HplSpace.Position(new Vector3(afX, afY, afZ));
             foreach (var e in GetEntities(asName))
             {
                 if (e.Bodies.Count == 0) continue;
-                e.GameObject.transform.position += position - e.Bodies[0].Transform.position;
+                var body = e.Bodies[0];
+                if (body.Physics != null) body.Physics.SetPose(position, body.Physics.Rotation);
+                else body.Transform.position = position;
             }
         }
 
@@ -94,22 +95,67 @@ namespace RTXMnesia.ScriptApi
                 HplLog.Error($"Could not get position of entity '{name}' because it has no physics body!");
                 return Vector3.zero;
             }
-            return e.Bodies[0].Transform.position;
+            var body = e.Bodies[0];
+            return body.Physics != null ? body.Physics.Position : body.Transform.position;
         }
 
         protected void SetEntityCustomFocusCrossHair(string asName, string asCrossHair)
         {
-            foreach (var e in GetEntities(asName)) e.CustomFocusCrossHair = asCrossHair;
+            var crosshair = HplEntity.ParseCrosshair(asCrossHair);
+            foreach (var e in GetEntities(asName)) e.CustomFocusCrossHair = crosshair;
         }
 
-        protected void CreateEntityAtArea(string asEntityName, string asEntityFile, string asAreaName, bool abFullGameSave) =>
-            NotPorted(nameof(CreateEntityAtArea), "entities created at runtime");
+        /// <summary>The body by name in the entity, or its first body for "" (GetBodyInEntity); a pose in Unity space.</summary>
+        static bool BodyPose(HplEntity entity, string bodyName, out Vector3 position, out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
+            HplBody body = null;
+            if (string.IsNullOrEmpty(bodyName)) body = entity.Bodies.Count > 0 ? entity.Bodies[0] : null;
+            else body = entity.Bodies.Find(b => b.Name == entity.Name + "_" + bodyName);
+            if (body == null)
+            {
+                HplLog.Error($"Could not find body '{bodyName}' in entity '{entity.Name}'!");
+                return false;
+            }
+            position = body.Physics != null ? body.Physics.Position : body.Transform.position;
+            rotation = body.Physics != null ? body.Physics.Rotation : body.Transform.rotation;
+            return true;
+        }
 
-        protected void ReplaceEntity(string asName, string asBodyName, string asNewEntityName, string asNewEntityFile, bool abFullGameSave) =>
-            NotPorted(nameof(ReplaceEntity), "entities created at runtime");
+        /// <summary>A copy of the .ent template at the area (cLuxMap::CreateEntity with the area matrix).</summary>
+        protected void CreateEntityAtArea(string asEntityName, string asEntityFile, string asAreaName, bool abFullGameSave)
+        {
+            if (GetEntity(asAreaName, HplEntityType.Area) is not HplArea area) return;
+            Transform t = area.GameObject.transform;
+            if (Map.CreateEntity(asEntityName, asEntityFile, t.position, t.rotation, Vector3.one) == null)
+                HplLog.Error($"Could not create entity '{asEntityName}' from file '{asEntityFile}'!");
+        }
 
-        protected void PlaceEntityAtEntity(string asName, string asTargetEntity, string asTargetBodyName, bool abUseRotation) =>
-            NotPorted(nameof(PlaceEntityAtEntity), NeedsPhysics);
+        protected void ReplaceEntity(string asName, string asBodyName, string asNewEntityName, string asNewEntityFile, bool abFullGameSave)
+        {
+            var entity = GetEntity(asName);
+            if (entity == null || !BodyPose(entity, asBodyName, out var position, out var rotation)) return;
+            Map.DestroyEntity(entity);
+            if (Map.CreateEntity(asNewEntityName, asNewEntityFile, position, rotation, Vector3.one) == null)
+                HplLog.Error($"Could not create entity '{asNewEntityName}' from file '{asNewEntityFile}'!");
+        }
+
+        protected void PlaceEntityAtEntity(string asName, string asTargetEntity, string asTargetBodyName, bool abUseRotation)
+        {
+            var entity = GetEntity(asName);
+            if (entity == null) return;
+            if (entity.Bodies.Count == 0)
+            {
+                HplLog.Error($"Entity '{asName}' has no body that can be placed at '{asTargetEntity}'!");
+                return;
+            }
+            var target = GetEntity(asTargetEntity);
+            if (target == null || !BodyPose(target, asTargetBodyName, out var position, out var rotation)) return;
+            var body = entity.Bodies[0];
+            if (body.Physics != null) body.Physics.SetPose(position, abUseRotation ? rotation : body.Physics.Rotation);
+            else body.Transform.SetPositionAndRotation(position, abUseRotation ? rotation : body.Transform.rotation);
+        }
 
         protected void SetEntityPlayerLookAtCallback(string asName, string asCallback, bool abRemoveWhenLookedAt)
         {
@@ -171,173 +217,271 @@ namespace RTXMnesia.ScriptApi
 
         // ------------------------------------------------------------------ props
 
-        protected void SetPropEffectActive(string asName, bool abActive, bool abFadeAndPlaySounds) => NotPorted(nameof(SetPropEffectActive), NeedsInteraction);
-
-        /// <summary>Active state now; the mesh fade in / dissolve comes later.</summary>
-        protected void SetPropActiveAndFade(string asName, bool abActive, float afFadeTime)
+        protected void SetPropEffectActive(string asName, bool abActive, bool abFadeAndPlaySounds)
         {
-            foreach (var e in GetEntities(asName, HplEntityType.Prop)) e.SetActive(abActive);
+            foreach (var p in GetProps(asName)) p.SetEffectsActive(abActive, abFadeAndPlaySounds);
         }
 
-        protected void SetPropStaticPhysics(string asName, bool abX) => NotPorted(nameof(SetPropStaticPhysics), NeedsPhysics);
+        /// <summary>Active state now; the mesh fade in / dissolve comes with the dissolve materials.</summary>
+        protected void SetPropActiveAndFade(string asName, bool abActive, float afFadeTime)
+        {
+            foreach (var p in GetProps(asName)) p.SetActive(abActive);
+        }
 
-        protected bool GetPropIsInteractedWith(string asName) => false;
+        protected void SetPropStaticPhysics(string asName, bool abX)
+        {
+            foreach (var p in GetProps(asName)) p.SetStaticPhysics(abX);
+        }
 
+        protected bool GetPropIsInteractedWith(string asName) => GetEntity(asName, HplEntityType.Prop) is HplProp p && p.IsInteractedWith;
+
+        /// <summary>Static movement around the axis (HPL2 space), optionally around an area (offset).</summary>
         protected void RotatePropToSpeed(string asName, float afAcc, float afGoalSpeed, float afAxisX, float afAxisY, float afAxisZ,
-                                         bool abResetSpeed, string asOffsetArea) => NotPorted(nameof(RotatePropToSpeed), NeedsPhysics);
+                                         bool abResetSpeed, string asOffsetArea)
+        {
+            HplArea area = asOffsetArea != "" ? GetEntity(asOffsetArea, HplEntityType.Area) as HplArea : null;
+            var axis = new Vector3(afAxisX, afAxisY, afAxisZ);
+            foreach (var p in GetProps(asName))
+            {
+                if (p.MainBody == null) continue;
+                if (area != null)
+                {
+                    Vector3 areaPos = HplSpace.Position(area.GameObject.transform.position);
+                    Vector3 local = HplMatrix.Mul(p.MainBody.HplMatrix.inverse, areaPos);
+                    p.RotateAtSpeed(afAcc, afGoalSpeed, axis, abResetSpeed, true, areaPos, local);
+                }
+                else p.RotateAtSpeed(afAcc, afGoalSpeed, axis, abResetSpeed, false, Vector3.zero, Vector3.zero);
+            }
+        }
 
-        protected void StopPropMovement(string asName) { }
+        protected void StopPropMovement(string asName)
+        {
+            foreach (var p in GetProps(asName)) p.StopMove();
+        }
 
         protected void AttachPropToProp(string asPropName, string asAttachName, string asAttachFile, float fPosX, float fPosY, float fPosZ,
-                                        float fRotX, float fRotY, float fRotZ) => NotPorted(nameof(AttachPropToProp), "entities created at runtime");
+                                        float fRotX, float fRotY, float fRotZ) => NotPorted(nameof(AttachPropToProp), "attached props");
 
         protected void AddAttachedPropToProp(string asPropName, string asAttachName, string asAttachFile, float fPosX, float fPosY, float fPosZ,
-                                             float fRotX, float fRotY, float fRotZ) => NotPorted(nameof(AddAttachedPropToProp), "entities created at runtime");
+                                             float fRotX, float fRotY, float fRotZ) => NotPorted(nameof(AddAttachedPropToProp), "attached props");
 
-        protected void RemoveAttachedPropFromProp(string asPropName, string asAttachName) { }
+        protected void RemoveAttachedPropFromProp(string asPropName, string asAttachName) => NotPorted(nameof(RemoveAttachedPropFromProp), "attached props");
 
         protected void SetLampLit(string asName, bool abLit, bool abEffects)
         {
-            foreach (var p in GetProps(asName, "Lamp")) p.LampLit = abLit;
-            NotPorted(nameof(SetLampLit), NeedsInteraction);
+            foreach (var p in GetProps(asName, "Lamp")) ((Props.PropLamp)p).SetLit(abLit, abEffects);
         }
 
         protected void SetSwingDoorLocked(string asName, bool abLocked, bool abEffects)
         {
-            foreach (var p in GetProps(asName, "SwingDoor")) p.DoorLocked = abLocked;
-            NotPorted(nameof(SetSwingDoorLocked), NeedsInteraction);
+            foreach (var p in GetProps(asName, "SwingDoor")) ((Props.PropSwingDoor)p).SetLocked(abLocked, abEffects);
         }
 
         protected void SetSwingDoorClosed(string asName, bool abClosed, bool abEffects)
         {
-            foreach (var p in GetProps(asName, "SwingDoor")) p.DoorClosed = abClosed;
-            NotPorted(nameof(SetSwingDoorClosed), NeedsInteraction);
+            foreach (var p in GetProps(asName, "SwingDoor")) ((Props.PropSwingDoor)p).SetClosed(abClosed, abEffects);
         }
 
         protected void SetSwingDoorDisableAutoClose(string asName, bool abDisableAutoClose)
         {
-            foreach (var p in GetProps(asName, "SwingDoor")) p.DoorDisableAutoClose = abDisableAutoClose;
+            foreach (var p in GetProps(asName, "SwingDoor")) ((Props.PropSwingDoor)p).DisableAutoClose = abDisableAutoClose;
         }
 
-        protected bool GetSwingDoorLocked(string asName) => GetEntity(asName, HplEntityType.Prop, "SwingDoor") is HplProp p && p.DoorLocked;
+        protected bool GetSwingDoorLocked(string asName) =>
+            GetEntity(asName, HplEntityType.Prop, "SwingDoor") is Props.PropSwingDoor d && d.Locked;
 
-        protected bool GetSwingDoorClosed(string asName) => GetEntity(asName, HplEntityType.Prop, "SwingDoor") is HplProp p && p.DoorClosed;
+        protected bool GetSwingDoorClosed(string asName) =>
+            GetEntity(asName, HplEntityType.Prop, "SwingDoor") is Props.PropSwingDoor d && d.Closed;
 
-        /// <summary>-1 closed, 1 open (70% or more), 0 between (cLuxMap::GetDoorState); open / closed only for now.</summary>
+        /// <summary>-1 closed, 1 open (past 70% of the max angle), 0 between (cLuxProp_SwingDoor::GetDoorState).</summary>
         protected int GetSwingDoorState(string asName) =>
-            GetEntity(asName, HplEntityType.Prop, "SwingDoor") is HplProp p ? (p.DoorClosed ? -1 : 1) : 0;
+            GetEntity(asName, HplEntityType.Prop, "SwingDoor") is Props.PropSwingDoor d ? d.GetDoorState() : 0;
 
         protected void SetLevelDoorLocked(string asName, bool abLocked)
         {
-            foreach (var p in GetProps(asName, "LevelDoor")) p.DoorLocked = abLocked;
+            foreach (var p in GetProps(asName, "LevelDoor")) ((Props.PropLevelDoor)p).Locked = abLocked;
         }
 
-        protected void SetLevelDoorLockedSound(string asName, string asSound) { }
+        protected void SetLevelDoorLockedSound(string asName, string asSound)
+        {
+            foreach (var p in GetProps(asName, "LevelDoor")) ((Props.PropLevelDoor)p).LockedSound = asSound;
+        }
 
-        protected void SetLevelDoorLockedText(string asName, string asTextCat, string asTextEntry) { }
+        protected void SetLevelDoorLockedText(string asName, string asTextCat, string asTextEntry)
+        {
+            foreach (var p in GetProps(asName, "LevelDoor")) ((Props.PropLevelDoor)p).SetLockedText(asTextCat, asTextEntry);
+        }
 
-        protected void SetPropObjectStuckState(string asName, int alState) => NotPorted(nameof(SetPropObjectStuckState), NeedsInteraction);
+        protected void SetPropObjectStuckState(string asName, int alState)
+        {
+            foreach (var p in GetProps(asName, "Object")) ((Props.PropObject)p).SetStuckState(alState);
+        }
 
-        protected void SetWheelAngle(string asName, float afAngle, bool abAutoMove) => NotPorted(nameof(SetWheelAngle), NeedsInteraction);
+        /// <summary>The angle goes to cLuxProp_Wheel::SetAngle as given (the handler does not convert it).</summary>
+        protected void SetWheelAngle(string asName, float afAngle, bool abAutoMove)
+        {
+            foreach (var p in GetProps(asName, "Wheel")) ((Props.PropWheel)p).SetAngle(afAngle, abAutoMove);
+        }
 
-        protected void SetWheelStuckState(string asName, int alState, bool abEffects) => NotPorted(nameof(SetWheelStuckState), NeedsInteraction);
+        protected void SetWheelStuckState(string asName, int alState, bool abEffects)
+        {
+            foreach (var p in GetProps(asName, "Wheel")) ((Props.PropWheel)p).SetStuckState(alState, abEffects);
+        }
 
         protected void SetLeverStuckState(string asName, int alState, bool abEffects)
         {
-            foreach (var p in GetProps(asName, "Lever")) p.LeverState = alState;
-            NotPorted(nameof(SetLeverStuckState), NeedsInteraction);
+            foreach (var p in GetProps(asName, "Lever")) ((Props.PropLever)p).SetStuckState(alState, abEffects);
         }
 
-        protected void SetWheelInteractionDisablesStuck(string asName, bool abX) { }
+        protected void SetWheelInteractionDisablesStuck(string asName, bool abX)
+        {
+            foreach (var p in GetProps(asName, "Wheel")) ((Props.PropWheel)p).InteractionDisablesStuck = abX;
+        }
 
-        protected void SetLeverInteractionDisablesStuck(string asName, bool abX) { }
+        protected void SetLeverInteractionDisablesStuck(string asName, bool abX)
+        {
+            foreach (var p in GetProps(asName, "Lever")) ((Props.PropLever)p).InteractionDisablesStuck = abX;
+        }
 
-        protected int GetLeverState(string asName) => GetEntity(asName, HplEntityType.Prop, "Lever") is HplProp p ? p.LeverState : 0;
+        protected int GetLeverState(string asName) =>
+            GetEntity(asName, HplEntityType.Prop, "Lever") is Props.PropLever l ? l.CurrentState : 0;
 
-        protected void SetMultiSliderStuckState(string asName, int alStuckState, bool abEffects) => NotPorted(nameof(SetMultiSliderStuckState), NeedsInteraction);
+        protected void SetMultiSliderStuckState(string asName, int alStuckState, bool abEffects) => NotPorted(nameof(SetMultiSliderStuckState), "multi sliders");
 
-        protected void SetMultiSliderCallback(string asName, string asCallback) { }
+        protected void SetMultiSliderCallback(string asName, string asCallback) => NotPorted(nameof(SetMultiSliderCallback), "multi sliders");
 
-        protected void SetButtonSwitchedOn(string asName, bool abSwitchedOn, bool abEffects) => NotPorted(nameof(SetButtonSwitchedOn), NeedsInteraction);
+        protected void SetButtonSwitchedOn(string asName, bool abSwitchedOn, bool abEffects) => NotPorted(nameof(SetButtonSwitchedOn), "buttons");
 
-        protected void SetAllowStickyAreaAttachment(bool abX) { }
+        protected void SetAllowStickyAreaAttachment(bool abX) => NotPorted(nameof(SetAllowStickyAreaAttachment), "sticky areas");
 
-        protected void AttachPropToStickyArea(string asAreaName, string asProp) => NotPorted(nameof(AttachPropToStickyArea), NeedsPhysics);
+        protected void AttachPropToStickyArea(string asAreaName, string asProp) => NotPorted(nameof(AttachPropToStickyArea), "sticky areas");
 
-        protected void AttachBodyToStickyArea(string asAreaName, string asBody) => NotPorted(nameof(AttachBodyToStickyArea), NeedsPhysics);
+        protected void AttachBodyToStickyArea(string asAreaName, string asBody) => NotPorted(nameof(AttachBodyToStickyArea), "sticky areas");
 
-        protected void DetachFromStickyArea(string asAreaName) { }
+        protected void DetachFromStickyArea(string asAreaName) => NotPorted(nameof(DetachFromStickyArea), "sticky areas");
 
-        protected void SetNPCAwake(string asName, bool abAwake, bool abEffects) => NotPorted(nameof(SetNPCAwake), NeedsInteraction);
+        protected void SetNPCAwake(string asName, bool abAwake, bool abEffects) => NotPorted(nameof(SetNPCAwake), NeedsEnemies);
 
-        protected void SetNPCFollowPlayer(string asName, bool abX) => NotPorted(nameof(SetNPCFollowPlayer), NeedsInteraction);
+        protected void SetNPCFollowPlayer(string asName, bool abX) => NotPorted(nameof(SetNPCFollowPlayer), NeedsEnemies);
 
         protected void SetPropHealth(string asName, float afHealth)
         {
-            foreach (var p in GetProps(asName)) p.Health = afHealth;
+            foreach (var p in GetProps(asName)) p.SetHealth(afHealth);
         }
 
         protected void AddPropHealth(string asName, float afHealth)
         {
-            foreach (var p in GetProps(asName)) p.Health += afHealth;
+            foreach (var p in GetProps(asName)) p.SetHealth(p.Health + afHealth);
         }
 
         protected float GetPropHealth(string asName) => GetEntity(asName, HplEntityType.Prop) is HplProp p ? p.Health : 0f;
 
-        protected void ResetProp(string asName) => NotPorted(nameof(ResetProp), NeedsPhysics);
+        protected void ResetProp(string asName)
+        {
+            foreach (var p in GetProps(asName)) p.ResetProperties();
+        }
 
         protected void PlayPropAnimation(string asProp, string asAnimation, float afFadeTime, bool abLoop, string asCallback) =>
             NotPorted(nameof(PlayPropAnimation), "prop animations");
 
-        protected void SetMoveObjectState(string asName, float afState) => NotPorted(nameof(SetMoveObjectState), NeedsInteraction);
+        protected void SetMoveObjectState(string asName, float afState)
+        {
+            foreach (var p in GetProps(asName, "MoveObject")) ((Props.PropMoveObject)p).MoveToState(afState);
+        }
 
-        protected void SetMoveObjectStateExt(string asName, float afState, float afAcc, float afMaxSpeed, float afSlowdownDist, bool abResetSpeed) =>
-            NotPorted(nameof(SetMoveObjectStateExt), NeedsInteraction);
+        protected void SetMoveObjectStateExt(string asName, float afState, float afAcc, float afMaxSpeed, float afSlowdownDist, bool abResetSpeed)
+        {
+            foreach (var p in GetProps(asName, "MoveObject")) ((Props.PropMoveObject)p).MoveToState(afState, afAcc, afMaxSpeed, afSlowdownDist, abResetSpeed);
+        }
 
         // ------------------------------------------------------------------ physics
 
-        protected void AddPropForce(string asName, float afX, float afY, float afZ, string asCoordSystem) => NotPorted(nameof(AddPropForce), NeedsPhysics);
+        /// <summary>"local": the vector turned by the body rotation (VecToCoordSystem); HPL2 space in, Unity out.</summary>
+        static Vector3 VecToCoordSystem(Dynamics.HplPhysicsBody body, Vector3 hplVec, string coordSystem)
+        {
+            if (coordSystem != null && coordSystem.ToLowerInvariant() == "local")
+                hplVec = HplMatrix.Mul3x3(HplMatrix.GetRotation(body.HplMatrix), hplVec);
+            return HplSpace.Direction(hplVec);
+        }
 
-        protected void AddPropImpulse(string asName, float afX, float afY, float afZ, string asCoordSystem) => NotPorted(nameof(AddPropImpulse), NeedsPhysics);
+        protected void AddPropForce(string asName, float afX, float afY, float afZ, string asCoordSystem)
+        {
+            if (GetEntity(asName, HplEntityType.Prop) is not HplProp p) return;
+            var v = new Vector3(afX, afY, afZ);
+            foreach (var body in p.PhysicsBodies) body.AddForce(VecToCoordSystem(body, v, asCoordSystem));
+        }
+
+        protected void AddPropImpulse(string asName, float afX, float afY, float afZ, string asCoordSystem)
+        {
+            if (GetEntity(asName, HplEntityType.Prop) is not HplProp p) return;
+            var v = new Vector3(afX, afY, afZ);
+            foreach (var body in p.PhysicsBodies) body.AddImpulse(VecToCoordSystem(body, v, asCoordSystem));
+        }
 
         protected void AddBodyForce(string asName, float afX, float afY, float afZ, string asCoordSystem)
         {
-            if (Map.GetBody(asName) == null) HplLog.Error($"Could not find body '{asName}'!");
-            else NotPorted(nameof(AddBodyForce), NeedsPhysics);
+            var body = Map.GetBody(asName)?.Physics;
+            if (body == null)
+            {
+                HplLog.Error($"Could not find body '{asName}'!");
+                return;
+            }
+            body.AddForce(VecToCoordSystem(body, new Vector3(afX, afY, afZ), asCoordSystem));
         }
 
         protected void AddBodyImpulse(string asName, float afX, float afY, float afZ, string asCoordSystem)
         {
-            if (Map.GetBody(asName) == null) HplLog.Error($"Could not find body '{asName}'!");
-            else NotPorted(nameof(AddBodyImpulse), NeedsPhysics);
+            var body = Map.GetBody(asName)?.Physics;
+            if (body == null)
+            {
+                HplLog.Error($"Could not find body '{asName}'!");
+                return;
+            }
+            body.AddImpulse(VecToCoordSystem(body, new Vector3(afX, afY, afZ), asCoordSystem));
         }
 
-        protected void BreakJoint(string asName) => NotPorted(nameof(BreakJoint), NeedsPhysics);
+        protected void BreakJoint(string asName)
+        {
+            var joint = Map.PhysicsWorld.Joints.Find(j => j.Name == asName);
+            if (joint == null)
+            {
+                HplLog.Error($"Could not find joint '{asName}'!");
+                return;
+            }
+            joint.Break();
+        }
 
         protected void SetBodyMass(string asName, float afMass)
         {
-            var body = Map.GetBody(asName);
-            if (body?.Data != null) body.Data.mass = afMass;
-            else HplLog.Error($"Could not find body '{asName}'!");
+            var body = Map.GetBody(asName)?.Physics;
+            if (body == null)
+            {
+                HplLog.Error($"Could not find body '{asName}'!");
+                return;
+            }
+            body.Mass = afMass;
         }
 
         protected float GetBodyMass(string asName)
         {
-            var body = Map.GetBody(asName);
-            if (body?.Data != null) return body.Data.mass;
-            HplLog.Error($"Could not find body '{asName}'!");
-            return 0f;
+            var body = Map.GetBody(asName)?.Physics;
+            if (body == null)
+            {
+                HplLog.Error($"Could not find body '{asName}'!");
+                return 0f;
+            }
+            return body.Mass;
         }
 
         // ------------------------------------------------------------------ connections
 
         protected void InteractConnectPropWithRope(string asName, string asPropName, string asRopeName, bool abInteractOnly, float afSpeedMul,
                                                    float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed) =>
-            NotPorted(nameof(InteractConnectPropWithRope), NeedsInteraction);
+            NotPorted(nameof(InteractConnectPropWithRope), NeedsConnections);
 
         protected void InteractConnectPropWithMoveObject(string asName, string asPropName, string asMoveObjectName, bool abInteractOnly,
                                                          bool abInvert, int alStatesUsed) =>
-            NotPorted(nameof(InteractConnectPropWithMoveObject), NeedsInteraction);
+            NotPorted(nameof(InteractConnectPropWithMoveObject), NeedsConnections);
 
         /// <summary>State changes of the main entity (levers, wheels, ...) reach the connected one from step 4.3.</summary>
         protected void ConnectEntities(string asName, string asMainEntity, string asConnectEntity, bool abInvertStateSent, int alStatesUsed,

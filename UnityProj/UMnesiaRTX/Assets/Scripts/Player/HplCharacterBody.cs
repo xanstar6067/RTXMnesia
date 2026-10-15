@@ -34,6 +34,8 @@ namespace RTXMnesia.Player
         public float pushForce;
         public int cameraSmoothPosNum;
         public bool testCollision = true;
+        [Tooltip("Moving diagonally is not faster (the push state turns this off).")]
+        public bool DisableDiagSpeedBoost = true;
 
         /// <summary>Camera offset: y up, x along <see cref="Right"/>, z along <see cref="Forward"/>.</summary>
         [NonSerialized] public Vector3 cameraPosAdd;
@@ -253,7 +255,7 @@ namespace RTXMnesia.Player
         Vector3 UpdatePositionFromCharSpeed(float dt)
         {
             // Moving diagonally is not faster.
-            float diagMul = _moving[0] && _moving[1] ? 0.7071f : 1f;
+            float diagMul = DisableDiagSpeedBoost && _moving[0] && _moving[1] ? 0.7071f : 1f;
 
             MovedLastUpdate = false;
             for (int i = 0; i < 2; i++)

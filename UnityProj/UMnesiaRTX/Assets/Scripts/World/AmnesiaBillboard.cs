@@ -46,6 +46,7 @@ namespace RTXMnesia.World
             quadRenderer.shadowCastingMode = ShadowCastingMode.Off;
             quadRenderer.enabled = visible;
             _quad = go.transform;
+            if (_runtimeColor) ApplyColor();
             RenderPipelineManager.beginCameraRendering += FaceCamera;
         }
 
@@ -56,6 +57,42 @@ namespace RTXMnesia.World
             if (Application.isPlaying) Destroy(_quad.gameObject);
             else DestroyImmediate(_quad.gameObject);
             _quad = null;
+        }
+
+        bool _runtimeColor;
+        MaterialPropertyBlock _block;
+
+        /// <summary>
+        /// cBillboard::SetColor at runtime (prop effects fading): overrides the color the material variant has, as a
+        /// property block. Black hides the billboard (Billboard.cpp IsVisible).
+        /// </summary>
+        public void SetColor(Color c)
+        {
+            color = c;
+            _runtimeColor = true;
+            ApplyColor();
+        }
+
+        void ApplyColor()
+        {
+            if (material == null) return;
+            _block ??= new MaterialPropertyBlock();
+            _block.Clear();
+            if (material.shader.name == "HDRP/Unlit")
+            {
+                // Additive HPL2 blending ignores alpha; HDRP multiplies additive color by it (as the import does).
+                bool additive = Mathf.Approximately(material.GetFloat("_BlendMode"), 1f);
+                _block.SetColor("_UnlitColor", new Color(color.r, color.g, color.b, additive ? 1f : color.a));
+            }
+            else _block.SetColor("_BaseColor", color);
+
+            bool show = visible && (color.r > 0f || color.g > 0f || color.b > 0f);
+            foreach (var r in new[] { GetComponent<Renderer>(), _quad != null ? _quad.GetComponent<Renderer>() : null })
+            {
+                if (r == null) continue;
+                r.SetPropertyBlock(_block);
+                r.enabled = show;
+            }
         }
 
         void FaceCamera(ScriptableRenderContext context, Camera cam)

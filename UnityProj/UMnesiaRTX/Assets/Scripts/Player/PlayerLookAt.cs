@@ -46,8 +46,8 @@ namespace RTXMnesia.Player
             float pitch = -_player.Pitch;
             float yaw = Mathf.PI - _player.Yaw;
 
-            float distPitch = GetAngleDistanceRad(pitch, goal.x);
-            float distYaw = GetAngleDistanceRad(yaw, goal.y);
+            float distPitch = Hpl.HplMatrix.AngleDistanceRad(pitch, goal.x);
+            float distYaw = Hpl.HplMatrix.AngleDistanceRad(yaw, goal.y);
 
             var wanted = new Vector2(Mathf.Min(distPitch * _speedMul, _maxSpeed), Mathf.Min(distYaw * _speedMul, _maxSpeed));
             _currentSpeed += (wanted - _currentSpeed) * timeStep * 10f;
@@ -93,32 +93,9 @@ namespace RTXMnesia.Player
             float a = -angle.y;
             Vector3 d = goal - start;
             float rotatedZ = -Mathf.Sin(a) * d.x + Mathf.Cos(a) * d.z;
-            angle.x = Wrap(GetAngleFromPoints2DSimple(new Vector2(rotatedZ, d.y)), 0f, Mathf.PI * 2f);
+            angle.x = Hpl.HplMatrix.Wrap(GetAngleFromPoints2DSimple(new Vector2(rotatedZ, d.y)), 0f, Mathf.PI * 2f);
             return angle;
         }
 
-        static float Wrap(float x, float min, float max)
-        {
-            if (x >= min && x <= max) return x;
-            max -= min;
-            float offset = min;
-            x -= offset;
-            float numOfMax = Mathf.Floor(Mathf.Abs(x / max));
-            if (x >= max) x -= numOfMax * max;
-            else if (x < 0f) x = (numOfMax + 1f) * max + x;
-            return x + offset;
-        }
-
-        static float GetAngleDistanceRad(float angle1, float angle2)
-        {
-            const float max = Mathf.PI * 2f;
-            angle1 = Wrap(angle1, 0f, max);
-            angle2 = Wrap(angle2, 0f, max);
-            if (angle1 == angle2) return 0f;
-            float dist1 = angle2 - angle1;
-            float dist2 = max - Mathf.Abs(dist1);
-            if (dist1 > 0f) dist2 = -dist2;
-            return Mathf.Abs(dist1) < Mathf.Abs(dist2) ? dist1 : dist2;
-        }
     }
 }

@@ -33,6 +33,8 @@ namespace RTXMnesia.ScriptApi
         public AmnesiaPlayer player;
         public HplEffects effects;
         public HplHud hud;
+        [Tooltip("materials.cfg: physics materials and surface data.")]
+        public HplSurfaces surfaces;
 
         [Tooltip("ScriptDebugOn() in the level script (the original skips intros and runs test code).")]
         public bool scriptDebug;
@@ -44,6 +46,7 @@ namespace RTXMnesia.ScriptApi
         public static HplMap Current { get; private set; }
 
         public HplScript Script { get; private set; }
+        public Dynamics.HplPhysicsWorld PhysicsWorld { get; private set; }
         public float GameTime { get; private set; }
         public Camera PlayerCamera => player != null ? player.playerCamera : null;
         public readonly HplCollideCallbacks PlayerCollideCallbacks = new();
@@ -90,9 +93,34 @@ namespace RTXMnesia.ScriptApi
 
         void Start() => Begin();
 
+        // Play mode: Unity simulates after FixedUpdate (needed for Rigidbody interpolation); the part of the step
+        // after the simulation runs when the physics step is done (WaitForFixedUpdate).
         void FixedUpdate()
         {
-            if (Application.isPlaying) Step(Time.fixedDeltaTime);
+            if (!Application.isPlaying) return;
+            if (Physics.simulationMode == SimulationMode.Script)
+            {
+                Step(Time.fixedDeltaTime);
+                return;
+            }
+            StepBeforeSimulate(Time.fixedDeltaTime);
+            _afterPending = true;
+            if (_afterRoutine == null) _afterRoutine = StartCoroutine(AfterPhysics());
+        }
+
+        bool _afterPending;
+        Coroutine _afterRoutine;
+        static readonly WaitForFixedUpdate WaitPhysics = new();
+
+        System.Collections.IEnumerator AfterPhysics()
+        {
+            while (true)
+            {
+                yield return WaitPhysics;
+                if (!_afterPending) continue;
+                _afterPending = false;
+                StepAfterSimulate(Time.fixedDeltaTime);
+            }
         }
 
         /// <summary>Collects the scene into the script registries and creates the level script. Safe to call twice.</summary>
@@ -115,8 +143,13 @@ namespace RTXMnesia.ScriptApi
                 _checkPlayerCallbacks = () => PlayerCollideCallbacks.Check("Player", _playerBodies, this);
             }
 
+            PhysicsWorld = new Dynamics.HplPhysicsWorld();
+            _templateRoot = transform.Find("EntityTemplates");
+            _entityRoot = transform.Find("Entities") ?? transform;
+
             foreach (var area in GetComponentsInChildren<AmnesiaArea>(true))
             {
+                if (IsTemplate(area.transform)) continue;
                 switch (area.areaType)
                 {
                     case "PlayerStart":
@@ -127,17 +160,31 @@ namespace RTXMnesia.ScriptApi
                     case "PosNode":
                         break;
                     default:
-                        AddEntity(new HplArea(area));
+                        AddEntity(new HplArea(area, gameConfig));
                         break;
                 }
             }
-            foreach (var entity in GetComponentsInChildren<AmnesiaEntity>(true))
-                if (HplProp.TryGetType(entity.entityType, out var type)) AddEntity(new HplProp(entity, type));
             foreach (var light in GetComponentsInChildren<AmnesiaLight>(true))
             {
+                if (IsTemplate(light.transform)) continue;
                 if (_lights.TryAdd(light.name, light)) _lightList.Add(light);
                 light.InitRuntime();
             }
+            ConnectBillboards(transform);
+            foreach (var entity in GetComponentsInChildren<AmnesiaEntity>(true))
+            {
+                if (IsTemplate(entity.transform)) continue;
+                var prop = Props.PropFactory.Create(entity);
+                if (prop == null)
+                {
+                    // cLuxStaticPropLoader: not a script entity, but its bodies (and joints) exist.
+                    PhysicsWorld.AddEntity(entity.transform, surfaces, Application.isPlaying);
+                    continue;
+                }
+                prop.Load(this, PhysicsWorld);
+                AddEntity(prop);
+            }
+            if (player != null && player.Body != null) PhysicsWorld.SetCharacterShapes(player.Body.Shapes);
 
             InitFog();
 
@@ -168,6 +215,7 @@ namespace RTXMnesia.ScriptApi
             Build();
             if (_started) return;
             _started = true;
+            if (player != null && player.Body != null) PhysicsWorld.SetCharacterShapes(player.Body.Shapes);
             if (player != null && player.LookAt != null)
             {
                 player.LookAt.AtTarget += function => RunScript(function);
@@ -180,8 +228,19 @@ namespace RTXMnesia.ScriptApi
             Script.Run(Script.OnEnter, "OnEnter");
         }
 
-        /// <summary>One HPL2 logic step.</summary>
+        /// <summary>One HPL2 logic step with an explicit physics simulation (edit mode tools, script simulation mode).</summary>
         public void Step(float timeStep)
+        {
+            StepBeforeSimulate(timeStep);
+            Physics.Simulate(timeStep);
+            StepAfterSimulate(timeStep);
+        }
+
+        /// <summary>
+        /// The Update message (map: timers, entities; player; HUD; effects), then the world update up to the rigid
+        /// body simulation: the character body, the bodies' forces and joints' limits.
+        /// </summary>
+        public void StepBeforeSimulate(float timeStep)
         {
             Begin();
 
@@ -196,11 +255,127 @@ namespace RTXMnesia.ScriptApi
             hud.Step(timeStep);
             effects.Step(timeStep);
 
-            // World update: physics (the character body), lights.
+            // PostUpdate message: cScene::PostUpdate → cWorld::Update → iPhysicsWorld::Update.
             if (player != null) player.StepPhysics(timeStep);
-            for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
+            PhysicsWorld.BeforeSimulate(timeStep);
+        }
 
+        /// <summary>After the simulation: joints and bodies, lights, the player's post update, destroyed entities.</summary>
+        public void StepAfterSimulate(float timeStep)
+        {
+            PhysicsWorld.AfterSimulate(timeStep);
+            for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
+            if (player != null) player.StepPostUpdate(timeStep);
+            DestroyPendingEntities();
             GameTime += timeStep;
+        }
+
+        // ------------------------------------------------------------------ entity creation / destruction
+
+        readonly List<HplEntity> _destroy = new();
+        Transform _templateRoot, _entityRoot;
+
+        bool IsTemplate(Transform t) => _templateRoot != null && t.IsChildOf(_templateRoot);
+
+        /// <summary>Lights drive the billboards connected to them (cEFL_LightBillboardConnection, iLight::AttachBillboard).</summary>
+        void ConnectBillboards(Transform root)
+        {
+            foreach (var bb in root.GetComponentsInChildren<AmnesiaBillboard>(true))
+            {
+                if (string.IsNullOrEmpty(bb.connectLight) || IsTemplate(bb.transform)) continue;
+                // A billboard of an entity connects to a light of that entity, a map billboard to a map light.
+                var owner = bb.GetComponentInParent<AmnesiaEntity>(true);
+                var light = owner != null ? FindLight(owner.transform, bb.connectLight) : GetLight(bb.connectLight);
+                if (light == null) HplLog.Warn($"Light with name '{bb.connectLight}' does not exist!");
+                else light.AttachBillboard(bb);
+            }
+        }
+
+        static AmnesiaLight FindLight(Transform root, string name)
+        {
+            foreach (var l in root.GetComponentsInChildren<AmnesiaLight>(true)) if (l.name == name) return l;
+            return null;
+        }
+
+        /// <summary>cLuxMap::DestroyEntity: the entity goes after this step.</summary>
+        public void DestroyEntity(HplEntity entity)
+        {
+            if (entity == null || _destroy.Contains(entity)) return;
+            if (entity is HplProp prop) prop.DestroyMe = true;
+            _destroy.Add(entity);
+        }
+
+        void DestroyPendingEntities()
+        {
+            if (_destroy.Count == 0) return;
+            var list = new List<HplEntity>(_destroy);
+            _destroy.Clear();
+            foreach (var entity in list)
+            {
+                if (player != null && player.States != null) player.States.Current.OnDestroyEntity(entity);
+                if (entity is HplProp prop)
+                {
+                    prop.BeforeDestruction();
+                    PhysicsWorld.RemoveBodies(prop.PhysicsBodies);
+                }
+                _entities.Remove(entity);
+                string key = entity.Name.ToLowerInvariant();
+                if (_entitiesByName.TryGetValue(key, out var e) && e == entity) _entitiesByName.Remove(key);
+                foreach (var body in entity.Bodies) if (_bodies.TryGetValue(body.Name, out var b) && b == body) _bodies.Remove(body.Name);
+                foreach (var light in entity.GameObject.GetComponentsInChildren<AmnesiaLight>(true))
+                {
+                    _lightList.Remove(light);
+                    if (_lights.TryGetValue(light.name, out var l) && l == light) _lights.Remove(light.name);
+                }
+                if (Application.isPlaying) Destroy(entity.GameObject);
+                else DestroyImmediate(entity.GameObject);
+            }
+        }
+
+        /// <summary>
+        /// cLuxMap::CreateEntity: a copy of the imported template of the .ent file (EntityTemplates), named, placed
+        /// (Unity space) and loaded like a map entity. Null if the file has no template. Scaled copies: later.
+        /// </summary>
+        public HplEntity CreateEntity(string name, string file, Vector3 position, Quaternion rotation, Vector3 scale)
+        {
+            string fileName = System.IO.Path.GetFileNameWithoutExtension(file ?? "");
+            Transform template = null;
+            if (_templateRoot != null)
+                foreach (Transform t in _templateRoot)
+                    if (string.Equals(t.name, fileName, StringComparison.OrdinalIgnoreCase)) { template = t; break; }
+            if (template == null)
+            {
+                HplLog.Warn($"CreateEntity: no template for '{file}' (re-import the level to build it)");
+                return null;
+            }
+            if (scale != Vector3.one && (scale - Vector3.one).sqrMagnitude > 1e-6f)
+                HplLog.Warn($"CreateEntity '{name}': scale {scale} is not applied to created entities yet");
+
+            var go = Instantiate(template.gameObject, _entityRoot);
+            go.name = name;
+            foreach (var t in go.GetComponentsInChildren<Transform>(true))
+                if (t != go.transform && t.name.StartsWith(template.name + "_", StringComparison.Ordinal))
+                    t.name = name + t.name.Substring(template.name.Length);
+            go.transform.SetPositionAndRotation(position, rotation);
+            go.SetActive(true);
+
+            foreach (var light in go.GetComponentsInChildren<AmnesiaLight>(true))
+            {
+                if (_lights.TryAdd(light.name, light)) _lightList.Add(light);
+                light.InitRuntime();
+            }
+            ConnectBillboards(go.transform);
+            var prop = Props.PropFactory.Create(go.GetComponent<AmnesiaEntity>());
+            if (prop == null) return null;
+            prop.Load(this, PhysicsWorld);
+            AddEntity(prop);
+            return prop;
+        }
+
+        /// <summary>cLuxMapHandler::ChangeMap: map switching comes with the next maps (logged).</summary>
+        public void ChangeMap(string mapFile, string startPos)
+        {
+            HplLog.Warn($"ChangeMap('{mapFile}', '{startPos}'): skipped, needs map switching");
         }
 
         // ------------------------------------------------------------------ script calls

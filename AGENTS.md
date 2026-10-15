@@ -20,7 +20,7 @@
 
 ## Состояние Unity-проекта
 
-HDRP-база (`Assets/Editor/ConfigureHDRP.cs`, меню Tools > RTXMnesia > Configure HDRP, `Assets/Settings/*`, `SampleScene`), импортёры ресурсов и уровней (`Assets/Editor/Importer`), компоненты уровня, игрок и рантайм скриптов уровней (`Assets/Scripts`). Первый уровень: `Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity` (генерируется, не в git). В нём Play запускает скрипт уровня — вступление, пробуждение, события по зонам; без звука и частиц.
+HDRP-база (`Assets/Editor/ConfigureHDRP.cs`, меню Tools > RTXMnesia > Configure HDRP, `Assets/Settings/*`, `SampleScene`), импортёры ресурсов и уровней (`Assets/Editor/Importer`), компоненты уровня, игрок и рантайм скриптов уровней (`Assets/Scripts`). Первый уровень: `Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity` (генерируется, не в git). В нём Play запускает скрипт уровня — вступление, пробуждение, события по зонам; пропы — физические тела с шарнирами, их можно брать, толкать, открывать (двери, ящики, рычаги, колёса), зажигать лампы, подбирать предметы; без звука и частиц.
 Fixed Timestep = 1/60 (как шаг логики HPL2, `EngineInitVars mlUpdateRate`).
 Hardware RT не включён. Подробности: `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.
 Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe -batchmode -nographics -quit -projectPath ... -executeMethod ...`.
@@ -70,7 +70,7 @@ Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Edito
 - Объём: в итоге вся игра, но идём по шагам; первая цель — **глава 1** (`maps/main/ch01`, 15 карт, начиная с `00_rainy_hall`).
 - Скрипты уровней портируются **вручную на C#** (без встраивания AngelScript). Каждая карта документируется в `docs/ScriptPort/` по шаблону из README; код оригинала туда не копируется, только ссылки `файл:строка`.
 - После переноса функции API обновлять её статус в `docs/ScriptPort/api.md`.
-- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели ✓; префабы .ent → вместе с шагом 4) → 3) импорт одного уровня ✓ (`00_rainy_hall`; частицы .ps — заглушки) → 4) игрок: 4.1 передвижение ✓, 4.2 физика сущностей (Rigidbody, джоинты, физ. материалы), 4.3 взаимодействие (фокус/прицел, Grab, двери, ящики, рычаги, колёса), 4.4 лестницы, фонарь → 5) скрипты уровней (идёт: рантайм, эффекты, HUD, `00_rainy_hall` ✓; к шагу 5 перешли до шагов 4.2–4.4, их функции в API пока заглушки) → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
+- План этапов: 1) подготовка ✓ → 2) импортёры (текстуры, материалы, модели ✓; префабы .ent → вместе с шагом 4) → 3) импорт одного уровня ✓ (`00_rainy_hall`; частицы .ps — заглушки) → 4) игрок: 4.1 передвижение ✓, 4.2 физика сущностей ✓ (Rigidbody, джоинты, физ. материалы), 4.3 взаимодействие ✓ (фокус/прицел, Grab, Push, Slide, двери, рычаги, колёса, лампы, предметы), 4.4 лестницы, фонарь → 5) скрипты уровней (идёт: рантайм, эффекты, HUD, `00_rainy_hall` ✓) → 6) враги, безумие, звук, меню, сохранения → 7) RTX → 8) ИИ-апскейл текстур.
 
 ## Импортёры (Assets/Editor/Importer, namespace RTXMnesia.Importer)
 
@@ -109,11 +109,15 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
 Результат: `Assets/AmnesiaImported/Levels/<путь карты>.unity` + `<карта>/<карта>_generated.asset` (меши плоскостей/декалей/квад билбордов/цилиндр коллизии, варианты материалов по цвету) + `<карта>_volume.asset`.
 
 - StaticObject → экземпляр собственного префаба с трансформом `T·R·S` из карты и готовой коллизией HPL2. Plane → порт `MeshCreator::CreatePlane`. Decal → готовый мировой меш из .map + HDRP/Decal материал (цвет → вариант материала, без вертекс-цвета).
-- Entity → GameObject с `AmnesiaEntity` (файл, тип, переменные .ent + экземпляра); модель распакована, подмеши по `.ent`; `Body_*` с `AmnesiaBody` и коллайдерами из Shapes (пока всё статично, Rigidbody/джоинты — шаг 4). Цилиндр → выпуклый MeshCollider. `CommentaryIcon` выключены.
+- Entity → GameObject с `AmnesiaEntity` (файл, тип, переменные .ent + экземпляра); модель распакована, подмеши по `.ent`; `Body_*` с `AmnesiaBody` (масса, гравитация, damping, макс. скорости, CollideCharacter, физ. материал) и коллайдерами из Shapes. Тела без форм пропускаются. Цилиндр → выпуклый MeshCollider. `CommentaryIcon` выключены.
+  - Подмеши и дочерние объекты `.ent` (свет, билборды, частицы) прикрепляются к телу по `<Children>` его ID; остальные и скелетные модели — к первому телу, мировая поза сохраняется.
+  - Joints → `AmnesiaJoint` (данные; градусы → радианы; pivot/pin в локальном пространстве сущности). Ошибки оригинала сохранены: тип `joinscrew` с опечаткой загружается как ball.
+  - Физ. материалы: `SurfaceConverter` — `materials.cfg` → `Assets/AmnesiaImported/Physics/surfaces.asset` (`HplSurfaces`, PhysicsMaterial — под-ассеты, обновляются на месте). Статика берёт материал по `PhysicsMaterial` своего `.mat`, тела — из `.ent`.
+  - Шаблоны сущностей: неактивные, в масштабе 1, под корнем `EntityTemplates` — break-сущности, сломанные двери, ContainedItem и литералы `.ent` из `.hps` (без расширения — добавляется `.ent`), а также их собственные Break/Broken. `HplMap.CreateEntity` клонирует их.
 - Area → `AmnesiaArea` (+ триггер BoxCollider размера Scale, кроме PlayerStart). ParticleSystem/Sound → заглушки `AmnesiaParticleSystem`/`AmnesiaSound` (TODO конвертер .ps и звук). BoxLight, FogArea, точечные gobo (кубкарты), скайбокс — пока пропускаются с предупреждением.
 - Свет → HDRP через `AmnesiaLight` (хранит параметры HPL, включая flicker — пока не симулируется). Пересчёт яркости — `Assets/Scripts/Hpl/HplLighting.cs`: фиксированная экспозиция EV100 = 3; HPL-свет почти не затухает в радиусе, HDRP — 1/d², совпадение на 0.5 радиуса (`ReferenceDistance`); `Candela = π·d²·1.2·2^EV`. Spot с gobo → Pyramid + cookie (роль текстуры `Cookie`, перевёрнута по вертикали, как проецирует HPL).
 - Эмиссия Lit и цвет тумана в HDRP экспонируются → × `UnitRadiance` (1.2·2^EV); **цвет HDRP/Unlit не экспонируется** (ShaderPassForwardUnlit: `_DeExposureMultiplier` = 1) → цвет HPL как есть. При смене EV — перегнать материалы и уровень.
-- Билборды: FixedAxis — обычный MeshRenderer; Point/Axis рисует скрытый несохраняемый дочерний объект `AmnesiaBillboard` ([ExecuteAlways], поворот к камере в `beginCameraRendering`, работает и в Scene view). TODO: ореолы (IsHalo) в HPL рисуются без depth test с затуханием по occlusion query — пока с обычным depth test; связь билборда со светом (ConnectLight).
+- Билборды: FixedAxis — обычный MeshRenderer; Point/Axis рисует скрытый несохраняемый дочерний объект `AmnesiaBillboard` ([ExecuteAlways], поворот к камере в `beginCameraRendering`, работает и в Scene view). TODO: ореолы (IsHalo) в HPL рисуются без depth test с затуханием по occlusion query — пока с обычным depth test. Связь билборда со светом (`iLight::AttachBillboard`) — в рантайме `HplMap`: билборд сущности → свет той же сущности, билборд карты → свет карты; цвет = базовый × rgb света.
 - Окружение: Volume — без неба (HPL без скайбокса не даёт ambient), фикс. экспозиция, без тонмаппинга, туман HDRP подобран так, что на FogEnd непрозрачность = alpha цвета тумана (`HplLighting.ApplyFog`; параметры тумана карты — в `AmnesiaLevel`, скрипты меняют их в игре). Игрок (`AmnesiaPlayer` + камера, фон чёрный) на PlayerStartArea_1; `config/game.cfg`, `config/menu.cfg` и `config/default_user_keys.cfg` → `Assets/AmnesiaImported/Config/*.asset` (`HplConfig`) при каждом импорте уровня.
 - На корне сцены — рантайм скриптов: `HplMap` (+ `HplEffects` с шейдером и таблицей сепии, `HplHud` с иконкой записи). Тексты — `LanguageConverter` → `Assets/AmnesiaImported/Lang/russian.asset` (`HplLanguage`). Порядок файлов как в HPL2, первая запись имени побеждает: `config/lang_main/russian.lang`, `config/base_russian.lang`, затем английские для недостающих. Ещё в нём список `.ogg` папки языка (`lang/rus`) с длительностями из заголовков Ogg (`OggInfo`). Нужные рантайму текстуры игры конвертируются ролями `Lookup` (линейная, без мипов) и `Gui`.
 - PlayerStart: игрок смотрит вдоль **+Z** зоны (`cLuxAreaNodeLoader_PlayerStart`: forward = R·(0,0,1)), без разворота на 180°.
@@ -130,9 +134,32 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
   - мышь — каждый кадр: пиксели × чувствительность / (1.7 × высота экрана) × 2 рад, сглаживание как `GetSmoothMousePos` (веса 0.7^возраст в шагах 60 Гц — не зависит от FPS), питч ±70°;
   - смещения головы `HeadPosAdd` (Main/Bob/Lean/Script/ScreenShake/…) как `MoveHeadPosAdd`: x — вдоль правой оси тела, z — вдоль forward, без зеркала;
   - для скриптов: `active` (неактивный игрок не получает ввода), затухания FOV/aspect/крена как `cLuxPlayer::UpdateCamera`, `PlayerLookAt` (порт `cLuxPlayerLookAt`; углы считаются в терминах HPL2: yaw_HPL = π − yaw, pitch_HPL = −pitch, крен совпадает), здоровье/рассудок/масло с событиями для эффектов;
-  - клавиши: WASD, Shift, Space, Ctrl (переключает присед), Q/E наклон, F2 свободная камера (`FlyCamera`), Esc отпускает мышь;
+  - клавиши: WASD, Shift, Space, Ctrl (переключает присед), Q/E наклон, ЛКМ взаимодействие, ПКМ бросок, R — вращать взятый предмет мышью, колесо — дальность; F2 свободная камера (`FlyCamera`), Esc отпускает мышь;
+  - `AddYaw`/`AddPitch` принимают величины HPL (мышь: `AddYaw(-x)`, `AddPitch(y)`), ходьба/бег/прыжок/присед и действия идут через состояние игрока — оно может их перехватить; ограничения взгляда — стек `PushViewLimits`/`PopViewLimits`;
   - звуки (шаги, прыжок) — заглушки до шага 6.
+- Состояния игрока (`PlayerStates.cs`, порт `iLuxPlayerState`): `PlayerStateNormal` — фокус лучом 20 м с триггерами (пропускает слой персонажа, неактивные сущности и тела/области, с которыми нельзя взаимодействовать; статика луч блокирует), прицел по типу сущности, текст фокуса. `PlayerStateInteract.cs` — Grab (PID сила 400/0/40, момент 40/0/0.4, масса × GrabMassMul, без гравитации, бросок, вращение), Push, Slide, RotateBase → SwingDoor/Lever/Wheel. Вся математика — в пространстве HPL (`HplCamera*`, `HplMatrix`). Ошибки оригинала сохранены (prevPos колеса). `StepPostUpdate` — силы удержания после симуляции.
+- Прицелы — `HplHud`: `hud_crosshair_*.tga` (роль `Gui`), видимость как `CanDrawCrossHair`; затемнение экрана затемняет и прицел с текстом фокуса (в HPL fade рисуется поверх HUD).
 - Проверка без Play: `-executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch [-amnesiaMap ...] [-script "start PlayerStartArea_x2; turn 90; w 6; run 4; crouch; jump; leanr 1; shot name"]` → состояние в `Logs/AmnesiaImport.log`, снимки `Logs/Player_*.png` (без `-nographics`). Проверено на 00_rainy_hall: шаг 2.5 м/с, бег 4.25, лестница PlayerStartArea_x2 вниз/вверх, камера 1.75 / 1.15 (присед), прыжок ~1 м. PlayerStartArea_x1 — отладочный старт снаружи уровня (оттуда можно уйти в пустоту, как и в оригинале).
+
+## Физика сущностей (шаг 4.2, Assets/Scripts/Dynamics, namespace RTXMnesia.Dynamics)
+
+Порт Newton-обёртки HPL2 (`iPhysicsBody`, `iPhysicsJoint*`, `iPhysicsWorld`) поверх PhysX.
+- Пространство: позиции/направления HPL → Unity `(−x, y, z)`; осевые векторы (ω, момент) → `(x, −y, −z)`; кватернион `(x, −y, −z, w)`; матрица `S·M·S`, S = diag(−1,1,1,1) — `HplSpace`. `HplMatrix` — `cMatrixf`/`cMath` (MatrixRotate XYZ = Rz·Ry·Rx, GetRight/Up/Forward — строки, `GetAngleDistance`, `HplPid` = `cPidController`). Логику с углами писать в пространстве HPL через `Hpl*`-аксессоры тела, а не переводить формулы.
+- `HplPhysicsBody` (Rigidbody): масса 0 = кинематическое, interpolation только в Play, итерации решателя 12/4. `AddImpulse` = `ForceMode.VelocityChange` (`NewtonBodyAddImpulse` принимает Δv), в точке — масса × Δv. Damping Unity = clamp(d, 0.001, 1) × 0.02 × 60. Ограничение скорости повторяет ошибку HPL2 (длина сравнивается с max²). Статическое движение (`StaticLinearMove`/`StaticAngularMove`) — кинематический MovePosition/MoveRotation, поворот `RotateXYZ(ω·dt)·R` в пространстве HPL.
+- Слои: `CollideNonCharacter=false` → слой 30 (`NoCollideLayer`, не сталкивается ни с чем); `CollideCharacter=false` → `Physics.IgnoreCollision` с формами персонажа (`SetCharacterShapes`).
+- Комбинирование трения/упругости: порядок приоритетов Average < Min < Multiply < Max совпадает с Unity.
+- `HplJoint`: Hinge → `HingeJoint`, остальные → `ConfigurableJoint`. Угол шарнира HPL = −(правый поворот ребёнка вокруг пина HPL) = AngleAxis в Unity вокруг отражённого пина = `HingeJoint.angle` (проверено `PhysicsTests`), лимиты PhysX = [min°, max°]. Диапазоны за ±π или min > max — мягкий лимит коррекцией скорости. Slider — connected anchor в центре диапазона, симметричный `linearLimit`. Ball — twist ±MaxTwist, swing по конусу, 0 = свободно. Перед шагом: обновление лимитов (допуск 0.002 рад / 0.0005 м), LimitAutoSleep, Sticky, события MinLimitReached/MaxLimitReached; после — разрыв по `currentForce` ≥ BreakForce.
+- `HplPhysicsWorld`: `AddEntity` создаёт тела, затем джоинты; поиск тела по Rigidbody/коллайдеру/данным; `Step` для edit/batch.
+- `HplBodyContacts` ([ExecuteAlways]) — `OnCollisionEnter` для пропов, реагирующих на удар; скорость до удара — `PreviousVelocityAt`.
+- Прогон шага: в Play FixedUpdate делает часть до симуляции, корутина `WaitForFixedUpdate` — после. В edit/batch `Physics.simulationMode = Script` и `HplMap.Step` вызывает `Physics.Simulate`.
+- Проверка: `-executeMethod RTXMnesia.EditorDev.PhysicsTests.RunBatch` — синтетические шарнир (знак угла, лимиты, закрытие [0°, 2°], мягкий лимит 120°) и слайдер [0, 0.5].
+
+## Пропы и взаимодействие (шаг 4.3, Assets/Scripts/Props, namespace RTXMnesia.Props)
+
+- `HplProp` (ScriptApi, порт `iLuxProp` + `iLuxPropLoader::AfterLoad`): тела, джоинты, здоровье/прочность, эффекты (свет `FadeTo`, билборды и эмиссия `_EmissiveColor` через MaterialPropertyBlock), статическое движение, `SetDisableCollisionUntilOutsidePlayer`, связанные пропы. Переменные `.ent` — `Var*`, экземпляра карты — `InstanceVar*`, числа конфига — `ConfigFloat`.
+- `PropFactory.Create` по `EntityType`: `PropObject` (Grab/Push/Slide/Static, разбивание по энергии удара или здоровью → break-шаблон, ContainedItem), `PropSwingDoor` (Closed — лимит 2°, Locked, автозакрытие < 10°, поломка), `PropLamp` (зажигание огнивом + рассудок из `Player_Sanity`), `PropItem` (`HplGame.AddItem` — порт `cLuxInventory::AddItem`), `PropLevelDoor` (Locked, смена карты пока только в лог), `PropLever`, `PropWheel`, `PropMoveObject`, `PropGeneric`. StaticProp и простые модели — не пропы, но их тела всё равно физические.
+- Ошибки оригинала сохраняются (например, `SetStuckState` шарнира ставит оба лимита в min; счётчик огнива).
+- `HplMap.DestroyEntity` — отложенное удаление в конце шага; `CreateEntity` — клон шаблона с переименованием префиксов детей.
 
 ## Скрипты уровней (шаг 5, Assets/Scripts/ScriptApi, Effects, Ui, Levels)
 
@@ -144,7 +171,7 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
   - `or`/`and` → `||`/`&&`;
   - `0.7` → `0.7f`.
 - Глобальные переменные скрипта — поля класса. Локальные и глобальные переменные хранятся строками, как в HPL2 (`HplMath`: atoi/atof, `%.20f`).
-- Части движка, которых ещё нет (звук, частицы `.ps`, физика пропов 4.2, взаимодействие 4.3, фонарь 4.4, враги/безумие/журнал/инвентарь/сохранения 6), — `NotPorted`: одно предупреждение `[Script] X: skipped, needs …` на функцию. Состояние (двери, лампы, предметы, квесты) при этом хранится, `Get*` возвращают заданное.
+- Части движка, которых ещё нет (звук, частицы `.ps`, прикреплённые пропы, липкие зоны, мульти-слайдеры, кнопки, interact connections, анимации пропов, лестницы/фонарь 4.4, смена карты, враги/безумие/журнал/сохранения 6), — `NotPorted`: одно предупреждение `[Script] X: skipped, needs …` на функцию. Состояние (двери, лампы, предметы, квесты) при этом хранится, `Get*` возвращают заданное.
 - Ошибки, которые пишет сам движок (`Error()` HPL2 — в `hpl.log`, игра продолжается; например, скрипт просит свет, которого нет в карте), — `HplLog.Error` → предупреждение `[Script] ERROR: …`. Ошибка Unity при включённом в консоли Error Pause ставит Play на паузу. Настоящие ошибки Unity (`HplLog.PortError`, исключения) — только для ошибок порта.
 
 **`HplMap` (порт `cLuxMap` и порядка обновления).**
@@ -155,12 +182,16 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
 - Таймеры: `cLuxMap::UpdateTimers` — сначала все счётчики, потом вызовы; добавленные в колбэке не срабатывают в тот же шаг.
 - Шаг 60 Гц:
   1. таймеры;
-  2. логика активных сущностей: коллбэки столкновений и взгляда;
-  3. игрок (`StepLogic`), в его конце коллбэки «Player»;
+  2. логика активных сущностей: коллбэки столкновений и взгляда, затем `OnUpdate` пропов;
+  3. игрок (`StepLogic`): движение, состояние, голова, наклон, взгляд, в конце коллбэки «Player», текст фокуса;
   4. HUD;
   5. эффекты;
   6. тело игрока (`StepPhysics`);
-  7. свет (`AmnesiaLight.UpdateLight`: `FadeTo`, мерцание).
+  7. физика: `HplPhysicsWorld.BeforeSimulate` → симуляция → `AfterSimulate` (разрыв джоинтов);
+  8. свет (`AmnesiaLight.UpdateLight`: `FadeTo`, мерцание);
+  9. `StepPostUpdate` игрока (силы удержания);
+  10. удаление сущностей, помеченных на уничтожение.
+- Сборка: свет регистрируется и инициализируется до пропов; затем связи билбордов со светом, пропы (`PropFactory` + `Load`), тела остальных сущностей; шаблоны (`EntityTemplates`) пропускаются.
 - `OnStart`/`OnEnter` — после постановки игрока.
 - Флаги: `scriptDebug` (`ScriptDebugOn`), `logDebugMessages` (`AddDebugMessage` в консоль; в HPL2 видно только в отладке), `runScript`.
 
@@ -192,7 +223,11 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
   - `watch t интервал` — шаги со строкой состояния скрипта: игрок, FOV/aspect/крен, затемнение/след/сепия, реплика, сообщения, таймеры;
   - `fx sepia|trail|fade|blur|flash|off значение`;
   - `goto x y z yaw`;
-  - `start Зона`.
+  - `start Зона`;
+  - `interact`, `release`, `throw`, `scroll n`, `rotate on|off`, `mouse x y t [log]` (единицы мыши HPL за шаг, y вниз);
+  - `aim Сущность [Тело]` — повернуть камеру на тело; `body Сущность` — состояние пропа/двери/лампы, тела, джоинты;
+  - `call Функция аргументы` — вызвать функцию скрипта уровня.
+- Строка состояния включает состояние игрока, прицел и текст фокуса.
 - Пример: вступление `00_rainy_hall` — `-seed 1 -script "watch 80 2; shot awake"` (~70 с до первого квеста).
 
 ## Соглашения
@@ -201,6 +236,8 @@ Batch-методы `RTXMnesia.Importer.ImportMenu.*` (Unity с этим прое
   - `UnityProj/UMnesiaRTX/Assets/Scripts/`:
     - `Hpl/` — конвертации HPL→Unity, конфиг, язык, физ. запросы, `HplMath`;
     - `World/` — компоненты уровня;
+    - `Dynamics/` — физика тел и джоинтов;
+    - `Props/` — пропы;
     - `Player/` — игрок;
     - `ScriptApi/` — карта и API скриптов;
     - `Effects/` — эффекты экрана;

@@ -1,0 +1,725 @@
+using System.Collections.Generic;
+using RTXMnesia.Dynamics;
+using RTXMnesia.Hpl;
+using RTXMnesia.World;
+using UnityEngine;
+
+namespace RTXMnesia.ScriptApi
+{
+    /// <summary>cLuxInteractData_Grab (LuxProp.h): how a grabbed prop follows the camera.</summary>
+    public sealed class InteractDataGrab
+    {
+        public bool grabUseDepth;
+        public float grabDepth, grabDepthInc, grabMinDepth, grabMaxDepth;
+        public bool grabUseOffset;
+        public Vector3 grabPositionOffset, grabRotationOffset; // HPL2 space, radians
+        public float grabThrowImpulse, grabMassMul, forceMul, torqueMul;
+        public bool useRotation;
+    }
+
+    public sealed class InteractDataPush
+    {
+        public bool pushAtPoint;
+        public float pushForceMul, pushImpulse;
+    }
+
+    public sealed class InteractDataSlide
+    {
+        public float slideMaxSpeed, slideSlowDownFactor, slideSpeedFactor, slideThrowImpulse;
+    }
+
+    /// <summary>iLuxInteractData_RotateBase: swing doors, levers, wheels.</summary>
+    public sealed class InteractDataRotate
+    {
+        public float moveMaxSpeed, moveSlowDownFactor, moveSpeedFactor, moveThrowImpulse;
+    }
+
+    /// <summary>
+    /// A prop, enemy or commentary icon from an .ent file: port of iLuxProp (LuxProp.cpp) and its loader
+    /// (iLuxPropLoader::AfterLoad). Type behavior is in the subclasses (RTXMnesia.Props); enemies and commentary
+    /// icons use this base until step 6.
+    ///
+    /// Covers: base variables, bodies (Rigidbodies from <see cref="HplPhysicsWorld"/>), main body, health and
+    /// toughness, effects on / off (lights, billboards, particle systems, mesh illumination, fading), static
+    /// movement (MoveLinearTo / MoveAngularTo / RotateAtSpeed, computed in HPL2 space), "no collision with the
+    /// player until outside it", static physics, reset. Sounds of effects and movement: step 6.
+    /// </summary>
+    public class HplProp : HplEntity
+    {
+        public readonly AmnesiaEntity Component;
+        readonly HplEntityType _type;
+        public override HplEntityType Type => _type;
+        /// <summary>The .ent EntityType: Object, SwingDoor, Lamp, Enemy_Grunt, ...</summary>
+        public string PropType => Component.entityType;
+        public string SubType => Component.entitySubType;
+
+        public readonly List<HplPhysicsBody> PhysicsBodies = new();
+        public readonly List<HplJoint> Joints = new();
+
+        public float Health = 100f;
+        public int Toughness;
+        public bool ShowMesh = true, ShowHints = true;
+        public bool IsInteractedWith;
+        public readonly List<string> ConnectedProps = new();
+        public bool StaticPhysics { get; private set; }
+        /// <summary>Destroyed (break, pick up): the map removes it after the step.</summary>
+        public bool DestroyMe { get; internal set; }
+
+        protected HplPhysicsWorld PhysicsWorld { get; private set; }
+        protected HplConfig GameConfig { get; private set; }
+
+        string _mainBodyName = "";
+        HplPhysicsBody _mainBody;
+        float[] _bodyMasses;
+        bool[] _defaultCollideCharacter;
+        Vector3 _loadPosition;
+        Quaternion _loadRotation;
+
+        // ------------------------------------------------------------------ construction
+
+        public HplProp(AmnesiaEntity entity, HplEntityType type) : base(entity.gameObject, entity.hplId)
+        {
+            Component = entity;
+            _type = type;
+            foreach (var body in entity.GetComponentsInChildren<AmnesiaBody>(true))
+                Bodies.Add(new HplBody(Name + "_" + body.name, this, body.transform, body, body.GetComponentsInChildren<Collider>(true)));
+        }
+
+        /// <summary>
+        /// iLuxPropLoader::AfterLoad: bodies, base variables, type variables, SetupAfterLoad, instance variables.
+        /// The map adds the entity and sets its active state.
+        /// </summary>
+        internal void Load(HplMap map, HplPhysicsWorld world)
+        {
+            Map = map;
+            PhysicsWorld = world;
+            GameConfig = map.gameConfig;
+            _loadPosition = GameObject.transform.position;
+            _loadRotation = GameObject.transform.rotation;
+
+            world.AddEntity(GameObject.transform, map.surfaces, Application.isPlaying);
+            foreach (var b in Bodies)
+            {
+                b.Physics = world.BodyOf(b.Data);
+                if (b.Physics == null) continue;
+                b.Physics.UserData = this;
+                PhysicsBodies.Add(b.Physics);
+            }
+            foreach (var j in world.Joints)
+                if (j.Child.UserData == this && !Joints.Contains(j)) Joints.Add(j);
+
+            // Base properties
+            Health = VarFloat("Health", 100f);
+            Toughness = VarInt("Toughness", 0);
+            MaxFocusDistance = VarFloat("MaxFocusDistance", 0f);
+            _mainBodyName = VarString("MainPhysicsBody", "");
+            ShowMesh = VarBool("ShowMesh", true);
+            if (!ShowMesh) SetMeshVisible(false);
+            ShowHints = VarBool("ShowHints", true);
+
+            // Effects properties
+            _effectsOnSound = VarString("EffectsOnSound", "");
+            _effectsOffSound = VarString("EffectsOffSound", "");
+            _effectsOnTime = VarFloat("EffectsOnTime", 1f);
+            _effectsOffTime = VarFloat("EffectsOffTime", 1f);
+            _effectsOffLightColor = VarColor("EffectsOffLightColor", new Color(0f, 0f, 0f, 0f));
+            _effectsOffLightRadius = VarFloat("EffectsOffLightRadius", 1f);
+
+            // Move properties
+            _moveCheckCollision = VarBool("StaticMoveCheckCollision", true);
+
+            LoadVariables();
+            if (MaxFocusDistance <= 0f) MaxFocusDistance = ConfigFloat(DefaultFocusDistanceKey);
+
+            SetupAfterLoad();
+
+            // Instance variables
+            if (InstanceVar("CastShadows") == "false") { } // set by the level import
+            ConnectedProps.Clear();
+            foreach (string s in (InstanceVar("ConnectedProps") ?? "").Split(new[] { ' ', ',', '\t' }, System.StringSplitOptions.RemoveEmptyEntries))
+                ConnectedProps.Add(s);
+            CallbackFunc = InstanceVar("CallbackFunc") ?? "";
+            ConnectionStateChangeCallback = InstanceVar("ConnectionStateChangeCallback") ?? "";
+            SetPlayerLookAtCallback(InstanceVar("PlayerLookAtCallback") ?? "", InstanceBool("PlayerLookAtCallbackAutoRemove", false));
+            SetPlayerInteractCallback(InstanceVar("PlayerInteractCallback") ?? "", InstanceBool("PlayerInteractCallbackAutoRemove", false));
+            SetStaticPhysics(InstanceBool("StaticPhysics", false));
+            LoadInstanceVariables();
+        }
+
+        /// <summary>The game.cfg Player_Interaction key of the type's default focus distance.</summary>
+        protected virtual string DefaultFocusDistanceKey => "Default_DefaultMaxFocusDist";
+
+        /// <summary>The type loader's LoadVariables (.ent variables).</summary>
+        protected virtual void LoadVariables() { }
+
+        /// <summary>The type loader's LoadInstanceVariables (map instance variables).</summary>
+        protected virtual void LoadInstanceVariables() { }
+
+        protected virtual void OnSetupAfterLoad() { }
+
+        void SetupAfterLoad()
+        {
+            _defaultCollideCharacter = new bool[PhysicsBodies.Count];
+            _bodyMasses = new float[PhysicsBodies.Count];
+            for (int i = 0; i < PhysicsBodies.Count; i++)
+            {
+                _defaultCollideCharacter[i] = PhysicsBodies[i].CollideCharacter;
+                _bodyMasses[i] = PhysicsBodies[i].Mass;
+            }
+            if (_mainBodyName != "")
+            {
+                _mainBody = PhysicsBodies.Find(b => b.Name == Name + "_" + _mainBodyName);
+                if (_mainBody == null) HplLog.Warn($"Could not find main physics body '{Name}'");
+            }
+            SetupEffectData();
+            OnSetupAfterLoad();
+        }
+
+        // ------------------------------------------------------------------ variables
+
+        protected string VarString(string name, string fallback) => HplVariable.Find(Component.variables, name) ?? fallback;
+        protected float VarFloat(string name, float fallback) => ParseFloat(HplVariable.Find(Component.variables, name), fallback);
+        protected int VarInt(string name, int fallback) => ParseInt(HplVariable.Find(Component.variables, name), fallback);
+        protected bool VarBool(string name, bool fallback) => ParseBool(HplVariable.Find(Component.variables, name), fallback);
+        protected Vector3 VarVector3(string name, Vector3 fallback) => ParseVector3(HplVariable.Find(Component.variables, name), fallback);
+        protected Color VarColor(string name, Color fallback) => ParseColor(HplVariable.Find(Component.variables, name), fallback);
+
+        protected string InstanceVar(string name) => HplVariable.Find(Component.instanceVariables, name);
+        protected float InstanceFloat(string name, float fallback) => ParseFloat(InstanceVar(name), fallback);
+        protected bool InstanceBool(string name, bool fallback) => ParseBool(InstanceVar(name), fallback);
+        protected string InstanceString(string name, string fallback) => InstanceVar(name) ?? fallback;
+
+        protected float ConfigFloat(string key) => GameConfig != null ? GameConfig.GetFloat("Player_Interaction", key) : 0f;
+
+        static float ParseFloat(string s, float fallback) => string.IsNullOrEmpty(s) ? fallback : HplMath.Atof(s);
+        static int ParseInt(string s, int fallback) => string.IsNullOrEmpty(s) ? fallback : HplMath.Atoi(s);
+        static bool ParseBool(string s, bool fallback) => string.IsNullOrEmpty(s) ? fallback : s.Trim().ToLowerInvariant() == "true";
+
+        static Vector3 ParseVector3(string s, Vector3 fallback)
+        {
+            if (string.IsNullOrEmpty(s)) return fallback;
+            var parts = s.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+            var v = Vector3.zero;
+            for (int i = 0; i < 3 && i < parts.Length; i++) v[i] = HplMath.Atof(parts[i]);
+            return v;
+        }
+
+        static Color ParseColor(string s, Color fallback)
+        {
+            if (string.IsNullOrEmpty(s)) return fallback;
+            var parts = s.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+            var c = new Color(0f, 0f, 0f, 1f);
+            for (int i = 0; i < 4 && i < parts.Length; i++) c[i] = HplMath.Atof(parts[i]);
+            return c;
+        }
+
+        // ------------------------------------------------------------------ bodies
+
+        public HplPhysicsBody MainBody => _mainBody ?? (PhysicsBodies.Count > 0 ? PhysicsBodies[0] : null);
+
+        /// <summary>The MainPhysicsBody variable's body, null if not set (mpMainBody).</summary>
+        protected HplPhysicsBody ExplicitMainBody => _mainBody;
+
+        public override Transform AttachTransform => MainBody != null ? MainBody.Data.transform : GameObject.transform;
+
+        public HplPhysicsBody GetBodyFromId(int id) => PhysicsBodies.Find(b => b.Data.hplId == id);
+
+        public int GetBodyIndexFromName(string name) => PhysicsBodies.FindIndex(b => b.Name == Name + "_" + name);
+
+        /// <summary>iLuxProp::GetWorldCenterPos (Unity space).</summary>
+        public Vector3 WorldCenterPos
+        {
+            get
+            {
+                if (MainBody != null) return MainBody.Position;
+                var renderers = GameObject.GetComponentsInChildren<Renderer>();
+                if (renderers.Length == 0) return GameObject.transform.position;
+                var b = renderers[0].bounds;
+                foreach (var r in renderers) b.Encapsulate(r.bounds);
+                return b.center;
+            }
+        }
+
+        public virtual InteractDataGrab GetGrabData() => null;
+        public virtual InteractDataPush GetPushData() => null;
+        public virtual InteractDataSlide GetSlideData() => null;
+        public virtual InteractDataRotate GetMoveBaseData() => null;
+
+        /// <summary>Highlight all bodies connected by joints when focused (grab objects).</summary>
+        public virtual bool ShowOutlinesOnConnectedBodies => true;
+
+        public void SetStaticPhysics(bool x)
+        {
+            if (StaticPhysics == x) return;
+            StaticPhysics = x;
+            for (int i = 0; i < PhysicsBodies.Count; i++)
+            {
+                var body = PhysicsBodies[i];
+                body.Mass = StaticPhysics ? 0f : _bodyMasses[i];
+                body.LinearVelocity = Vector3.zero;
+                body.AngularVelocity = Vector3.zero;
+            }
+        }
+
+        /// <summary>The mass a body had at load (cLuxProp_BodyData), for states that change and restore it.</summary>
+        public float DefaultMass(HplPhysicsBody body)
+        {
+            int i = PhysicsBodies.IndexOf(body);
+            return i >= 0 ? _bodyMasses[i] : body.Mass;
+        }
+
+        /// <summary>
+        /// iLuxProp::SetDisableCollisionUntilOutSidePlayer: the player passes through the bodies until it is
+        /// outside them (after letting go of a grabbed prop).
+        /// </summary>
+        public void SetDisableCollisionUntilOutsidePlayer(bool x)
+        {
+            _checkOutsidePlayer = x;
+            if (!x) return;
+            foreach (var body in PhysicsBodies) body.CollideCharacter = false;
+        }
+
+        bool _checkOutsidePlayer;
+
+        void UpdateCheckIfOutsidePlayer()
+        {
+            if (!_checkOutsidePlayer) return;
+            var player = Map.player;
+            if (player == null || player.Body == null || player.Body.Shapes.Count == 0) return;
+            var playerShape = player.Body.Shapes[player.Body.ActiveSize];
+            var playerT = playerShape.transform;
+
+            bool notColliding = true;
+            for (int i = 0; i < PhysicsBodies.Count; i++)
+            {
+                var body = PhysicsBodies[i];
+                if (body.CollideCharacter || !_defaultCollideCharacter[i]) continue;
+
+                bool collide = false;
+                foreach (var c in body.Colliders)
+                {
+                    if (c == null || !c.enabled) continue;
+                    Transform t = c.transform;
+                    if (Physics.ComputePenetration(c, t.position, t.rotation, playerShape, playerT.position, playerT.rotation, out _, out _))
+                    {
+                        collide = true;
+                        break;
+                    }
+                }
+
+                if (collide)
+                {
+                    notColliding = false;
+                    // A small impulse away from the player, keeping the speed in that direction low.
+                    Vector3 dir = body.HplPosition - HplSpace.Position(playerT.position);
+                    dir.y *= 0.1f;
+                    dir.Normalize();
+                    Vector3 vel = body.HplLinearVelocity;
+                    Vector3 relVel = dir * Vector3.Dot(vel, dir);
+                    if (relVel.magnitude < 0.5f) body.AddImpulseHpl(dir * 0.5f);
+                }
+                else body.CollideCharacter = true;
+            }
+            if (notColliding) _checkOutsidePlayer = false;
+        }
+
+        // ------------------------------------------------------------------ health
+
+        public void SetHealth(float x)
+        {
+            Health = x;
+            OnHealthChange();
+        }
+
+        /// <summary>iLuxProp::GiveDamage: strength one below the toughness halves, lower does nothing.</summary>
+        public override void GiveDamage(float amount, int strength)
+        {
+            if (strength < Toughness - 1) amount = 0f;
+            else if (strength == Toughness - 1) amount *= 0.5f;
+            SetHealth(Health - amount);
+            OnDamage(amount, strength);
+        }
+
+        protected virtual void OnHealthChange() { }
+        protected virtual void OnDamage(float amount, int strength) { }
+
+        /// <summary>iLuxProp::ResetProperties: bodies back to their load pose, still, health 100.</summary>
+        public void ResetProperties()
+        {
+            Matrix4x4 root = Matrix4x4.TRS(_loadPosition, _loadRotation, Vector3.one);
+            foreach (var body in PhysicsBodies)
+            {
+                var pose = root * Matrix4x4.TRS(body.LoadLocalPosition, body.LoadLocalRotation, Vector3.one);
+                body.SetPose(pose.GetPosition(), pose.rotation);
+                body.LinearVelocity = Vector3.zero;
+                body.AngularVelocity = Vector3.zero;
+            }
+            _moving = _movingAngular = _movingLinear = false;
+            _moveAngularSpeed = 0f;
+            Health = 100f;
+            OnResetProperties();
+        }
+
+        protected virtual void OnResetProperties() { }
+
+        /// <summary>Called by the map before the entity is removed (iLuxProp::BeforeEntityDestruction).</summary>
+        internal virtual void BeforeDestruction() { }
+
+        // ------------------------------------------------------------------ update
+
+        protected override void OnUpdate(float timeStep)
+        {
+            UpdateMoving(timeStep);
+            UpdateCheckIfOutsidePlayer();
+            UpdateEffectFading(timeStep);
+            UpdatePropSpecific(timeStep);
+        }
+
+        protected virtual void UpdatePropSpecific(float timeStep) { }
+
+        // ------------------------------------------------------------------ effects (lights, billboards, particles)
+
+        string _effectsOnSound = "", _effectsOffSound = "";
+        float _effectsOnTime = 1f, _effectsOffTime = 1f, _effectsOffLightRadius = 1f;
+        Color _effectsOffLightColor;
+        bool _effectsActive = true, _effectAlphaFading = true;
+        protected bool HasFlickering { get; private set; }
+
+        public float EffectsAlpha { get; private set; } = 1f;
+
+        protected readonly List<AmnesiaLight> Lights = new();
+        protected readonly List<(Color onColor, float onRadius, bool flickering)> LightData = new();
+        readonly List<(AmnesiaBillboard billboard, Color onColor, bool connectedToLight)> _billboards = new();
+        readonly List<GameObject> _particleSystems = new();
+        readonly List<(Renderer renderer, int index, Color emissive)> _illumination = new();
+        MaterialPropertyBlock _block;
+
+        void SetupEffectData()
+        {
+            foreach (var light in GameObject.GetComponentsInChildren<AmnesiaLight>(true))
+            {
+                Lights.Add(light);
+                LightData.Add((light.diffuseColor, light.radius, light.flickerActive));
+            }
+            if (Lights.Count > 0 && Lights[0].flickerActive) HasFlickering = true;
+
+            foreach (var bb in GameObject.GetComponentsInChildren<AmnesiaBillboard>(true))
+            {
+                bool connected = !string.IsNullOrEmpty(bb.connectLight) && Lights.Exists(l => l.name == bb.connectLight);
+                _billboards.Add((bb, bb.color, connected));
+            }
+            foreach (var ps in GameObject.GetComponentsInChildren<AmnesiaParticleSystem>(true)) _particleSystems.Add(ps.gameObject);
+
+            foreach (var renderer in GameObject.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer.GetComponent<AmnesiaBillboard>() != null) continue;
+                var materials = renderer.sharedMaterials;
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    var m = materials[i];
+                    if (m == null || !m.HasProperty("_EmissiveColor")) continue;
+                    Color e = m.GetColor("_EmissiveColor");
+                    if (e.maxColorComponent <= 0f) continue;
+                    _illumination.Add((renderer, i, e));
+                }
+            }
+        }
+
+        /// <summary>iLuxProp::SetEffectsActive: lights, particle systems and sounds on / off, faded or at once.</summary>
+        public void SetEffectsActive(bool active, bool fadeAndPlaySounds)
+        {
+            if (active == _effectsActive) return;
+            _effectsActive = active;
+            _effectAlphaFading = true;
+
+            if (_effectsActive)
+            {
+                foreach (var ps in _particleSystems) ps.SetActive(true);
+                for (int i = 0; i < Lights.Count; i++)
+                {
+                    var (onColor, onRadius, flickering) = LightData[i];
+                    if (fadeAndPlaySounds) Lights[i].FadeTo(onColor, onRadius, _effectsOnTime);
+                    else
+                    {
+                        Lights[i].SetColor(onColor);
+                        Lights[i].SetRadius(onRadius);
+                        Lights[i].SetFlickerActive(flickering);
+                    }
+                }
+                if (!fadeAndPlaySounds) EffectsAlpha = 1f;
+            }
+            else
+            {
+                foreach (var ps in _particleSystems) ps.SetActive(false);
+                for (int i = 0; i < Lights.Count; i++)
+                {
+                    var light = Lights[i];
+                    light.StopFading();
+                    light.SetFlickerActive(false);
+                    float offRadius = _effectsOffLightRadius >= 0f ? _effectsOffLightRadius : LightData[i].onRadius;
+                    if (fadeAndPlaySounds) light.FadeTo(_effectsOffLightColor, offRadius, _effectsOffTime);
+                    else
+                    {
+                        light.SetColor(_effectsOffLightColor);
+                        light.SetRadius(offRadius);
+                    }
+                }
+                if (!fadeAndPlaySounds) EffectsAlpha = 0f;
+            }
+            // Effect sounds (EffectsOnSound / EffectsOffSound) and sound entities: step 6.
+        }
+
+        void UpdateEffectFading(float timeStep)
+        {
+            if (!_effectAlphaFading) return;
+            if (_effectsActive)
+            {
+                EffectsAlpha += 1f / _effectsOnTime * timeStep;
+                if (EffectsAlpha > 1f)
+                {
+                    EffectsAlpha = 1f;
+                    for (int i = 0; i < Lights.Count; i++) Lights[i].SetFlickerActive(LightData[i].flickering);
+                    _effectAlphaFading = false;
+                }
+            }
+            else
+            {
+                EffectsAlpha -= 1f / _effectsOffTime * timeStep;
+                if (EffectsAlpha < 0f)
+                {
+                    EffectsAlpha = 0f;
+                    _effectAlphaFading = false;
+                }
+            }
+
+            foreach (var (billboard, onColor, connected) in _billboards)
+                if (!connected && billboard != null) billboard.SetColor(onColor * EffectsAlpha);
+
+            SetIlluminationAmount(EffectsAlpha);
+        }
+
+        /// <summary>cMeshEntity::SetIlluminationAmount: emission × amount (property blocks).</summary>
+        void SetIlluminationAmount(float amount)
+        {
+            if (_illumination.Count == 0) return;
+            _block ??= new MaterialPropertyBlock();
+            foreach (var (renderer, index, emissive) in _illumination)
+            {
+                if (renderer == null) continue;
+                renderer.GetPropertyBlock(_block, index);
+                _block.SetColor("_EmissiveColor", emissive * amount);
+                renderer.SetPropertyBlock(_block, index);
+            }
+        }
+
+        protected void SetMeshVisible(bool visible)
+        {
+            foreach (var renderer in GameObject.GetComponentsInChildren<Renderer>(true))
+                if (renderer.GetComponent<AmnesiaBillboard>() == null && renderer.GetComponentInParent<AmnesiaLight>() == null)
+                    renderer.enabled = visible;
+        }
+
+        // ------------------------------------------------------------------ static movement (HPL2 space)
+
+        bool _moving, _movingLinear, _movingAngular, _moveCheckCollision = true;
+        float _moveStartCount;
+        Matrix4x4 _lastBodyMoveMatrix = Matrix4x4.identity;
+        Vector3 _moveLinearGoal;
+        float _moveLinearAcc, _moveLinearMaxSpeed, _moveLinearSpeed, _moveLinearSlowdownDist;
+        Matrix4x4 _moveAngularGoal;
+        float _moveAngularAcc, _moveAngularMaxSpeed, _moveAngularSpeed, _moveAngularSlowdownDist;
+        bool _moveAngularNoGoal, _moveAngularUseOffset;
+        Vector3 _moveAngularNoGoalDir, _moveAngularWorldOffset, _moveAngularLocalOffset;
+
+        public bool IsMoving => _moving;
+
+        /// <summary>iLuxProp::MoveLinearTo (HPL2 space goal).</summary>
+        public void MoveLinearTo(Vector3 goal, float acc, float maxSpeed, float slowdownDist, bool resetSpeed)
+        {
+            // Move start sound: step 6.
+            _moveStartCount = 1f;
+            _moving = _movingLinear = true;
+            _moveLinearGoal = goal;
+            _moveLinearAcc = acc;
+            _moveLinearMaxSpeed = maxSpeed;
+            _moveLinearSlowdownDist = slowdownDist;
+            if (resetSpeed) _moveLinearSpeed = 0f;
+            OnStartMove();
+        }
+
+        public void MoveAngularTo(Matrix4x4 goal, float acc, float maxSpeed, float slowdownDist, bool resetSpeed,
+                                  bool useOffset, Vector3 worldOffset, Vector3 localOffset)
+        {
+            _moveStartCount = 1f;
+            _moving = _movingAngular = true;
+            _moveAngularGoal = goal;
+            _moveAngularAcc = acc;
+            _moveAngularMaxSpeed = maxSpeed;
+            _moveAngularSlowdownDist = slowdownDist;
+            if (resetSpeed) _moveAngularSpeed = 0f;
+            _moveAngularUseOffset = useOffset;
+            _moveAngularWorldOffset = worldOffset;
+            _moveAngularLocalOffset = localOffset;
+            _moveAngularNoGoal = false;
+            OnStartMove();
+        }
+
+        public void RotateAtSpeed(float acc, float goalSpeed, Vector3 axis, bool resetSpeed, bool useOffset, Vector3 worldOffset, Vector3 localOffset)
+        {
+            _moveStartCount = 1f;
+            _moving = _movingAngular = true;
+            _moveAngularAcc = acc;
+            _moveAngularMaxSpeed = goalSpeed;
+            if (resetSpeed) _moveAngularSpeed = 0f;
+            _moveAngularNoGoal = true;
+            _moveAngularNoGoalDir = axis.normalized;
+            _moveAngularUseOffset = useOffset;
+            _moveAngularWorldOffset = worldOffset;
+            _moveAngularLocalOffset = localOffset;
+            OnStartMove();
+        }
+
+        public void StopMove()
+        {
+            _movingLinear = _movingAngular = _moving = false;
+            // Move stop sound: step 6.
+        }
+
+        protected virtual void OnStartMove() { }
+
+        void UpdateMoving(float timeStep)
+        {
+            if (_moveStartCount > 0f) _moveStartCount -= timeStep;
+            if (!_moving || MainBody == null) return;
+            // Move loop sound volume: step 6.
+            _lastBodyMoveMatrix = MainBody.HplMatrix;
+            UpdateLinearMoving(timeStep);
+            UpdateAngularMoving(timeStep);
+            if (!_movingLinear && !_movingAngular) StopMove();
+        }
+
+        void UpdateLinearMoving(float timeStep)
+        {
+            if (!_movingLinear) return;
+            var body = MainBody;
+            Vector3 delta = _moveLinearGoal - body.HplPosition;
+            float dist = delta.magnitude;
+            Vector3 moveVel;
+
+            if (dist <= _moveLinearSpeed * timeStep * 1.05f || dist < 0.01f)
+            {
+                _moveLinearSpeed = 0f;
+                moveVel = delta / timeStep;
+                _movingLinear = false;
+            }
+            else
+            {
+                Vector3 dir = delta / dist;
+                if (dist < _moveLinearSlowdownDist) _moveLinearSpeed = dist / _moveLinearSlowdownDist * _moveLinearMaxSpeed;
+                else
+                {
+                    _moveLinearSpeed += _moveLinearAcc * timeStep;
+                    if (_moveLinearSpeed > _moveLinearMaxSpeed) _moveLinearSpeed = _moveLinearMaxSpeed;
+                }
+                moveVel = dir * _moveLinearSpeed;
+            }
+
+            if (_moveCheckCollision) CheckMoveCollision(ref moveVel, ref _moveLinearSpeed, timeStep);
+            if (moveVel != Vector3.zero) body.StaticLinearMove(HplSpace.Direction(moveVel));
+        }
+
+        void UpdateAngularMoving(float timeStep)
+        {
+            if (!_movingAngular) return;
+            var body = MainBody;
+            Vector3 moveVel;
+
+            if (_moveAngularNoGoal)
+            {
+                float acc = _moveAngularMaxSpeed < _moveAngularSpeed ? -_moveAngularAcc : _moveAngularAcc;
+                _moveAngularSpeed += acc * timeStep;
+                if ((acc < 0f && _moveAngularSpeed < _moveAngularMaxSpeed) || (acc > 0f && _moveAngularSpeed > _moveAngularMaxSpeed))
+                {
+                    _moveAngularSpeed = _moveAngularMaxSpeed;
+                    if (_moveAngularSpeed == 0f) _movingAngular = false;
+                }
+                moveVel = _moveAngularNoGoalDir * _moveAngularSpeed;
+            }
+            else
+            {
+                Vector3 delta = HplMatrix.EulerAngleDistance(body.HplMatrix, _moveAngularGoal);
+                float dist = delta.magnitude;
+                if (dist <= _moveAngularSpeed * timeStep * 1.05f || dist < 0.01f)
+                {
+                    _moveAngularSpeed = 0f;
+                    moveVel = delta / timeStep;
+                    _movingAngular = false;
+                }
+                else
+                {
+                    Vector3 dir = delta / dist;
+                    if (dist < _moveAngularSlowdownDist) _moveAngularSpeed = dist / _moveAngularSlowdownDist * _moveAngularMaxSpeed;
+                    else
+                    {
+                        _moveAngularSpeed += _moveAngularAcc * timeStep;
+                        if (_moveAngularSpeed > _moveAngularMaxSpeed) _moveAngularSpeed = _moveAngularMaxSpeed;
+                    }
+                    moveVel = dir * _moveAngularSpeed;
+                }
+            }
+
+            body.StaticAngularMove(HplSpace.Axial(moveVel));
+
+            if (_moveAngularUseOffset)
+            {
+                Matrix4x4 m = body.HplMatrix;
+                Matrix4x4 newBody = HplMatrix.RotateXYZ(moveVel * timeStep) * HplMatrix.GetRotation(m);
+                newBody = HplMatrix.SetTranslation(newBody, HplMatrix.GetTranslation(m));
+                Vector3 offset = HplMatrix.Mul(newBody, _moveAngularLocalOffset);
+                Vector3 diff = _moveAngularWorldOffset - offset;
+                body.StaticLinearMove(HplSpace.Direction(diff / timeStep));
+            }
+        }
+
+        readonly Collider[] _moveOverlaps = new Collider[32];
+
+        /// <summary>
+        /// iLuxProp::CheckMoveCollision: the body's shape at the moved pose against dynamic bodies; the part of the
+        /// move into them is removed.
+        /// </summary>
+        void CheckMoveCollision(ref Vector3 moveVel, ref float speed, float timeStep)
+        {
+            if (moveVel == Vector3.zero) return;
+            var body = MainBody;
+            Vector3 add = moveVel * timeStep;
+            Vector3 addU = HplSpace.Direction(add);
+            Vector3 push = Vector3.zero;
+            foreach (var c in body.Colliders)
+            {
+                if (c == null || !c.enabled) continue;
+                Transform t = c.transform;
+                Vector3 pos = t.position + addU;
+                var b = c.bounds;
+                int count = Physics.OverlapBoxNonAlloc(b.center + addU, b.extents, _moveOverlaps, Quaternion.identity,
+                                                       Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
+                {
+                    var other = _moveOverlaps[i];
+                    var rb = other.attachedRigidbody;
+                    if (rb == null || rb.isKinematic || rb == body.Rigidbody) continue;
+                    if (!Physics.ComputePenetration(c, pos, t.rotation, other, other.transform.position, other.transform.rotation,
+                                                    out Vector3 dir, out float d)) continue;
+                    Vector3 p = HplSpace.Direction(dir * d);
+                    if (Mathf.Abs(push.x) < Mathf.Abs(p.x)) push.x = p.x;
+                    if (Mathf.Abs(push.y) < Mathf.Abs(p.y)) push.y = p.y;
+                    if (Mathf.Abs(push.z) < Mathf.Abs(p.z)) push.z = p.z;
+                }
+            }
+            if (push == Vector3.zero) return;
+            float velAmount = 1f - Vector3.Dot(push, add * -1f) / add.sqrMagnitude;
+            if (velAmount < 0f) velAmount = 0f;
+            speed *= velAmount;
+            moveVel *= velAmount;
+        }
+    }
+}

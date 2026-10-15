@@ -63,6 +63,8 @@ namespace RTXMnesia.Importer
 
         Mesh _container;
         HplConfig _gameConfig;
+        HplSurfaces _surfaces;
+        readonly Dictionary<Material, string> _physicsMaterialNames = new();
         Mesh _quad, _cylinder;
 
         public string ScenePath => _levelFolder + ".unity";
@@ -100,6 +102,7 @@ namespace RTXMnesia.Importer
 
             PrepareResources(contents);
             _gameConfig = ConfigConverter.Convert(ConfigConverter.GameConfig, _log);
+            _surfaces = SurfaceConverter.Convert(_log);
 
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(_levelFolder));
             AssetDatabase.Refresh();
@@ -151,6 +154,7 @@ namespace RTXMnesia.Importer
                 }
             }
 
+            BuildEntityTemplates(root.transform, entities);
             BuildEnvironment(mapData, root.transform);
             BuildScriptRuntime(root);
 
@@ -397,6 +401,8 @@ namespace RTXMnesia.Importer
                     if (filter.sharedMesh != null && filter.GetComponent<Renderer>() != null && filter.GetComponent<Collider>() == null)
                         filter.gameObject.AddComponent<MeshCollider>().sharedMesh = filter.sharedMesh;
             }
+            foreach (var c in go.GetComponentsInChildren<Collider>(true))
+                if (c.enabled) c.sharedMaterial = StaticPhysicsMaterial(c);
             SetStatic(go);
             Count("static objects");
         }
@@ -563,40 +569,122 @@ namespace RTXMnesia.Importer
                 _log.Warn($"Entity '{e.Str("Name")}': file index {e.Str("FileIndex")} unresolved");
                 return;
             }
-            var ent = Entity(entFile);
-            string name = e.Str("Name");
-            Vector3 scale = e.Vec3("Scale", Vector3.one);
-
-            var go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            go.transform.SetLocalPositionAndRotation(HplSpace.Position(e.Vec3("WorldPos")), HplSpace.Rotation(e.Vec3("Rotation")));
-
-            var entity = go.AddComponent<AmnesiaEntity>();
-            entity.file = AmnesiaPaths.ToSourceRelative(entFile);
-            entity.hplId = e.Int("ID", -1);
-            entity.entityType = ent.EntityType;
-            entity.entitySubType = ent.EntitySubType;
-            entity.scale = scale;
-            entity.variables = new List<HplVariable>(ent.Variables);
-            entity.instanceVariables = HplXml.Variables(e.Child("UserVariables"));
-
-            BuildEntityModel(ent, go.transform, scale);
-            BuildEntityBodies(ent, go.transform, scale);
-            foreach (var child in ent.WorldEntities)
-            {
-                try { BuildWorldEntity(child, go.transform, name + "_", scale); }
-                catch (Exception ex) { _log.Error($"{entity.file} {child.Name} '{child.Str("Name")}': {ex.Message}"); }
-            }
+            var go = BuildEntity(entFile, e.Str("Name"), e.Vec3("WorldPos"), e.Vec3("Rotation"), e.Vec3("Scale", Vector3.one),
+                                 e.Int("ID", -1), HplXml.Variables(e.Child("UserVariables")), parent);
+            var entity = go.GetComponent<AmnesiaEntity>();
 
             // Map instance CastShadows variable (Lux entities read it in their loaders).
             if (HplVariable.Find(entity.instanceVariables, "CastShadows") == "false") SetCastShadows(go, false);
             // Developer commentary icons only exist in commentary mode.
-            bool commentary = ent.EntityType == "CommentaryIcon";
+            bool commentary = entity.entityType == "CommentaryIcon";
             if (!e.Bool("Active", true) || commentary) go.SetActive(false);
             Count("entities");
         }
 
-        void BuildEntityModel(HplEntityFile ent, Transform parent, Vector3 scale)
+        /// <summary>An .ent instance (EntityLoader_Object.cpp Load): model, world entities, bodies with their children, joints.</summary>
+        GameObject BuildEntity(string entFile, string name, Vector3 hplPosition, Vector3 hplRotation, Vector3 scale, int id,
+                               List<HplVariable> instanceVariables, Transform parent)
+        {
+            var ent = Entity(entFile);
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.SetLocalPositionAndRotation(HplSpace.Position(hplPosition), HplSpace.Rotation(hplRotation));
+
+            var entity = go.AddComponent<AmnesiaEntity>();
+            entity.file = AmnesiaPaths.ToSourceRelative(entFile);
+            entity.hplId = id;
+            entity.entityType = ent.EntityType;
+            entity.entitySubType = ent.EntitySubType;
+            entity.scale = scale;
+            entity.variables = new List<HplVariable>(ent.Variables);
+            entity.instanceVariables = instanceVariables;
+
+            // Sub meshes, then world entities, form the list of children the bodies pick from by unique ID; what no
+            // body takes goes to the first body.
+            var attachables = new List<(int id, Transform transform)>();
+            BuildEntityModel(ent, go.transform, scale, attachables);
+            foreach (var child in ent.WorldEntities)
+            {
+                try
+                {
+                    var built = BuildWorldEntity(child, go.transform, name + "_", scale);
+                    if (built != null) attachables.Add((child.Int("ID", -1), built.transform));
+                }
+                catch (Exception ex) { _log.Error($"{entity.file} {child.Name} '{child.Str("Name")}': {ex.Message}"); }
+            }
+            var bodies = BuildEntityBodies(ent, go.transform, scale);
+            AttachEntityChildren(ent, bodies, attachables);
+            BuildEntityJoints(ent, go.transform, scale, name, bodies);
+            return go;
+        }
+
+        /// <summary>
+        /// Entities the game creates while playing (cLuxMap::CreateEntity): broken versions (BreakEntity of objects,
+        /// BrokenEntity of doors), contained items and .ent files the level script names. Built once, inactive, at
+        /// scale 1 under "EntityTemplates", named by file; the map clones them.
+        /// </summary>
+        void BuildEntityTemplates(Transform root, Transform entities)
+        {
+            var queue = new Queue<(string reference, string near)>();
+            foreach (var e in entities.GetComponentsInChildren<AmnesiaEntity>(true))
+            {
+                string near = Path.Combine(AmnesiaPaths.SourceRoot, e.file);
+                foreach (string v in new[] { "BreakEntity", "BrokenEntity" })
+                {
+                    string s = HplVariable.Find(e.variables, v);
+                    if (!string.IsNullOrEmpty(s)) queue.Enqueue((s, near));
+                }
+                string item = HplVariable.Find(e.instanceVariables, "ContainedItem");
+                if (!string.IsNullOrEmpty(item) && item != "None") queue.Enqueue((item, near));
+            }
+            string hps = Path.ChangeExtension(_mapAbsolute, ".hps");
+            if (File.Exists(hps))
+                foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(hps), "\"([^\"]+\\.ent)\""))
+                    queue.Enqueue((m.Groups[1].Value, null));
+
+            Transform templates = null;
+            var built = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (queue.Count > 0)
+            {
+                var (reference, near) = queue.Dequeue();
+                // cLuxMap::CreateEntity takes the file with or without its extension.
+                if (Path.GetExtension(reference) == "") reference += ".ent";
+                string file = _index.Find(reference, near);
+                if (file == null)
+                {
+                    WarnOnce($"Entity template '{reference}' not found in source/");
+                    continue;
+                }
+                if (!built.Add(file)) continue;
+                if (templates == null)
+                {
+                    templates = new GameObject("EntityTemplates").transform;
+                    templates.SetParent(root, false);
+                }
+                try
+                {
+                    string models = EntityMesh(Entity(file));
+                    var entFile = Entity(file);
+                    if (models != null && !ModelConverter.IsConverted(models)) ModelConverter.ConvertModels(new List<string> { models }, $"Model for {reference}");
+                    var mats = entFile.SubMeshes.Select(s => string.IsNullOrEmpty(s.Material) ? null : _index.Find(s.Material, file))
+                        .Where(m => m != null && !File.Exists(AmnesiaPaths.ToAbsolute(MaterialConverter.AssetPathFor(m)))).Distinct().ToList();
+                    if (mats.Count > 0) MaterialConverter.ConvertMaterials(mats, false, $"Materials for {reference}");
+                    var go = BuildEntity(file, Path.GetFileNameWithoutExtension(file), Vector3.zero, Vector3.zero, Vector3.one, -1,
+                                         new List<HplVariable>(), templates);
+                    go.SetActive(false);
+                    var ent = go.GetComponent<AmnesiaEntity>();
+                    foreach (string v in new[] { "BreakEntity", "BrokenEntity" })
+                    {
+                        string s = HplVariable.Find(ent.variables, v);
+                        if (!string.IsNullOrEmpty(s)) queue.Enqueue((s, file));
+                    }
+                    Count("entity templates");
+                }
+                catch (Exception ex) { _log.Error($"Entity template {AmnesiaPaths.ToSourceRelative(file)}: {ex.Message}"); }
+            }
+        }
+
+        void BuildEntityModel(HplEntityFile ent, Transform parent, Vector3 scale, List<(int id, Transform transform)> attachables)
         {
             string dae = EntityMesh(ent);
             var prefab = Model(dae);
@@ -610,7 +698,9 @@ namespace RTXMnesia.Importer
             if (!IsBuiltModel(prefab))
             {
                 // Skinned meshes are placed whole with the entity scale; .ent sub mesh transforms are not used.
+                // The whole mesh goes to the first body (ragdoll bones come with enemies).
                 SetLocalMatrix(model.transform, Matrix4x4.Scale(scale) * ModelCorrection(dae) * LocalMatrix(model.transform));
+                attachables.Add((int.MinValue, model.transform));
                 return;
             }
 
@@ -638,6 +728,10 @@ namespace RTXMnesia.Importer
             foreach (var (_, node, matrix) in targets)
                 HplModelBuilder.SetLocalMatrix(node, modelToEntity.inverse * matrix, _log, $"{AmnesiaPaths.ToSourceRelative(ent.Path)} '{node.name}'");
 
+            foreach (var (sub, node, _) in targets) attachables.Add((sub.Id, node));
+            // Sub meshes the .ent does not list are not attached in HPL2; here they follow the first body too.
+            foreach (var node in subMeshNodes) attachables.Add((int.MinValue, node));
+
             foreach (var (sub, node, _) in targets)
             {
                 if (string.IsNullOrEmpty(sub.Material)) continue;
@@ -648,14 +742,35 @@ namespace RTXMnesia.Importer
             }
         }
 
-        void BuildEntityBodies(HplEntityFile ent, Transform parent, Vector3 scale)
+        /// <summary>
+        /// EntityLoader_Object.cpp: a body per &lt;Body&gt; with its shapes (a body without shapes is skipped with an
+        /// error, a shape belongs to the first body that lists it). Colliders get the body's physics material.
+        /// </summary>
+        List<(HplEntityFile.Body data, AmnesiaBody body)> BuildEntityBodies(HplEntityFile ent, Transform parent, Vector3 scale)
         {
+            var built = new List<(HplEntityFile.Body, AmnesiaBody)>();
+            var freeShapes = new List<HplEntityFile.Shape>(ent.Shapes);
             foreach (var body in ent.Bodies)
             {
+                var shapes = new List<HplEntityFile.Shape>();
+                foreach (int id in body.ShapeIds)
+                {
+                    var shape = freeShapes.FirstOrDefault(s => s.Id == id);
+                    if (shape == null) continue;
+                    freeShapes.Remove(shape);
+                    shapes.Add(shape);
+                }
+                if (shapes.Count == 0)
+                {
+                    _log.Error($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: no shapes found for body '{body.Name}'");
+                    continue;
+                }
+
                 var go = new GameObject(body.Name);
                 go.transform.SetParent(parent, false);
                 go.transform.SetLocalPositionAndRotation(HplSpace.Position(Vector3.Scale(body.Position, scale)), HplSpace.Rotation(body.Rotation));
                 var data = go.AddComponent<AmnesiaBody>();
+                data.hplId = body.Id;
                 data.mass = body.Mass;
                 data.material = body.Material;
                 data.collideCharacter = body.CollideCharacter;
@@ -663,20 +778,158 @@ namespace RTXMnesia.Importer
                 data.hasGravity = body.HasGravity;
                 data.linearDamping = body.LinearDamping;
                 data.angularDamping = body.AngularDamping;
+                data.maxLinearSpeed = body.MaxLinearSpeed;
+                data.maxAngularSpeed = body.MaxAngularSpeed;
+                data.continuousCollision = body.ContinuousCollision;
+                data.buoyancyDensityMul = body.BuoyancyDensityMul;
+                data.isVolatile = body.Volatile;
+                data.useSurfaceEffects = body.UseSurfaceEffects;
                 data.blocksSound = body.BlocksSound;
                 data.pushedByCharacterGravity = body.PushedByCharacterGravity;
                 data.canAttachCharacter = body.CanAttachCharacter;
 
-                foreach (int id in body.ShapeIds)
+                var physicsMaterial = _surfaces != null ? _surfaces.GetOrDefault(body.Material)?.physicsMaterial : null;
+                foreach (var shape in shapes) BuildShape(shape, go.transform, scale, physicsMaterial);
+                built.Add((body, data));
+            }
+            return built;
+        }
+
+        /// <summary>
+        /// EntityLoader_Object.cpp LoadAndAttachChildren: each body takes the children its &lt;Children&gt; lists (first
+        /// match by unique ID); everything left is attached to the first body. World poses stay.
+        /// </summary>
+        void AttachEntityChildren(HplEntityFile ent, List<(HplEntityFile.Body data, AmnesiaBody body)> bodies,
+                                  List<(int id, Transform transform)> attachables)
+        {
+            if (bodies.Count == 0) return;
+            var left = new List<(int id, Transform transform)>(attachables);
+            foreach (var (data, body) in bodies)
+            {
+                foreach (int id in data.ChildIds)
                 {
-                    var shape = ent.Shapes.FirstOrDefault(s => s.Id == id);
-                    if (shape != null) BuildShape(shape, go.transform, scale);
+                    int index = left.FindIndex(a => a.id == id);
+                    if (index < 0)
+                    {
+                        _log.Warn($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: could not find child with unique ID {id} to attach to body '{data.Name}'");
+                        continue;
+                    }
+                    left[index].transform.SetParent(body.transform, true);
+                    left.RemoveAt(index);
                 }
+            }
+            foreach (var (_, t) in left) t.SetParent(bodies[0].body.transform, true);
+        }
+
+        /// <summary>EntityLoader_Object.cpp CreateJoint + SetJointProperties, as <see cref="AmnesiaJoint"/> data.</summary>
+        void BuildEntityJoints(HplEntityFile ent, Transform parent, Vector3 scale, string entityName,
+                               List<(HplEntityFile.Body data, AmnesiaBody body)> bodies)
+        {
+            AmnesiaBody Find(int id) => bodies.FirstOrDefault(b => b.data.Id == id).body;
+
+            foreach (var joint in ent.Joints)
+            {
+                var e = joint.Element;
+                string jointName = entityName + "_" + e.Str("Name");
+                // ToJointType: the screw name is misspelled in the original, so screws load as ball joints.
+                HplJointType type;
+                switch (joint.Type.ToLowerInvariant())
+                {
+                    case "jointhinge": type = HplJointType.Hinge; break;
+                    case "jointball": type = HplJointType.Ball; break;
+                    case "jointslider": type = HplJointType.Slider; break;
+                    case "joinscrew": type = HplJointType.Screw; break;
+                    default:
+                        _log.Warn($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: joint type '{joint.Type}' does not exist (ball joint)");
+                        type = HplJointType.Ball;
+                        break;
+                }
+
+                int parentId = e.Int("ConnectedParentBodyID");
+                int childId = e.Int("ConnectedChildBodyID");
+                var parentBody = parentId > 0 ? Find(parentId) : null;
+                var childBody = Find(childId);
+                if (childBody == null)
+                {
+                    _log.Warn($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: could not find child body with ID {childId} for joint '{jointName}'");
+                    continue;
+                }
+
+                var go = new GameObject("Joint_" + e.Str("Name"));
+                go.transform.SetParent(parent, false);
+                var j = go.AddComponent<AmnesiaJoint>();
+                j.type = type;
+                j.jointName = jointName;
+                j.hplId = e.Int("ID", -1);
+                j.parentBody = parentBody;
+                j.childBody = childBody;
+                j.pivot = HplSpace.Position(Vector3.Scale(e.Vec3("WorldPos"), scale));
+                j.pinDir = HplSpace.Direction(e.Vec3("PinDir"));
+                go.transform.localPosition = j.pivot;
+
+                j.minAngle = e.Float("MinAngle") * Mathf.Deg2Rad;
+                j.maxAngle = e.Float("MaxAngle") * Mathf.Deg2Rad;
+                j.maxConeAngle = e.Float("MaxConeAngle") * Mathf.Deg2Rad;
+                j.maxTwistAngle = e.Float("MaxTwistAngle") * Mathf.Deg2Rad;
+                j.minDistance = e.Float("MinDistance");
+                j.maxDistance = e.Float("MaxDistance");
+
+                j.moveSound = e.Str("MoveSound");
+                j.minMoveSpeed = e.Float("MinMoveSpeed", 0.5f);
+                j.minMoveFreq = e.Float("MinMoveFreq", 0.9f);
+                j.minMoveVolume = e.Float("MinMoveVolume", 0.3f);
+                j.minMoveFreqSpeed = e.Float("MinMoveFreqSpeed", 0.9f);
+                j.maxMoveFreq = e.Float("MaxMoveFreq", 1.1f);
+                j.maxMoveVolume = e.Float("MaxMoveVolume", 1f);
+                j.maxMoveFreqSpeed = e.Float("MaxMoveFreqSpeed", 1.1f);
+                j.middleMoveSpeed = e.Float("MiddleMoveSpeed", 1f);
+                j.middleMoveVolume = e.Float("MiddleMoveVolume", 1f);
+                j.moveSpeedAngular = e.Str("MoveType", "Linear").ToLowerInvariant() == "angular";
+                j.stickyMinLimit = e.Bool("StickyMinLimit");
+                j.stickyMaxLimit = e.Bool("StickyMaxLimit");
+                j.breakable = e.Bool("Breakable");
+                j.breakForce = e.Float("BreakForce", 1000f);
+                j.breakSound = e.Str("BreakSound");
+                j.limitAutoSleep = e.Bool("LimitAutoSleep");
+                j.limitAutoSleepDist = e.Float("LimitAutoSleepDist", 0.02f);
+                j.limitAutoSleepNumSteps = e.Int("LimitAutoSleepNumSteps", 10);
+                j.collideBodies = e.Bool("CollideBodies", true);
+                j.maxLimitSound = e.Str("MaxLimitSound");
+                j.maxLimitMaxSpeed = e.Float("MaxLimitMaxSpeed", 10f);
+                j.maxLimitMinSpeed = e.Float("MaxLimit_MinSpeed", 20f);
+                if (j.maxLimitMaxSpeed <= 0f) j.maxLimitMaxSpeed = 0.01f;
+                j.minLimitSound = e.Str("MinLimitSound");
+                j.minLimitMaxSpeed = e.Float("MinLimitMaxSpeed", 10f);
+                j.minLimitMinSpeed = e.Float("MinLimitMinSpeed", 20f);
+                // Kept: the original checks the min limit but resets the max one.
+                if (j.minLimitMaxSpeed <= 0f) j.maxLimitMaxSpeed = 0.01f;
+                Count("joints");
             }
         }
 
+        /// <summary>The physics material of a static collider: its sub mesh material's PhysicsMaterial (WorldLoaderHplMap.cpp).</summary>
+        PhysicsMaterial StaticPhysicsMaterial(Collider collider)
+        {
+            if (_surfaces == null) return null;
+            var renderer = collider.GetComponent<Renderer>();
+            var material = renderer != null ? renderer.sharedMaterial : null;
+            string name = null;
+            if (material != null && !_physicsMaterialNames.TryGetValue(material, out name))
+            {
+                string assetPath = AssetDatabase.GetAssetPath(material);
+                if (assetPath.StartsWith(AmnesiaPaths.MaterialsRoot + "/", StringComparison.Ordinal))
+                {
+                    string source = AmnesiaPaths.SourceOf(AmnesiaPaths.MaterialsRoot, assetPath);
+                    try { if (File.Exists(source)) name = AmnesiaMaterial.Load(source).PhysicsMaterial; }
+                    catch (Exception ex) { _log.Warn($"{source}: {ex.Message}"); }
+                }
+                _physicsMaterialNames[material] = name;
+            }
+            return _surfaces.GetOrDefault(name)?.physicsMaterial;
+        }
+
         /// <summary>EntityLoader_Object.cpp CreateCollideShape: size = Scale × instance scale, offset relative to the body.</summary>
-        void BuildShape(HplEntityFile.Shape shape, Transform body, Vector3 scale)
+        void BuildShape(HplEntityFile.Shape shape, Transform body, Vector3 scale, PhysicsMaterial physicsMaterial)
         {
             var go = new GameObject($"Shape_{shape.Id}_{shape.Type}");
             go.transform.SetParent(body, false);
@@ -707,6 +960,8 @@ namespace RTXMnesia.Importer
                     _log.Warn($"Unknown shape type '{shape.Type}'");
                     break;
             }
+            var shapeCollider = go.GetComponent<Collider>();
+            if (shapeCollider != null) shapeCollider.sharedMaterial = physicsMaterial;
         }
 
         static Vector3 Abs(Vector3 v) => new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z));
@@ -714,17 +969,15 @@ namespace RTXMnesia.Importer
         // ---------- Lights, billboards, particle systems, sounds ----------
 
         /// <summary>Map-level or .ent world entity. Inside an entity positions scale with it (EntityLoader_Object.cpp).</summary>
-        void BuildWorldEntity(XmlElement e, Transform parent, string namePrefix, Vector3 positionScale)
+        GameObject BuildWorldEntity(XmlElement e, Transform parent, string namePrefix, Vector3 positionScale)
         {
             switch (e.Name)
             {
                 case "PointLight":
                 case "SpotLight":
-                    BuildLight(e, parent, namePrefix, positionScale);
-                    break;
+                    return BuildLight(e, parent, namePrefix, positionScale);
                 case "Billboard":
-                    BuildBillboard(e, parent, namePrefix, positionScale);
-                    break;
+                    return BuildBillboard(e, parent, namePrefix, positionScale);
                 case "ParticleSystem":
                 {
                     var go = Child(e, parent, namePrefix, positionScale, HplSpace.Rotation(e.Vec3("Rotation")));
@@ -735,7 +988,7 @@ namespace RTXMnesia.Importer
                     ps.minFadeDistance = new Vector2(e.Float("MinFadeDistanceStart"), e.Float("MinFadeDistanceEnd"));
                     ps.maxFadeDistance = new Vector2(e.Float("MaxFadeDistanceStart"), e.Float("MaxFadeDistanceEnd"));
                     FinishChild(e, go, "particle systems (placeholders)");
-                    break;
+                    return go;
                 }
                 case "Sound":
                 {
@@ -747,11 +1000,11 @@ namespace RTXMnesia.Importer
                     sound.maxDistance = e.Float("MaxDistance");
                     sound.volume = e.Float("Volume", 1f);
                     FinishChild(e, go, "sounds (placeholders)");
-                    break;
+                    return go;
                 }
                 default:
                     WarnOnce($"'{e.Name}' is not supported yet (skipped)");
-                    break;
+                    return null;
             }
         }
 
@@ -769,7 +1022,7 @@ namespace RTXMnesia.Importer
             Count(counter);
         }
 
-        void BuildLight(XmlElement e, Transform parent, string namePrefix, Vector3 positionScale)
+        GameObject BuildLight(XmlElement e, Transform parent, string namePrefix, Vector3 positionScale)
         {
             bool spot = e.Name == "SpotLight";
             string gobo = e.Str("Gobo");
@@ -830,9 +1083,10 @@ namespace RTXMnesia.Importer
             data.flickerOffPS = e.Str("FlickerOffPS");
             data.Apply();
             FinishChild(e, go, spot ? "spot lights" : "point lights");
+            return go;
         }
 
-        void BuildBillboard(XmlElement e, Transform parent, string namePrefix, Vector3 positionScale)
+        GameObject BuildBillboard(XmlElement e, Transform parent, string namePrefix, Vector3 positionScale)
         {
             var go = Child(e, parent, namePrefix, positionScale, HplSpace.Rotation(e.Vec3("Rotation")));
             Vector2 size = e.Vec2("BillboardSize", Vector2.one);
@@ -871,6 +1125,7 @@ namespace RTXMnesia.Importer
             string connect = e.Str("ConnectLight");
             billboard.connectLight = connect.Length > 0 ? namePrefix + connect : "";
             FinishChild(e, go, "billboards");
+            return go;
         }
 
         /// <summary>The billboard color multiplies the material (vertex color in HPL2); quads are two-sided.</summary>
@@ -1052,6 +1307,7 @@ namespace RTXMnesia.Importer
             map.keysConfig = ConfigConverter.Convert(ConfigConverter.KeysConfig, _log);
             map.language = LanguageConverter.Convert(LanguageConverter.DefaultLanguage, _log);
             map.player = Object.FindAnyObjectByType<AmnesiaPlayer>();
+            map.surfaces = _surfaces;
 
             var effects = root.AddComponent<HplEffects>();
             effects.screenEffectsShader = Shader.Find(HplScreenEffectsPass.ShaderName);
@@ -1062,6 +1318,9 @@ namespace RTXMnesia.Importer
             var hud = root.AddComponent<HplHud>();
             string questIcon = map.menuConfig != null ? map.menuConfig.GetString("Messages", "QuestAddedIcon") : "";
             hud.questAddedIcon = RuntimeTexture(questIcon, TextureRole.Gui);
+            // iLuxPlayerState_DefaultBase: crosshair images by eLuxFocusCrosshair.
+            string[] crosshairs = { "default", "over_grab", "over_push", "over_ignite", "over_pick", "over_leveldoor", "over_ladder" };
+            hud.crosshairs = crosshairs.Select(c => RuntimeTexture($"hud_crosshair_{c}.tga", TextureRole.Gui)).ToArray();
             map.hud = hud;
 
             var script = HplScript.FindScriptType(_mapRelative);

@@ -94,8 +94,84 @@ namespace RTXMnesia.Player
         public bool PressingRun { get; private set; }
         public bool PressingJump { get; private set; }
         public Vector3 CameraRight => playerCamera != null ? playerCamera.transform.right : Body.Right;
-        public float MoveSpeedMul => scriptMoveSpeedMul;
+        public float MoveSpeedMul => scriptMoveSpeedMul * interactionMoveSpeedMul;
         public float RunSpeedMul => scriptRunSpeedMul;
+
+        // ------------------------------------------------------------------ interaction (step 4.3)
+
+        [NonSerialized] public float interactionMoveSpeedMul = 1f;
+        public PlayerStates States { get; private set; }
+        /// <summary>The rotate key (R) is held: grabbed props turn with the mouse.</summary>
+        public bool RotateHeld { get; set; }
+        public ScriptApi.HplEntity EntityInFocus { get; set; }
+        public Dynamics.HplPhysicsBody BodyInFocus { get; set; }
+        public float FocusDistance { get; set; }
+        /// <summary>The focus point, HPL2 space.</summary>
+        public Vector3 FocusPos { get; set; }
+        public string FocusText { get; private set; } = "";
+        public string LastFocusText { get; private set; } = "";
+        public float FocusTextAlpha { get; private set; }
+
+        public void SetFocusText(string text)
+        {
+            if (FocusText == text) return;
+            LastFocusText = FocusText;
+            FocusText = text;
+        }
+
+        /// <summary>The camera of the last logic step (not interpolated).</summary>
+        public Vector3 LogicCameraPosition => Body.CameraPosition;
+        public Quaternion LogicCameraRotation => Quaternion.Euler(_pitch * Mathf.Rad2Deg, _yaw * Mathf.Rad2Deg, Roll * Mathf.Rad2Deg);
+
+        // HPL2-space camera, as cCamera gives it to the interaction states.
+        public Vector3 HplCameraPosition => HplSpace.Position(LogicCameraPosition);
+        public Vector3 HplCameraForward => HplSpace.Direction(LogicCameraRotation * Vector3.forward);
+        public Vector3 HplCameraUp => HplSpace.Direction(LogicCameraRotation * Vector3.up);
+        public Vector3 HplCameraRight => HplSpace.Direction(LogicCameraRotation * Vector3.right);
+        /// <summary>(pitch, yaw, roll) of the HPL2 camera: pitch = -pitch, yaw = π - yaw, roll the same.</summary>
+        public Vector3 HplCameraAngles => new(-_pitch, Mathf.PI - _yaw, Roll);
+
+        // View limits of the push state (cCamera pitch / yaw limits), in Unity angles.
+        float _savedPitchMin, _savedPitchMax;
+        float _pitchMin = -70f * Mathf.Deg2Rad, _pitchMax = 70f * Mathf.Deg2Rad;
+        bool _yawLimited;
+        float _yawMin, _yawMax;
+
+        /// <summary>cLuxPlayerState_InteractPush: pitch within [pitch - min, pitch + max] (HPL2 sense), yaw ± range.</summary>
+        public void PushViewLimits(float pitchMinRange, float pitchMaxRange, float yawRange)
+        {
+            _savedPitchMin = _pitchMin;
+            _savedPitchMax = _pitchMax;
+            // HPL2 pitch is minus Unity pitch: its [p - min, p + max] is [p - max, p + min] here.
+            _pitchMin = _pitch - pitchMaxRange;
+            _pitchMax = _pitch + pitchMinRange;
+            _yawLimited = true;
+            _yawMin = _yaw - yawRange;
+            _yawMax = _yaw + yawRange;
+        }
+
+        public void PopViewLimits()
+        {
+            _pitchMin = _savedPitchMin;
+            _pitchMax = _savedPitchMax;
+            _yawLimited = false;
+        }
+
+        /// <summary>cLuxPlayer::DoAction: the state first; lantern toggling comes with step 4.4.</summary>
+        public void DoAction(PlayerAction action, bool pressed)
+        {
+            if (States == null) return;
+            States.Current.OnDoAction(action, pressed);
+        }
+
+        public void Scroll(float amount) => States?.Current.OnScroll(amount);
+
+        /// <summary>cLuxPlayer::PostUpdate (after the world update): the state's post update (grab forces).</summary>
+        public void StepPostUpdate(float dt)
+        {
+            if (_freeCameraActive) return;
+            States?.Current.PostUpdate(dt);
+        }
 
         /// <summary>Step sound request: type and walk/run/sneak (sounds come with the sound system).</summary>
         public event Action<FootSound, string> FootSounded;
@@ -110,7 +186,6 @@ namespace RTXMnesia.Player
         readonly HeadOffset[] _headOffsets = new HeadOffset[Enum.GetValues(typeof(HeadPosAdd)).Length];
 
         float _yaw, _pitch; // radians, Unity convention: yaw turns right, pitch looks down
-        float _pitchLimit = 70f * Mathf.Deg2Rad;
         float _fov;
         float _fovMul = 1f, _fovMulGoal = 1f, _fovMulSpeed;
         float _aspectMul = 1f, _aspectMulGoal = 1f, _aspectMulSpeed;
@@ -175,6 +250,7 @@ namespace RTXMnesia.Player
             Lean = new PlayerLean(this);
             LookAt = new PlayerLookAt(this);
             MoveState.OnEnterState();
+            States = new PlayerStates(this);
         }
 
         void Start()
@@ -231,7 +307,8 @@ namespace RTXMnesia.Player
 
             if (keyboard != null && keyboard.f2Key.wasPressedThisFrame) SetFreeCamera(!_freeCameraActive);
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) LockCursor(false);
-            if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked) LockCursor(true);
+            bool cursorWasLocked = Cursor.lockState == CursorLockMode.Locked;
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame && !cursorWasLocked) LockCursor(true);
             if (_freeCameraActive) return;
 
             // cLuxInputHandler::UpdateGamePlayerInput: an inactive player gets no input at all.
@@ -257,16 +334,33 @@ namespace RTXMnesia.Player
                 if (keyboard.spaceKey.wasPressedThisFrame) Jump(true);
                 if (keyboard.spaceKey.wasReleasedThisFrame) Jump(false);
                 if (keyboard.leftCtrlKey.wasPressedThisFrame) Crouch(true);
+                RotateHeld = keyboard.rKey.isPressed;
             }
 
-            if (mouse != null && Cursor.lockState == CursorLockMode.Locked) UpdateMouseLook(mouse.delta.ReadValue(), Time.unscaledDeltaTime);
+            if (mouse != null && Cursor.lockState == CursorLockMode.Locked)
+            {
+                // Interact (left), attack / throw (right), scroll (grab depth); not the click that locked the mouse.
+                if (cursorWasLocked)
+                {
+                    if (mouse.leftButton.wasPressedThisFrame) DoAction(PlayerAction.Interact, true);
+                    if (mouse.rightButton.wasPressedThisFrame) DoAction(PlayerAction.Attack, true);
+                    if (mouse.rightButton.wasReleasedThisFrame) DoAction(PlayerAction.Attack, false);
+                    float scroll = mouse.scroll.ReadValue().y;
+                    if (scroll > 0f) Scroll(1f);
+                    if (scroll < 0f) Scroll(-1f);
+                }
+                if (mouse.leftButton.wasReleasedThisFrame) DoAction(PlayerAction.Interact, false);
+                UpdateMouseLook(mouse.delta.ReadValue(), Time.unscaledDeltaTime);
+            }
         }
+
 
         void FixedUpdate()
         {
             if (steppedByMap) return;
             StepLogic(Time.fixedDeltaTime);
             StepPhysics(Time.fixedDeltaTime);
+            StepPostUpdate(Time.fixedDeltaTime);
         }
 
         /// <summary>
@@ -289,12 +383,21 @@ namespace RTXMnesia.Player
             }
 
             MoveState.Update(dt);
+            States.Current.Update(dt);
             UpdateHeadPosAdd(dt);
             Lean.Update(dt);
             LookAt.Update(dt);
             PressedMove = false;
             collideCallbacks?.Invoke();
             UpdateCameraEffects(dt);
+            UpdateFocusText(dt);
+        }
+
+        /// <summary>cLuxPlayer::UpdateFocusText: the focus text fades in and out at 2 per second.</summary>
+        void UpdateFocusText(float dt)
+        {
+            if (FocusText == "") FocusTextAlpha = Mathf.Max(0f, FocusTextAlpha - dt * 2f);
+            else FocusTextAlpha = Mathf.Min(1f, FocusTextAlpha + dt * 2f);
         }
 
         public void StepPhysics(float dt)
@@ -314,7 +417,7 @@ namespace RTXMnesia.Player
         public void AddLook(float yaw, float pitch)
         {
             _yaw += yaw;
-            _pitch = Mathf.Clamp(_pitch + pitch, -_pitchLimit, _pitchLimit);
+            _pitch = Mathf.Clamp(_pitch + pitch, _pitchMin, _pitchMax);
             Body.Yaw = _yaw;
         }
 
@@ -338,12 +441,14 @@ namespace RTXMnesia.Player
         public void Move(CharDir dir, float mul)
         {
             PressedMove = true;
+            if (States != null && !States.Current.OnMove(dir, mul)) return;
             Body.Move(dir, mul);
         }
 
         public void Run(bool pressed)
         {
             PressingRun = pressed;
+            if (States != null && !States.Current.OnRun(pressed)) return;
             MoveState.OnRun(pressed);
         }
 
@@ -351,29 +456,50 @@ namespace RTXMnesia.Player
         {
             if (pressed && jumpDisabled) return;
             PressingJump = pressed;
+            if (States != null && !States.Current.OnJump(pressed)) return;
             MoveState.OnJump(pressed);
         }
 
         public void Crouch(bool pressed)
         {
             if (pressed && crouchDisabled) return;
+            if (States != null && !States.Current.OnCrouch(pressed)) return;
             MoveState.OnCrouch(pressed);
         }
 
         /// <summary>
-        /// cLuxInputHandler: pixels × sensitivity / (1.7 × screen height), smoothed, then ×2 as radians
-        /// (cLuxPlayer::AddYaw/AddPitch). The smoothing weights samples by 0.7^(age in 60 Hz steps) over 7
-        /// steps, as the original per engine step, so it behaves the same at any frame rate.
+        /// cLuxPlayer::AddYaw with an HPL2 amount (positive turns left): the state may take it (rotating a held
+        /// prop, turning a door), else the camera turns by 2 × amount, within the yaw limits if set.
+        /// </summary>
+        public void AddYaw(float amount)
+        {
+            amount *= lookSpeedMul;
+            if (States != null && !States.Current.OnAddYaw(amount)) return;
+            _yaw -= amount * 2f;
+            if (_yawLimited) _yaw = Mathf.Clamp(_yaw, _yawMin, _yawMax);
+            Body.Yaw = _yaw;
+        }
+
+        /// <summary>cLuxPlayer::AddPitch with an HPL2 amount (positive looks up).</summary>
+        public void AddPitch(float amount)
+        {
+            amount *= lookSpeedMul;
+            if (States != null && !States.Current.OnAddPitch(amount)) return;
+            _pitch = Mathf.Clamp(_pitch - amount * 2f, _pitchMin, _pitchMax);
+        }
+
+        /// <summary>
+        /// cLuxInputHandler: pixels × sensitivity / (1.7 × screen height), smoothed, then AddYaw(-x) / AddPitch(y)
+        /// (screen y grows upwards here, downwards in HPL2). The smoothing weights samples by 0.7^(age in 60 Hz
+        /// steps) over 7 steps, as the original per engine step, so it behaves the same at any frame rate.
         /// </summary>
         void UpdateMouseLook(Vector2 pixels, float frameTime)
         {
             Vector2 rel = pixels * mouseSensitivity / (1.7f * Mathf.Max(1, Screen.height));
             Vector2 final = smoothMouse ? SmoothMouse(rel, frameTime) : rel;
             if (invertMouse) final.y = -final.y;
-
-            _yaw += final.x * 2f * lookSpeedMul;
-            _pitch = Mathf.Clamp(_pitch - final.y * 2f * lookSpeedMul, -_pitchLimit, _pitchLimit);
-            Body.Yaw = _yaw;
+            AddYaw(-final.x);
+            AddPitch(final.y);
         }
 
         Vector2 SmoothMouse(Vector2 rel, float frameTime)

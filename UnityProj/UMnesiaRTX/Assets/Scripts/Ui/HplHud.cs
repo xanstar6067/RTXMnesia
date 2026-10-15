@@ -19,14 +19,18 @@ namespace RTXMnesia.Ui
         public Texture2D questAddedIcon;
         public bool showSubtitles = true;
         public bool showHints = true;
+        [Tooltip("graphics/hud/hud_crosshair_*.tga by FocusCrosshair: default, grab, push, ignite, pick, leveldoor, ladder.")]
+        public Texture2D[] crosshairs = new Texture2D[7];
+        [Tooltip("User setting ShowCrossHair: off shows the crosshair only over things that can be interacted with.")]
+        public bool showCrossHair = true;
 
         public readonly MessageHandler Messages = new();
         public readonly HintHandler Hints = new();
 
         HplMap _map;
         Canvas _canvas;
-        Text _subtitles, _message, _hintTitle, _hintText, _emotionText;
-        RawImage _questIcon, _questGlow;
+        Text _subtitles, _message, _hintTitle, _hintText, _emotionText, _focusText;
+        RawImage _questIcon, _questGlow, _crosshair;
         Vector2 _voiceFontSize = new(18f, 18f);
         float _voiceRowWidth = 600f;
         bool _initialized;
@@ -165,6 +169,44 @@ namespace RTXMnesia.Ui
             _questIcon.color = new Color(1f, 1f, 1f, quest);
             float glowAlpha = quest * Messages.QuestOscillation;
             _questGlow.color = new Color(glowAlpha, glowAlpha, glowAlpha, 1f);
+
+            RefreshCrosshair();
+        }
+
+        /// <summary>cLuxPlayer::CanDrawCrossHair + DrawHud: the state's crosshair, the focus text fading.</summary>
+        void RefreshCrosshair()
+        {
+            var player = _map != null ? _map.player : null;
+            Texture2D texture = null;
+            if (player != null && player.States != null && player.showCrossHairIcons)
+            {
+                bool draw = showCrossHair;
+                if (!draw)
+                {
+                    var e = player.EntityInFocus;
+                    draw = e != null && e.CanInteract(player.BodyInFocus) && player.FocusDistance <= e.MaxFocusDistance;
+                }
+                var kind = draw ? player.States.Current.GetCrosshair() : null;
+                if (kind.HasValue && (int)kind.Value < crosshairs.Length) texture = crosshairs[(int)kind.Value];
+            }
+            // The fade is drawn in HPL2's HUD set above the crosshair and focus text (z 3.2 vs 1): it darkens them.
+            float fade = _map != null && _map.effects != null ? Mathf.Clamp01(_map.effects.Fade.Alpha) : 0f;
+            _crosshair.enabled = texture != null && fade < 1f;
+            if (texture != null)
+            {
+                _crosshair.texture = texture;
+                _crosshair.color = new Color(1f - fade, 1f - fade, 1f - fade, 1f);
+                Place(_crosshair.rectTransform, new Rect((800f - texture.width) * 0.5f, (600f - texture.height) * 0.5f, texture.width, texture.height));
+            }
+
+            string focus = "";
+            float alpha = 0f;
+            if (player != null)
+            {
+                focus = player.FocusText != "" ? player.FocusText : player.LastFocusText;
+                alpha = player.FocusTextAlpha;
+            }
+            SetText(_focusText, focus, alpha, new Color(1f - fade, 1f - fade, 1f - fade));
         }
 
         static void SetText(Text text, string value, float alpha, Color? color = null)
@@ -218,6 +260,14 @@ namespace RTXMnesia.Ui
             var iconRect = new Rect(800f - iconSize.x - 20f, 600f - iconSize.y - 20f, iconSize.x, iconSize.y);
             _questIcon = CreateImage(screen, "Quest added", iconRect, null);
             _questGlow = CreateImage(screen, "Quest added glow", iconRect, AdditiveUiMaterial());
+
+            // cLuxPlayer::DrawHud: the crosshair image centered at its size, focus text rows from y = 450.
+            _crosshair = CreateImage(screen, "Crosshair", new Rect(384f, 284f, 32f, 32f), null);
+            _focusText = CreateText(screen, "Focus text", font, 22, TextAnchor.UpperCenter, new Rect(150f, 450f - 2f, 500f, 120f));
+            _focusText.lineSpacing = 24f / 22f;
+            var focusShadow = _focusText.gameObject.AddComponent<Shadow>();
+            focusShadow.effectColor = new Color(0f, 0f, 0f, 0.8f);
+            focusShadow.effectDistance = new Vector2(1f, -1f);
             Refresh();
         }
 

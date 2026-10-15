@@ -35,9 +35,17 @@ namespace RTXMnesia.Importer
             public float Mass;
             public string Material;
             public bool CollideCharacter, CollideNonCharacter, HasGravity, BlocksSound, PushedByCharacterGravity, CanAttachCharacter;
-            public float LinearDamping, AngularDamping;
+            public bool ContinuousCollision, Volatile, UseSurfaceEffects;
+            public float LinearDamping, AngularDamping, MaxLinearSpeed, MaxAngularSpeed, BuoyancyDensityMul;
             public readonly List<int> ShapeIds = new();
             public readonly List<int> ChildIds = new();
+        }
+
+        /// <summary>A joint element as written (attribute access through HplXml); Type is the element name.</summary>
+        public class Joint
+        {
+            public string Type;
+            public XmlElement Element;
         }
 
         public string Path;
@@ -48,6 +56,7 @@ namespace RTXMnesia.Importer
         public readonly List<SubMesh> SubMeshes = new();
         public readonly List<Shape> Shapes = new();
         public readonly List<Body> Bodies = new();
+        public readonly List<Joint> Joints = new();
         /// <summary>Lights, billboards, particle systems and sounds that come with the entity.</summary>
         public readonly List<XmlElement> WorldEntities = new();
 
@@ -123,6 +132,12 @@ namespace RTXMnesia.Importer
                     CanAttachCharacter = e.Bool("CanAttachCharacter"),
                     LinearDamping = e.Float("LinearDamping"),
                     AngularDamping = e.Float("AngularDamping"),
+                    MaxLinearSpeed = e.Float("MaxLinearSpeed"),
+                    MaxAngularSpeed = e.Float("MaxAngularSpeed"),
+                    BuoyancyDensityMul = e.Float("BuoyancyDensityMul", 1f),
+                    ContinuousCollision = e.Bool("ContinuousCollision", true),
+                    Volatile = e.Bool("Volatile"),
+                    UseSurfaceEffects = e.Bool("UseSurfaceEffects", true),
                 };
                 foreach (var child in e.Children())
                 {
@@ -132,6 +147,9 @@ namespace RTXMnesia.Importer
                 }
                 ent.Bodies.Add(body);
             }
+
+            foreach (var e in model.Child("Joints").Children())
+                ent.Joints.Add(new Joint { Type = e.Name, Element = e });
             return ent;
         }
     }

@@ -2,7 +2,7 @@
 
 - **Оригинал:** `source/maps/main/ch01/00_rainy_hall.hps`.
 - **Порт:** `UnityProj/UMnesiaRTX/Assets/Scripts/Levels/Ch01/RainyHall.cs` (класс `RainyHall`, `[HplMapScript("maps/main/ch01/00_rainy_hall.map")]`).
-- **Статус:** логика перенесена полностью и проверена прогоном (см. «Проверка»). В игре пока не слышно звука, нет частиц, двери и люстры не двигаются — эти части движка ещё не портированы.
+- **Статус:** логика перенесена полностью и проверена прогоном (см. «Проверка»). Двери, лампы и силы работают с шагами 4.2–4.3; звука и частиц пока нет.
 
 ## Функции
 
@@ -27,14 +27,14 @@
 | глобальные `fStep`, `fLoop` (:533) | поля `fStep`, `fLoop` | готов | |
 | `HallwaySteps` (:535) | `HallwaySteps` | готов | `fStep += 0.03f` в аргументе, как в оригинале |
 | глобальная `bSwing` (:552) | поле `bSwing` | готов | |
-| `HallwayEvents` (:553) | `HallwayEvents` | готов | `(int)RandFloat(1, 4)`; раскачка люстр ждёт шага 4.2 |
+| `HallwayEvents` (:553) | `HallwayEvents` | готов | `(int)RandFloat(1, 4)`; люстры раскачиваются силами `AddBodyForce` |
 | `CollideAreaNarrowPassOut` (:603) | `CollideAreaNarrowPassOut` | готов | |
 | `NarrowPassOutEvents` (:629) | `NarrowPassOutEvents` | готов | |
 | `NarrowPassOutEvents02` (:716) | `NarrowPassOutEvents02` | готов | |
 | `TimerPlayerInactive` (:803) | `TimerPlayerInactive` | готов | нигде не вызывается (как в оригинале) |
-| `CollideAreaGalleryDoor` (:818) | `CollideAreaGalleryDoor` | готов | дверь откроется с шагами 4.2–4.3 |
-| `TimerSwingDoor` (:831) | `TimerSwingDoor` | готов | `AddPropForce` — шаг 4.2 |
-| `TimerStopCreak` (:847) | `TimerStopCreak` | готов | `SetLampLit` — шаг 4.3 |
+| `CollideAreaGalleryDoor` (:818) | `CollideAreaGalleryDoor` | готов | дверь медленно приоткрывается |
+| `TimerSwingDoor` (:831) | `TimerSwingDoor` | готов | 10 толчков `AddPropForce` по 0.03 с |
+| `TimerStopCreak` (:847) | `TimerStopCreak` | готов | `SetLampLit` гасит люстру и подсвечник за 1 с |
 | `CollideAreaGallery` (:895) | `CollideAreaGallery` | готов | |
 | `CollideAreaGustDoor` (:942) | `CollideAreaGustDoor` | готов | |
 | `TimerGustDoor` (:957) | `TimerGustDoor` | готов | |
@@ -64,11 +64,9 @@
 Части движка, которых пока нет, пропускаются с одним предупреждением в логе на функцию:
 - звук и музыка — шаг 6;
 - частицы — нужен конвертер `.ps`;
-- силы для дверей и люстр — шаг 4.2;
-- двери и лампы — шаг 4.3;
 - наборы безумия — шаг 6.
 
-Состояние, которое задают скрипты (двери, лампы, предметы), сохраняется сейчас, поэтому `Get*` уже возвращают правильные значения.
+Двери, лампы, предметы и силы работают через пропы шагов 4.2–4.3 (`Assets/Scripts/Props`, `Dynamics`).
 
 Голоса вступления пока не звучат. Каждая реплика длится столько же, сколько её `.ogg` из `lang/rus`, и показывает свои субтитры. Поэтому колбэк окончания голоса срабатывает в то же время, что и в игре.
 
@@ -84,10 +82,7 @@
 - Не воспроизводятся:
   - звуки — дождь, гром, скрипы, дыхание, шаги в коридоре, музыка;
   - частицы — лепестки розы, пыль, сквозняки.
-- Дверь в галерею и дверь сквозняка не открываются; люстры в коридоре не качаются.
-- `SetLampLit` в галерее не гасит люстру и подсвечник. `PointLight_25` гаснет, потому что это обычный свет.
 - Удар по рассудку не даёт эффекта приближения (шаг 6), значение рассудка при этом уменьшается.
-- Перекрестие и интерфейс фокуса (`ShowPlayerCrossHairIcons`) появятся с шагом 4.3.
 
 ## Проверка
 
@@ -106,3 +101,8 @@
 - вход в `areanarrowhalls` → `HallwaySteps`, `HallwayEvents`, медленное растяжение aspect до 1.7.
 
 Ещё не проверены прогоном: `narrowpassout`, галерея, гром на `areabeginthunder`/`areaendthunder`.
+
+**Пропы (шаги 4.2–4.3)**, вызовы функций уровня командой `call`:
+- `CollideAreaGalleryDoor` → `door_gallery` за 2 с приоткрывается до ~35° (10 толчков силой 70);
+- `CollideAreaGustDoor` → `door_gust` распахивается до 90°;
+- `TimerStopCreak("lightsout")` → `chandelier_nice_1` и `candlestick_floor_2` гаснут за 1 с (свет и эмиссия до 0).

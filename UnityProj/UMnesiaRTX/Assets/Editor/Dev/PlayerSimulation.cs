@@ -21,7 +21,9 @@ namespace RTXMnesia.EditorDev
     /// [-scriptDebug] [-noScript] [-seed N] (shots need a GPU: no -nographics). Script commands, ';'-separated,
     /// durations in seconds:
     /// idle t | watch t interval | w/s/a/d t | run t | turn deg | pitch deg | crouch (toggle) | jump | leanr/leanl t |
-    /// start AreaName | goto x y z [yawDeg] | shot name.
+    /// start AreaName | goto x y z [yawDeg] | shot name |
+    /// interact | release | throw | scroll n | rotate on/off | mouse x y t (HPL2 mouse units per step) | aim Entity [Body] |
+    /// body Entity (bodies and joints) | call Function args (script or engine function).
     /// "watch" steps like idle and logs the script state every interval.
     /// </summary>
     public static class PlayerSimulation
@@ -62,6 +64,9 @@ namespace RTXMnesia.EditorDev
                 else log.Info(line);
             }
             Application.logMessageReceived += OnLog;
+            // Rigid bodies are stepped by the map (Physics.Simulate), not by the editor.
+            var simulationMode = Physics.simulationMode;
+            Physics.simulationMode = SimulationMode.Script;
 
             try
             {
@@ -117,7 +122,8 @@ namespace RTXMnesia.EditorDev
                     Vector3 cam = player.playerCamera.transform.position - b.FeetPosition;
                     log.Info($"t={time,6:0.00} {what,-16} feet {b.FeetPosition:F3} y {minY:0.000}..{maxY:0.000} max {maxSpeed:0.00} m/s now {b.GetVelocity(dt).magnitude:0.00} " +
                              $"ground {b.IsOnGround} size {b.ActiveSize} cam up {cam.y:0.000} side {Vector3.Dot(cam, b.Right):0.000} " +
-                             $"roll {player.playerCamera.transform.eulerAngles.z:0.0}");
+                             $"roll {player.playerCamera.transform.eulerAngles.z:0.0} | {player.States?.Current.Describe()} " +
+                             $"crosshair {player.States?.Current.GetCrosshair()?.ToString() ?? "none"} text \"{player.FocusText.Replace('\n', ' ')}\"");
                 }
 
                 foreach (string raw in script.Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -181,6 +187,73 @@ namespace RTXMnesia.EditorDev
                             }
                             Step(1);
                             break;
+                        // Interaction (step 4.3): buttons and mouse as the input handler gives them to the player.
+                        case "interact": player.DoAction(PlayerAction.Interact, true); Step(1); break;
+                        case "release": player.DoAction(PlayerAction.Interact, false); Step(1); break;
+                        case "throw": player.DoAction(PlayerAction.Attack, true); Step(1); player.DoAction(PlayerAction.Attack, false); break;
+                        case "scroll": player.Scroll(arg); Step(1); break;
+                        case "rotate": player.RotateHeld = p.Length > 1 && p[1] == "on"; Step(1); break;
+                        case "mouse":
+                        {
+                            // mouse x y t: an HPL2 mouse move (screen units, y down) every step for t seconds.
+                            float mx = Arg(1, 0f), my = Arg(2, 0f);
+                            int n = Mathf.Max(1, Mathf.RoundToInt(Arg(3, 0.5f) / dt));
+                            bool trace = p.Length > 4 && p[4] == "log";
+                            for (int i = 0; i < n; i++)
+                            {
+                                player.AddYaw(-mx);
+                                player.AddPitch(-my);
+                                Step(1);
+                                if (trace && i % 5 == 0) log.Info($"t={time,6:0.00}     {player.States.Current.Describe()}");
+                            }
+                            break;
+                        }
+                        case "aim":
+                        {
+                            // aim Entity [Body]: look at the body (or entity) center.
+                            var target = map?.GetEntityByName(p.Length > 1 ? p[1] : "");
+                            if (target == null) { log.Warn($"No entity '{raw.Trim()}'"); continue; }
+                            var body = p.Length > 2 ? target.Bodies.Find(b => b.Name == target.Name + "_" + p[2]) : (target.Bodies.Count > 0 ? target.Bodies[0] : null);
+                            Vector3 goal = body?.Physics != null ? body.Physics.WorldCenterOfMass : (body != null ? body.Transform.position : target.GameObject.transform.position);
+                            Vector3 dir = goal - player.LogicCameraPosition;
+                            float yaw = Mathf.Atan2(dir.x, dir.z), pitch = -Mathf.Atan2(dir.y, new Vector2(dir.x, dir.z).magnitude);
+                            player.AddLook(Mathf.DeltaAngle(player.Yaw * Mathf.Rad2Deg, yaw * Mathf.Rad2Deg) * Mathf.Deg2Rad,
+                                           (pitch - player.Pitch));
+                            Step(1);
+                            break;
+                        }
+                        case "body":
+                        {
+                            // body Entity: positions, velocities and joint angles of its bodies.
+                            if (map?.GetEntityByName(p.Length > 1 ? p[1] : "") is not HplProp prop) { log.Warn($"No prop '{raw.Trim()}'"); continue; }
+                            var firstLight = prop.GameObject.GetComponentInChildren<RTXMnesia.World.AmnesiaLight>(true);
+                            log.Info($"t={time,6:0.00}   prop {prop.Name} {prop.PropType}/{prop.SubType} active {prop.Active} effects {prop.EffectsAlpha:0.00} " +
+                                     (prop is RTXMnesia.Props.PropLamp lamp ? $"lit {lamp.Lit} " : "") +
+                                     (prop is RTXMnesia.Props.PropSwingDoor door ? $"closed {door.Closed} locked {door.Locked} state {door.GetDoorState()} " : "") +
+                                     (firstLight != null ? $"light {firstLight.name} {firstLight.CurrentColor} r {firstLight.CurrentRadius:0.##}" : ""));
+                            foreach (var b in prop.PhysicsBodies)
+                                log.Info($"t={time,6:0.00}   body {b.Name}: pos {b.Position:F3} vel {b.LinearVelocity.magnitude:0.000} ang {b.AngularVelocity.magnitude:0.000} " +
+                                         $"mass {b.Mass:0.##} awake {b.Enabled}");
+                            foreach (var j in prop.Joints)
+                                log.Info($"t={time,6:0.00}   joint {j.Name} {j.Type}: angle {j.GetAngle() * Mathf.Rad2Deg:0.0}° dist {j.GetDistance():0.000} " +
+                                         $"limits {j.MinAngle * Mathf.Rad2Deg:0.#}..{j.MaxAngle * Mathf.Rad2Deg:0.#}°");
+                            continue;
+                        }
+                        case "call":
+                        {
+                            // call Function args...: a level script function or engine function of HplScript by name.
+                            if (map?.Script == null) { log.Warn("call needs a level script"); continue; }
+                            var method = map.Script.GetType().GetMethod(p.Length > 1 ? p[1] : "", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (method == null) { log.Warn($"No function '{raw.Trim()}'"); continue; }
+                            var pars = method.GetParameters();
+                            var args = new object[pars.Length];
+                            for (int i = 0; i < pars.Length; i++)
+                                args[i] = Convert.ChangeType(p.Length > i + 2 ? p[i + 2] : "", pars[i].ParameterType, CultureInfo.InvariantCulture);
+                            var result = method.Invoke(map.Script, args);
+                            log.Info($"t={time,6:0.00}   call {raw.Trim()} → {result}");
+                            Step(1);
+                            break;
+                        }
                         case "shot":
                             if (shots)
                             {
@@ -197,6 +270,7 @@ namespace RTXMnesia.EditorDev
             finally
             {
                 Application.logMessageReceived -= OnLog;
+                Physics.simulationMode = simulationMode;
             }
             log.Save($"Player simulation: {mapName}");
         }

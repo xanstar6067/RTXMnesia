@@ -7,6 +7,9 @@ namespace RTXMnesia.ScriptApi
 {
     public enum HplEntityType { Prop, Area, Enemy, Rope, CommentaryIcon }
 
+    /// <summary>eLuxFocusCrosshair (LuxTypes.h).</summary>
+    public enum FocusCrosshair { Default, Grab, Push, Ignite, Pick, LevelDoor, Ladder, LastEnum }
+
     /// <summary>Something with physics bodies that collide callbacks can test (iLuxCollideCallbackContainer).</summary>
     public interface IHplBodies
     {
@@ -25,6 +28,8 @@ namespace RTXMnesia.ScriptApi
         /// <summary>Entity body data (null for areas).</summary>
         public readonly AmnesiaBody Data;
         public readonly Collider[] Colliders;
+        /// <summary>The rigid body (null for areas).</summary>
+        public Dynamics.HplPhysicsBody Physics;
 
         public HplBody(string name, HplEntity entity, Transform transform, AmnesiaBody data, Collider[] colliders)
         {
@@ -199,10 +204,64 @@ namespace RTXMnesia.ScriptApi
         public string CallbackFunc = "";
         public string ConnectionStateChangeCallback = "";
         public bool InteractionDisabled;
-        public float MaxFocusDistance = 2f;
-        public string CustomFocusCrossHair = "Default";
+        public float MaxFocusDistance;
+        public FocusCrosshair CustomFocusCrossHair = FocusCrosshair.Default;
 
         public readonly List<(string name, HplEntity entity, bool invertStateSent, int statesUsed, string callback)> Connections = new();
+
+        // ------------------------------------------------------------------ interaction (step 4.3)
+
+        /// <summary>iLuxEntity::CanInteract with the focused body (null for areas).</summary>
+        public virtual bool CanInteract(Dynamics.HplPhysicsBody body) => false;
+
+        /// <summary>iLuxEntity::OnInteract; the position is the focus point in HPL2 space.</summary>
+        public virtual bool OnInteract(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos) => false;
+
+        public virtual FocusCrosshair GetFocusCrosshair(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos) => FocusCrosshair.LastEnum;
+
+        public virtual string GetFocusText() => "";
+
+        /// <summary>iLuxEntity::GiveDamage (props: health, toughness).</summary>
+        public virtual void GiveDamage(float amount, int strength) { }
+
+        /// <summary>A connected entity changed state (levers, wheels, ...): iLuxEntity::OnConnectionStateChange.</summary>
+        public virtual void OnConnectionStateChange(HplEntity entity, int state) { }
+
+        /// <summary>The main body for attaching and positions (iLuxEntity::GetAttachEntity).</summary>
+        public virtual Transform AttachTransform => Bodies.Count > 0 ? Bodies[0].Transform : GameObject.transform;
+
+        /// <summary>
+        /// iLuxEntity::ConnectionStateChange: the change callback, then every connection that uses this state gets
+        /// it (inverted if set) and runs its callback (connection name, this entity, connected entity, state).
+        /// </summary>
+        public void ConnectionStateChange(int state)
+        {
+            if (ConnectionStateChangeCallback != "") Map.RunScript(ConnectionStateChangeCallback, Name, state);
+            foreach (var (connName, entity, invert, statesUsed, callback) in Connections.ToArray())
+            {
+                if (statesUsed != 0 && state != statesUsed) continue;
+                int sent = invert ? -state : state;
+                entity.OnConnectionStateChange(this, sent);
+                if (callback != "") Map.RunScript(callback, connName, Name, entity.Name, sent);
+            }
+        }
+
+        public static FocusCrosshair ParseCrosshair(string name)
+        {
+            switch (name?.ToLowerInvariant())
+            {
+                case "default": return FocusCrosshair.Default;
+                case "grab": return FocusCrosshair.Grab;
+                case "push": return FocusCrosshair.Push;
+                case "ignite": return FocusCrosshair.Ignite;
+                case "pick": return FocusCrosshair.Pick;
+                case "leveldoor": return FocusCrosshair.LevelDoor;
+                case "ladder": return FocusCrosshair.Ladder;
+                default:
+                    HplLog.Error($"CrossHair type '{name}' does not exist!");
+                    return FocusCrosshair.Default;
+            }
+        }
 
         float _lookAtCount;
 
@@ -338,67 +397,43 @@ namespace RTXMnesia.ScriptApi
         public string AreaType => Component.areaType;
         public override HplEntityType Type => AreaType == "Rope" ? HplEntityType.Rope : HplEntityType.Area;
 
-        public HplArea(AmnesiaArea area) : base(area.gameObject, area.hplId)
+        bool _itemInteraction;
+
+        public HplArea(AmnesiaArea area, Hpl.HplConfig gameConfig) : base(area.gameObject, area.hplId)
         {
             Component = area;
             var colliders = area.GetComponents<Collider>();
             Bodies.Add(new HplBody(Name, this, area.transform, null, colliders));
+
+            if (AreaType == "Script")
+            {
+                // cLuxAreaLoader_Script::LoadVariables
+                SetPlayerLookAtCallback(area.GetVariable("PlayerLookAtCallback") ?? "",
+                                        area.GetVariable("PlayerLookAtCallbackAutoRemove") == "true");
+                SetPlayerInteractCallback(area.GetVariable("PlayerInteractCallback") ?? "",
+                                          area.GetVariable("PlayerInteractCallbackAutoRemove") == "true");
+                _itemInteraction = area.GetVariable("ItemInteraction") == "true";
+                MaxFocusDistance = gameConfig != null ? gameConfig.GetFloat("Player_Interaction", "ScriptArea_MaxFocusDist") : 0f;
+                string max = area.GetVariable("MaxFocusDistance");
+                if (!string.IsNullOrEmpty(max) && Hpl.HplMath.Atof(max) >= 0f) MaxFocusDistance = Hpl.HplMath.Atof(max);
+            }
         }
 
         public override int BodyCount => 1;
         public override IReadOnlyList<Collider> GetBodyColliders(int index) => Bodies[0].Colliders;
-    }
 
-    /// <summary>A prop, enemy or commentary icon from an .ent file (iLuxProp / iLuxEnemy).</summary>
-    public sealed class HplProp : HplEntity
-    {
-        public readonly AmnesiaEntity Component;
-        readonly HplEntityType _type;
-        public override HplEntityType Type => _type;
-        /// <summary>The .ent EntityType: Object, SwingDoor, Lamp, Enemy_Grunt, ...</summary>
-        public string PropType => Component.entityType;
-        public float Health = 100f;
+        // cLuxArea_Script; other areas (ladders, signs, examine) come with step 4.4.
+        public override bool CanInteract(Dynamics.HplPhysicsBody body) =>
+            AreaType == "Script" && (_itemInteraction || InteractCallback != "");
 
-        // Script-visible state of doors, lamps and levers until their behavior exists (step 4.3).
-        public bool DoorLocked, DoorClosed = true, DoorDisableAutoClose, LampLit;
-        public int LeverState;
+        public override bool OnInteract(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos) =>
+            AreaType == "Script" && InteractCallback != "";
 
-        public HplProp(AmnesiaEntity entity, HplEntityType type) : base(entity.gameObject, entity.hplId)
+        public override FocusCrosshair GetFocusCrosshair(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos)
         {
-            Component = entity;
-            _type = type;
-            foreach (var body in entity.GetComponentsInChildren<AmnesiaBody>(true))
-                Bodies.Add(new HplBody(Name + "_" + body.name, this, body.transform, body, body.GetComponentsInChildren<Collider>(true)));
-            string health = entity.GetVariable("Health");
-            if (!string.IsNullOrEmpty(health)) Health = Hpl.HplMath.Atof(health);
-            DoorLocked = entity.GetVariable("Locked") == "true";
-            string openAmount = entity.GetVariable("OpenAmount");
-            DoorClosed = string.IsNullOrEmpty(openAmount) || Hpl.HplMath.Atof(openAmount) <= 0f;
-            LampLit = entity.GetVariable("Lit") == "true";
-        }
-
-        /// <summary>
-        /// Lux prop / enemy loaders by .ent type (LuxBase.cpp). Others (StaticProp, plain models) are not script
-        /// entities in HPL2.
-        /// </summary>
-        public static bool TryGetType(string entityType, out HplEntityType type)
-        {
-            type = HplEntityType.Prop;
-            switch (entityType)
-            {
-                case "Object": case "SwingDoor": case "Lever": case "Wheel": case "Lamp": case "Photocell":
-                case "MoveObject": case "Item": case "Chest": case "LevelDoor": case "Button": case "OilBarrel":
-                case "EmotionStone": case "NPC": case "MultiSlider": case "CritterBug": case "CritterSpider":
-                    return true;
-                case "Enemy_Grunt": case "Enemy_WaterLurker": case "Enemy_ManPig":
-                    type = HplEntityType.Enemy;
-                    return true;
-                case "CommentaryIcon":
-                    type = HplEntityType.CommentaryIcon;
-                    return true;
-                default:
-                    return false;
-            }
+            if (AreaType != "Script") return FocusCrosshair.LastEnum;
+            if (InteractCallback == "") return FocusCrosshair.Default;
+            return CustomFocusCrossHair == FocusCrosshair.Default ? FocusCrosshair.Grab : CustomFocusCrossHair;
         }
     }
 

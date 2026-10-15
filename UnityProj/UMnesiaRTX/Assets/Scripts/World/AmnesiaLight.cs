@@ -93,11 +93,41 @@ namespace RTXMnesia.World
 
         public void SetFlickerActive(bool active) => _flickering = active;
 
+        public bool FlickerActive => _runtime ? _flickering : flickerActive;
+
+        /// <summary>iLight::SetDiffuseColor (also the color flicker returns to).</summary>
+        public void SetColor(Color color)
+        {
+            _flickerOnColor = color;
+            SetColorAndRadius(color, _radius);
+        }
+
+        /// <summary>iLight::SetRadius (also the radius flicker returns to).</summary>
+        public void SetRadius(float lightRadius)
+        {
+            _flickerOnRadius = lightRadius;
+            SetColorAndRadius(_color, lightRadius);
+        }
+
+        public void StopFading() => _fadeTime = 0f;
+
+        readonly System.Collections.Generic.List<(AmnesiaBillboard billboard, Color baseColor)> _billboards = new();
+
+        /// <summary>iLight::AttachBillboard: the billboard's color becomes its base color × the light color (alpha 1).</summary>
+        public void AttachBillboard(AmnesiaBillboard billboard)
+        {
+            _billboards.Add((billboard, billboard.color));
+            billboard.SetColor(billboard.color * new Color(CurrentColor.r, CurrentColor.g, CurrentColor.b, 1f));
+        }
+
         void SetColorAndRadius(Color color, float lightRadius)
         {
             _color = color;
             _radius = lightRadius;
             Apply(_color, _radius);
+            // iLight::OnSetDiffuse
+            foreach (var (billboard, baseColor) in _billboards)
+                if (billboard != null) billboard.SetColor(baseColor * new Color(color.r, color.g, color.b, 1f));
         }
 
         /// <summary>iLight::UpdateLight, every world step.</summary>
