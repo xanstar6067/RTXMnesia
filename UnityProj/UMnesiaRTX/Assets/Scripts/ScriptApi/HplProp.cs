@@ -42,7 +42,7 @@ namespace RTXMnesia.ScriptApi
     /// Covers: base variables, bodies (Rigidbodies from <see cref="HplPhysicsWorld"/>), main body, health and
     /// toughness, effects on / off (lights, billboards, particle systems, mesh illumination, fading), static
     /// movement (MoveLinearTo / MoveAngularTo / RotateAtSpeed, computed in HPL2 space), "no collision with the
-    /// player until outside it", static physics, reset. Sounds of effects and movement: step 6.
+    /// player until outside it", static physics, reset, sounds of effects and static movement.
     /// </summary>
     public class HplProp : HplEntity
     {
@@ -127,6 +127,9 @@ namespace RTXMnesia.ScriptApi
 
             // Move properties
             _moveCheckCollision = VarBool("StaticMoveCheckCollision", true);
+            _moveStartSound = VarString("StaticMoveStartSound", "");
+            _moveStopSound = VarString("StaticMoveStopSound", "");
+            _moveLoopSound = VarString("StaticMoveLoopSound", "");
 
             LoadVariables();
             if (MaxFocusDistance <= 0f) MaxFocusDistance = ConfigFloat(DefaultFocusDistanceKey);
@@ -466,7 +469,19 @@ namespace RTXMnesia.ScriptApi
                 }
                 if (!fadeAndPlaySounds) EffectsAlpha = 0f;
             }
-            // Effect sounds (EffectsOnSound / EffectsOffSound) and sound entities: step 6.
+            if (Map.sound == null) return;
+            foreach (var sound in Map.SoundEntitiesUnder(GameObject.transform))
+            {
+                if (_effectsActive)
+                {
+                    if (fadeAndPlaySounds) sound.FadeIn(1f / _effectsOnTime);
+                    else sound.Play(false);
+                }
+                else if (fadeAndPlaySounds) sound.FadeOut(1f / _effectsOffTime);
+                else sound.Stop(false);
+            }
+            if (fadeAndPlaySounds)
+                PlaySoundAt(Name + "_lightlitchange", _effectsActive ? _effectsOnSound : _effectsOffSound, WorldCenterPos);
         }
 
         void UpdateEffectFading(float timeStep)
@@ -533,10 +548,19 @@ namespace RTXMnesia.ScriptApi
 
         public bool IsMoving => _moving;
 
+        string _moveStartSound = "", _moveStopSound = "", _moveLoopSound = "";
+        Sound.HplSoundEntity _moveLoopSoundEntity;
+        float _movingVolume;
+
+        void PlayMoveStartSound()
+        {
+            if (!_moving && _moveStartCount <= 0f) PlaySound("MoveStart", _moveStartSound, true, true);
+        }
+
         /// <summary>iLuxProp::MoveLinearTo (HPL2 space goal).</summary>
         public void MoveLinearTo(Vector3 goal, float acc, float maxSpeed, float slowdownDist, bool resetSpeed)
         {
-            // Move start sound: step 6.
+            PlayMoveStartSound();
             _moveStartCount = 1f;
             _moving = _movingLinear = true;
             _moveLinearGoal = goal;
@@ -550,6 +574,7 @@ namespace RTXMnesia.ScriptApi
         public void MoveAngularTo(Matrix4x4 goal, float acc, float maxSpeed, float slowdownDist, bool resetSpeed,
                                   bool useOffset, Vector3 worldOffset, Vector3 localOffset)
         {
+            PlayMoveStartSound();
             _moveStartCount = 1f;
             _moving = _movingAngular = true;
             _moveAngularGoal = goal;
@@ -566,6 +591,7 @@ namespace RTXMnesia.ScriptApi
 
         public void RotateAtSpeed(float acc, float goalSpeed, Vector3 axis, bool resetSpeed, bool useOffset, Vector3 worldOffset, Vector3 localOffset)
         {
+            PlayMoveStartSound();
             _moveStartCount = 1f;
             _moving = _movingAngular = true;
             _moveAngularAcc = acc;
@@ -582,7 +608,72 @@ namespace RTXMnesia.ScriptApi
         public void StopMove()
         {
             _movingLinear = _movingAngular = _moving = false;
-            // Move stop sound: step 6.
+            if (_moveStartCount <= 0f) PlaySound("MoveStop", _moveStopSound, true, true);
+        }
+
+        void SetMoveSoundVolume()
+        {
+            _moveLoopSoundEntity?.GetEntry(Sound.SoundEntityType.Main)?.SetVolumeMul(_movingVolume);
+        }
+
+        void DestroyMoveLoopSound()
+        {
+            if (_moveLoopSoundEntity == null) return;
+            _moveLoopSoundEntity.Stop(false);
+            Map.sound.DestroySoundEntity(_moveLoopSoundEntity);
+            _moveLoopSoundEntity = null;
+        }
+
+        /// <summary>
+        /// iLuxProp::UpdateMoving's sound part: the loop sound fades in (1.2 / s) while the main body moves and out
+        /// (1 / s) when it stops.
+        /// </summary>
+        void UpdateMoveSound(float timeStep)
+        {
+            if (!_moving)
+            {
+                if (_movingVolume <= 0f) return;
+                _movingVolume -= timeStep;
+                if (_movingVolume < 0f)
+                {
+                    _movingVolume = 0f;
+                    DestroyMoveLoopSound();
+                }
+                else SetMoveSoundVolume();
+                return;
+            }
+
+            const float minMove = 0.001f * (1f / 60f);
+            bool hasSpeed = false;
+            Matrix4x4 m = MainBody.HplMatrix;
+            if (_movingLinear && (m.GetPosition() - _lastBodyMoveMatrix.GetPosition()).sqrMagnitude > minMove * minMove) hasSpeed = true;
+            if (!hasSpeed && _movingAngular &&
+                HplMatrix.EulerAngleDistance(_lastBodyMoveMatrix, m).sqrMagnitude > minMove * minMove) hasSpeed = true;
+
+            if (hasSpeed && _movingVolume < 1f)
+            {
+                if (_moveLoopSoundEntity == null && _moveLoopSound != "")
+                {
+                    _moveLoopSoundEntity = PlaySound("MoveLoop", _moveLoopSound, false, true);
+                    if (_moveLoopSoundEntity != null)
+                    {
+                        _moveLoopSoundEntity.Play(false);
+                        _moveLoopSoundEntity.GetEntry(Sound.SoundEntityType.Main)?.SetVolumeMul(0f);
+                    }
+                }
+                _movingVolume = Mathf.Min(1f, _movingVolume + timeStep * 1.2f);
+                SetMoveSoundVolume();
+            }
+            else if (!hasSpeed && _movingVolume > 0f)
+            {
+                _movingVolume -= timeStep;
+                if (_movingVolume < 0f)
+                {
+                    _movingVolume = 0f;
+                    DestroyMoveLoopSound();
+                }
+                else SetMoveSoundVolume();
+            }
         }
 
         protected virtual void OnStartMove() { }
@@ -590,8 +681,9 @@ namespace RTXMnesia.ScriptApi
         void UpdateMoving(float timeStep)
         {
             if (_moveStartCount > 0f) _moveStartCount -= timeStep;
-            if (!_moving || MainBody == null) return;
-            // Move loop sound volume: step 6.
+            if (MainBody == null) return;
+            UpdateMoveSound(timeStep);
+            if (!_moving) return;
             _lastBodyMoveMatrix = MainBody.HplMatrix;
             UpdateLinearMoving(timeStep);
             UpdateAngularMoving(timeStep);

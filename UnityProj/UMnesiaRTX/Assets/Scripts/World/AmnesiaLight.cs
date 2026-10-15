@@ -155,7 +155,8 @@ namespace RTXMnesia.World
                         _flickerOn = false;
                         if (!flickerFade) SetColorAndRadius(flickerOffColor, flickerOffRadius);
                         else FadeTo(flickerOffColor, flickerOffRadius, HplMath.RandRectf(flickerOffFadeLength.x, flickerOffFadeLength.y));
-                        // TODO step 6 (sound) / particles: FlickerOffSound, FlickerOffPS.
+                        PlayFlickerSound("FlickerOff", flickerOffSound); // FlickerOffPS: with the particle converter
+
                         _flickerTime = 0f;
                         _flickerStateLength = HplMath.RandRectf(flickerOffLength.x, flickerOffLength.y);
                     }
@@ -165,11 +166,25 @@ namespace RTXMnesia.World
                     _flickerOn = true;
                     if (!flickerFade) SetColorAndRadius(_flickerOnColor, _flickerOnRadius);
                     else FadeTo(_flickerOnColor, _flickerOnRadius, HplMath.RandRectf(flickerOnFadeLength.x, flickerOnFadeLength.y));
+                    PlayFlickerSound("FlickerOn", flickerOnSound); // FlickerOnPS: with the particle converter
                     _flickerTime = 0f;
                     _flickerStateLength = HplMath.RandRectf(flickerOnLength.x, flickerOnLength.y);
                 }
                 _flickerTime += timeStep;
             }
+        }
+
+        /// <summary>The map's sound handler (set by the map) for the flicker sounds.</summary>
+        [System.NonSerialized] public RTXMnesia.Sound.HplSoundHandler sound;
+
+        /// <summary>iLight::UpdateLogic: a flicker on / off sound at the light.</summary>
+        void PlayFlickerSound(string name, string file)
+        {
+            if (string.IsNullOrEmpty(file) || sound == null) return;
+            var s = sound.CreateSoundEntity(name, file, true);
+            if (s == null) return;
+            s.IsSaved = false;
+            s.Position = transform.position;
         }
     }
 }

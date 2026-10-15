@@ -52,8 +52,18 @@ namespace RTXMnesia.Props
             _breakImpulse = VarFloat("BreakImpulse", 0f);
             _healthDamage[0] = VarFloat("HealthDamage1", 0f);
             _healthDamage[1] = VarFloat("HealthDamage2", 0f);
-            // Close / lock / interact sounds, damage meshes and their effects: step 6.
+            _closeOnSound = VarString("CloseOnSound", "");
+            _closeOffSound = VarString("CloseOffSound", "");
+            _lockOnSound = VarString("LockOnSound", "");
+            _lockOffSound = VarString("LockOffSound", "");
+            _interactLockedSound = VarString("InteractLockedSound", "");
+            _damageSound = VarString("DamageSound", "");
+            _breakSound = VarString("BreakSound", "");
+            // Damage meshes and their particle systems: later.
         }
+
+        string _closeOnSound = "", _closeOffSound = "", _lockOnSound = "", _lockOffSound = "", _interactLockedSound = "";
+        string _damageSound = "", _breakSound = "";
 
         protected override void OnSetupAfterLoad()
         {
@@ -90,7 +100,7 @@ namespace RTXMnesia.Props
 
             if (Locked && _interactSoundCount <= 0f)
             {
-                // Locked interact sound: step 6.
+                PlaySound("InteractLocked", _interactLockedSound, true, true);
                 _interactSoundCount = 0.5f;
             }
             if (!Locked) SetClosed(false, true);
@@ -137,7 +147,7 @@ namespace RTXMnesia.Props
             }
             // A small force so that the door really closes.
             foreach (var body in PhysicsBodies) body.AddForce(HplSpace.Direction(Vector3.one));
-            // Close on / off sounds: step 6.
+            if (effects) PlaySound(Closed ? "CloseOn" : "CloseOff", Closed ? _closeOnSound : _closeOffSound, true, true);
         }
 
         public void SetLocked(bool locked, bool effects)
@@ -145,7 +155,7 @@ namespace RTXMnesia.Props
             if (Locked == locked) return;
             Locked = locked;
             if (Locked) SetClosed(true, false);
-            // Lock sounds: step 6.
+            if (effects) PlaySound(Locked ? "LockedOn" : "LockedOff", Locked ? _lockOnSound : _lockOffSound, true, true);
         }
 
         /// <summary>cLuxProp_SwingDoor::GetDoorState: -1 closed (all within 5°), 1 open (past 70% of max), 0 between.</summary>
@@ -197,8 +207,11 @@ namespace RTXMnesia.Props
         protected override void OnHealthChange()
         {
             if (!_breakable || _disableBreakable || _broken) return;
+            string sound = "";
+            var mainBody = PhysicsBodies.Find(b => !b.IsStatic);
             if (Health <= 0f)
             {
+                sound = _breakSound;
                 _broken = true;
                 HplPhysicsBody main = null;
                 foreach (var body in PhysicsBodies)
@@ -218,8 +231,18 @@ namespace RTXMnesia.Props
                 }
                 RunCallbackFunc("Break");
             }
-            else if (Health < _healthDamage[1] && _currentMeshEntity <= 1) _currentMeshEntity = 2; // damage meshes: later
-            else if (Health < _healthDamage[0] && _currentMeshEntity == 0) _currentMeshEntity = 1;
+            else if (Health < _healthDamage[1] && _currentMeshEntity <= 1)
+            {
+                _currentMeshEntity = 2; // damage meshes: later
+                sound = _damageSound;
+            }
+            else if (Health < _healthDamage[0] && _currentMeshEntity == 0)
+            {
+                _currentMeshEntity = 1;
+                sound = _damageSound;
+            }
+            // Break / damage particle systems: with the particle converter.
+            if (mainBody != null) PlaySoundAt(Name + "_BreakSound", sound, mainBody.Position);
         }
     }
 }

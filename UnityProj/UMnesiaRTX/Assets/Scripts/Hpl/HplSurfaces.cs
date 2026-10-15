@@ -7,7 +7,7 @@ namespace RTXMnesia.Hpl
     /// <summary>
     /// Physics materials of the game (materials.cfg, cPhysics::LoadSurfaceData): friction / elasticity as Unity
     /// PhysicsMaterials (sub assets, combine modes as in cPhysicsMaterialNewton) and the surface data that impact,
-    /// scrape, roll and step sounds use (step 6).
+    /// scrape, roll and step sounds use.
     /// </summary>
     public class HplSurfaces : ScriptableObject
     {
@@ -29,6 +29,14 @@ namespace RTXMnesia.Hpl
             public string elasticityMode = "Average", frictionMode = "Average";
             public string stepType = "";
             public string scrapeSoundName = "", rollSoundName = "";
+            // Scrape (cSurfaceData::OnSlide) and roll (UpdateRollEffect) sound speeds, frequencies and volumes.
+            public float minScrapeSpeed = 0.7f, minScrapeFreq = 0.7f, minScrapeFreqSpeed = 0.7f, middleScrapeSpeed = 1.2f;
+            public float maxScrapeFreqSpeed = 3f, maxScrapeFreq = 2f;
+            public int minScrapeContacts = 4;
+            public float minRollSpeed = 0.7f, minRollFreq = 0.7f, minRollVolume = 0.7f, minRollFreqSpeed = 0.7f;
+            public float middleRollSpeed = 1.2f, maxRollFreqSpeed = 3f, maxRollFreq = 2f, maxRollVolume = 2f;
+            [Tooltip("RollAxis: bit 0 x, bit 1 y, bit 2 z.")]
+            public int rollAxisFlags;
             public List<Effect> impacts = new(), hits = new();
             public PhysicsMaterial physicsMaterial;
         }

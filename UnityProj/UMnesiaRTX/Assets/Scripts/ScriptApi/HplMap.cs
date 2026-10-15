@@ -33,6 +33,7 @@ namespace RTXMnesia.ScriptApi
         public AmnesiaPlayer player;
         public HplEffects effects;
         public HplHud hud;
+        public Sound.HplSoundHandler sound;
         [Tooltip("materials.cfg: physics materials and surface data.")]
         public HplSurfaces surfaces;
 
@@ -136,6 +137,7 @@ namespace RTXMnesia.ScriptApi
             if (hud == null && !TryGetComponent(out hud)) hud = gameObject.AddComponent<HplHud>();
             effects.Init(this);
             hud.Init(this);
+            InitSound();
             if (player != null)
             {
                 player.steppedByMap = true;
@@ -144,6 +146,8 @@ namespace RTXMnesia.ScriptApi
             }
 
             PhysicsWorld = new Dynamics.HplPhysicsWorld();
+            PhysicsWorld.SurfaceSounds.Sound = sound;
+            PhysicsWorld.SurfaceSounds.Surfaces = surfaces;
             _templateRoot = transform.Find("EntityTemplates");
             _entityRoot = transform.Find("Entities") ?? transform;
 
@@ -168,9 +172,11 @@ namespace RTXMnesia.ScriptApi
             {
                 if (IsTemplate(light.transform)) continue;
                 if (_lights.TryAdd(light.name, light)) _lightList.Add(light);
+                light.sound = sound;
                 light.InitRuntime();
             }
             ConnectBillboards(transform);
+            CreateSoundEntities(transform);
             foreach (var entity in GetComponentsInChildren<AmnesiaEntity>(true))
             {
                 if (IsTemplate(entity.transform)) continue;
@@ -265,6 +271,7 @@ namespace RTXMnesia.ScriptApi
         {
             PhysicsWorld.AfterSimulate(timeStep);
             for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
+            sound.Step(timeStep);
             if (player != null) player.StepPostUpdate(timeStep);
             DestroyPendingEntities();
             GameTime += timeStep;
@@ -295,6 +302,78 @@ namespace RTXMnesia.ScriptApi
         {
             foreach (var l in root.GetComponentsInChildren<AmnesiaLight>(true)) if (l.name == name) return l;
             return null;
+        }
+
+        // ------------------------------------------------------------------ sound
+
+        readonly Dictionary<AmnesiaSound, Sound.HplSoundEntity> _placedSounds = new();
+
+        void InitSound()
+        {
+            if (sound == null && !TryGetComponent(out sound)) sound = gameObject.AddComponent<Sound.HplSoundHandler>();
+            sound.EnsureMusic();
+            // cLuxMusicHandler: the music volume of game.cfg.
+            if (gameConfig != null) sound.Music.GameVolumeMul = gameConfig.GetFloat("Sound", "InGameMusicVolume", 1f);
+            if (player != null)
+            {
+                player.sound = sound;
+                player.surfaces = surfaces;
+            }
+            hud.Messages.Sound = sound;
+            if (PlayerCamera != null)
+            {
+                sound.listener = PlayerCamera.transform;
+                if (Application.isPlaying && FindAnyObjectByType<AudioListener>() == null)
+                    PlayerCamera.gameObject.AddComponent<AudioListener>();
+            }
+            if (sound.bank == null) HplLog.Warn("No sound bank: re-import the level to get sounds");
+        }
+
+        /// <summary>
+        /// cEngineFileLoading::LoadSound for the sound entities of the map and of .ent files (ModelData/Entities):
+        /// they follow their node (an entity's sounds move with its body). UseDefault = false takes the distances
+        /// and volume of the instance. An inactive one does not update (and so does not start).
+        /// </summary>
+        void CreateSoundEntities(Transform root)
+        {
+            foreach (var placed in root.GetComponentsInChildren<AmnesiaSound>(true))
+            {
+                if (IsTemplate(placed.transform) || _placedSounds.ContainsKey(placed)) continue;
+                var s = sound.CreateSoundEntity(placed.name, placed.soundEntityFile, false);
+                if (s == null) continue;
+                s.Parent = placed.transform;
+                s.Active = placed.gameObject.activeInHierarchy;
+                if (!placed.useDefault)
+                {
+                    s.MinDistance = placed.minDistance;
+                    s.MaxDistance = placed.maxDistance;
+                    s.Volume = placed.volume;
+                }
+                _placedSounds[placed] = s;
+            }
+        }
+
+        /// <summary>The sound entities placed under a node (an entity's own sounds), e.g. for its effects.</summary>
+        public IEnumerable<Sound.HplSoundEntity> SoundEntitiesUnder(Transform root)
+        {
+            foreach (var pair in _placedSounds)
+                if (pair.Key != null && pair.Key.transform.IsChildOf(root)) yield return pair.Value;
+        }
+
+        /// <summary>
+        /// Before an entity's objects go: its own sound entities are destroyed; sounds that were only attached to
+        /// it (PlaySoundAtEntity, a break sound) stay where it was and play to the end.
+        /// </summary>
+        void ReleaseSounds(Transform root)
+        {
+            foreach (var placed in root.GetComponentsInChildren<AmnesiaSound>(true))
+            {
+                if (!_placedSounds.TryGetValue(placed, out var s)) continue;
+                sound.DestroySoundEntity(s);
+                _placedSounds.Remove(placed);
+            }
+            foreach (var s in sound.SoundEntities)
+                if (s.Parent != null && s.Parent.IsChildOf(root)) s.Detach();
         }
 
         /// <summary>cLuxMap::DestroyEntity: the entity goes after this step.</summary>
@@ -329,6 +408,7 @@ namespace RTXMnesia.ScriptApi
                 }
                 // Destroy waits for the end of the frame: off now, so the next physics step no longer sees its bodies
                 // (the pieces of a broken pot would be pushed out of the whole one).
+                ReleaseSounds(entity.GameObject.transform);
                 entity.GameObject.SetActive(false);
                 if (Application.isPlaying) Destroy(entity.GameObject);
                 else DestroyImmediate(entity.GameObject);
@@ -365,9 +445,11 @@ namespace RTXMnesia.ScriptApi
             foreach (var light in go.GetComponentsInChildren<AmnesiaLight>(true))
             {
                 if (_lights.TryAdd(light.name, light)) _lightList.Add(light);
+                light.sound = sound;
                 light.InitRuntime();
             }
             ConnectBillboards(go.transform);
+            CreateSoundEntities(go.transform);
             var prop = Props.PropFactory.Create(go.GetComponent<AmnesiaEntity>());
             if (prop == null) return null;
             prop.Load(this, PhysicsWorld);

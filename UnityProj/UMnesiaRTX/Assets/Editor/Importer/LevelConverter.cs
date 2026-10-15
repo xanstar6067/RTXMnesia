@@ -1298,8 +1298,8 @@ namespace RTXMnesia.Importer
 
         /// <summary>
         /// The level's runtime for scripts: <see cref="HplMap"/> (finds the C# port of the .hps by its map path),
-        /// screen effects with their shader and sepia table, the HUD with the quest icon, game / menu configs and
-        /// the texts of the language.
+        /// screen effects with their shader and sepia table, the HUD with the quest icon, game / menu configs,
+        /// the texts of the language and the sound handler with the sound bank (all game sounds, see SoundConverter).
         /// </summary>
         void BuildScriptRuntime(GameObject root)
         {
@@ -1325,6 +1325,10 @@ namespace RTXMnesia.Importer
             string[] crosshairs = { "default", "over_grab", "over_push", "over_ignite", "over_pick", "over_leveldoor", "over_ladder" };
             hud.crosshairs = crosshairs.Select(c => RuntimeTexture($"hud_crosshair_{c}.tga", TextureRole.Gui)).ToArray();
             map.hud = hud;
+
+            var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
+            sound.bank = SoundConverter.Convert(_log, map.language);
+            map.sound = sound;
 
             var script = HplScript.FindScriptType(_mapRelative);
             if (script != null) _log.Info($"Level script: {script.FullName}");

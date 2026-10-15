@@ -60,6 +60,22 @@ namespace RTXMnesia.Importer
                     stepType = e.Str("StepType"),
                     scrapeSoundName = e.Str("ScrapeSoundName"),
                     rollSoundName = e.Str("RollSoundName"),
+                    minScrapeSpeed = e.Float("MinScrapeSpeed", 0.7f),
+                    minScrapeFreq = e.Float("MinScrapeFreq", 0.7f),
+                    minScrapeFreqSpeed = e.Float("MinScrapeFreqSpeed", 0.7f),
+                    middleScrapeSpeed = e.Float("MiddleScrapeSpeed", 1.2f),
+                    maxScrapeFreqSpeed = e.Float("MaxScrapeFreqSpeed", 3f),
+                    maxScrapeFreq = e.Float("MaxScrapeFreq", 2f),
+                    minScrapeContacts = e.Int("MinScrapeContacts", 4),
+                    minRollSpeed = e.Float("MinRollSpeed", 0.7f),
+                    minRollFreq = e.Float("MinRollFreq", 0.7f),
+                    minRollVolume = e.Float("MinRollVolume", 0.7f),
+                    minRollFreqSpeed = e.Float("MinRollFreqSpeed", 0.7f),
+                    middleRollSpeed = e.Float("MiddleRollSpeed", 1.2f),
+                    maxRollFreqSpeed = e.Float("MaxRollFreqSpeed", 3f),
+                    maxRollFreq = e.Float("MaxRollFreq", 2f),
+                    maxRollVolume = e.Float("MaxRollVolume", 2f),
+                    rollAxisFlags = RollAxis(e.Str("RollAxis")),
                 };
                 foreach (var c in e.Children())
                 {
@@ -95,6 +111,15 @@ namespace RTXMnesia.Importer
             AssetDatabase.SaveAssets();
             log.Info($"Physics materials {SourceFile} → {AssetPath} ({asset.surfaces.Count})");
             return asset;
+        }
+
+        /// <summary>RollAxis "x y" → eRollAxisFlag bits (x 1, y 2, z 4).</summary>
+        static int RollAxis(string axes)
+        {
+            int flags = 0;
+            foreach (string a in axes.Split(new[] { ' ', ',', '\t' }, System.StringSplitOptions.RemoveEmptyEntries))
+                flags |= a.ToLowerInvariant() switch { "x" => 1, "y" => 2, "z" => 4, _ => 0 };
+            return flags;
         }
     }
 }

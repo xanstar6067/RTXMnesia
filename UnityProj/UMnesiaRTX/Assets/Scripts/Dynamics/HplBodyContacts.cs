@@ -4,7 +4,8 @@ using UnityEngine;
 namespace RTXMnesia.Dynamics
 {
     /// <summary>
-    /// Body collision callbacks (iPhysicsBodyCallback::OnBodyCollide) for props that react to impacts. Unity reports
+    /// Contact messages of a body: iPhysicsBodyCallback::OnBodyCollide for props that react to impacts (first
+    /// contact) and the surface sounds (every step of contact, like Newton's contact callback). Unity reports
     /// contacts after the step; <see cref="HplPhysicsBody.PreviousVelocityAt"/> gives the velocity before it, which
     /// is what Newton's contact callback saw.
     /// </summary>
@@ -16,7 +17,14 @@ namespace RTXMnesia.Dynamics
 
         void OnCollisionEnter(Collision collision)
         {
-            if (Body != null) Collided?.Invoke(Body, collision);
+            if (Body == null) return;
+            Collided?.Invoke(Body, collision);
+            Body.World.SurfaceSounds.OnContact(Body, collision);
+        }
+
+        void OnCollisionStay(Collision collision)
+        {
+            if (Body != null) Body.World.SurfaceSounds.OnContact(Body, collision);
         }
     }
 }

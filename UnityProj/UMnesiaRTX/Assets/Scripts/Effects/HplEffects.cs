@@ -12,7 +12,7 @@ namespace RTXMnesia.Effects
     /// shake and the effect voice queue. Updated in the map step (60 Hz), only effects that are active.
     /// Screen effects are drawn by <see cref="HplScreenEffectsPass"/> (after post-processing, before the HUD),
     /// voice subtitles by <see cref="Ui.HplHud"/>.
-    /// Until the sound system (step 6) voices are not heard: each line lasts as long as its .ogg and shows its text.
+    /// Voices and effect sounds play through the map's sound handler (Sound/HplSoundHandler).
     /// </summary>
     public class HplEffects : MonoBehaviour
     {
@@ -52,6 +52,7 @@ namespace RTXMnesia.Effects
                 SanityGainFlash.Color = cfg.GetColor("Player_General", "SanityGain_Color", Color.black);
                 SanityGainFlash.FadeInTime = cfg.GetFloat("Player_General", "SanityGain_FadeInTime", 0.25f);
                 SanityGainFlash.FadeOutTime = cfg.GetFloat("Player_General", "SanityGain_FadeOutTime", 1.25f);
+                SanityGainFlash.Sound = cfg.GetString("Player_General", "SanityGain_Sound", "");
             }
             CreatePass();
         }
@@ -224,12 +225,13 @@ namespace RTXMnesia.Effects
             public float Alpha;
             public Color Color = Color.black;
             public float FadeInTime = 0.25f, FadeOutTime = 1.25f;
+            public string Sound = "";
             int _step;
             float _count;
 
             public void Start()
             {
-                // TODO step 6 (sound): SanityGain_Sound.
+                if (Sound != "") Handler.Map.sound.PlayGuiSoundData(Sound, RTXMnesia.Sound.SoundEntryType.Gui);
                 Active = true;
                 _step = 0;
                 Alpha = 0f;
@@ -430,8 +432,9 @@ namespace RTXMnesia.Effects
         }
 
         /// <summary>
-        /// cLuxEffect_PlayVoice: voice lines play one after another with their subtitle; when the queue is done the
-        /// over callback runs. Without sound a line counts as playing for the duration of its .ogg (lang folder).
+        /// cLuxEffect_PlayVoice: voice lines play one after another with their subtitle (a GUI stream, or a 3D
+        /// sound at a position) together with an optional effect sound; when the queue is done the over callback
+        /// runs. A line is playing while its sound entry is valid (the handler counts the clip length).
         /// </summary>
         public sealed class PlayVoiceEffect : Effect
         {
@@ -445,17 +448,17 @@ namespace RTXMnesia.Effects
 
             readonly Queue<VoiceData> _voices = new();
             string _overCallback = "";
-            // A loaded sound stays "not null" after it ends (the original keeps the entry pointer); valid = still playing.
-            bool _voiceLoaded, _effectLoaded;
-            float _voiceTimeLeft, _effectTimeLeft;
+            RTXMnesia.Sound.SoundEntry _voiceEntry, _effectEntry;
+            int _voiceEntryId = -1, _effectEntryId = -1;
             public float VolumeMul = 1f;
 
             /// <summary>Subtitle of the line playing now (kept until the next line, as the original).</summary>
             public string CurrentText { get; private set; } = "";
             public string CurrentVoice { get; private set; } = "";
 
-            bool VoiceValid => _voiceLoaded && _voiceTimeLeft > 0f;
-            bool EffectValid => _effectLoaded && _effectTimeLeft > 0f;
+            RTXMnesia.Sound.HplSoundHandler Sound => Handler.Map.sound;
+            bool VoiceValid => Sound.IsValid(_voiceEntry, _voiceEntryId);
+            bool EffectValid => Sound.IsValid(_effectEntry, _effectEntryId);
 
             public void AddVoice(string voiceFile, string effectFile, string text, bool usePosition, Vector3 position, float minDistance, float maxDistance)
             {
@@ -469,7 +472,10 @@ namespace RTXMnesia.Effects
 
             public void StopVoices(float fadeOutSpeed)
             {
-                _voiceLoaded = _effectLoaded = false;
+                if (VoiceValid) _voiceEntry.FadeOut(fadeOutSpeed);
+                _voiceEntry = null;
+                if (EffectValid) _effectEntry.FadeOut(fadeOutSpeed);
+                _effectEntry = null;
                 _voices.Clear();
                 Active = false;
             }
@@ -480,11 +486,14 @@ namespace RTXMnesia.Effects
 
             public override void Update(float timeStep)
             {
-                _voiceTimeLeft -= timeStep;
-                _effectTimeLeft -= timeStep;
+                if (VolumeMul < 1f)
+                {
+                    if (VoiceValid) _voiceEntry.SetVolumeMul(VolumeMul);
+                    if (EffectValid) _effectEntry.SetVolumeMul(VolumeMul);
+                }
 
                 if (VoiceValid) return;
-                if (!_voiceLoaded && EffectValid) return;
+                if (_voiceEntry == null && EffectValid) return;
 
                 if (_voices.Count == 0)
                 {
@@ -499,14 +508,27 @@ namespace RTXMnesia.Effects
                 }
 
                 var voice = _voices.Dequeue();
-                _voiceLoaded = TryDuration(voice.voiceFile, out _voiceTimeLeft);
-                _effectLoaded = voice.effectFile != "" && TryDuration(voice.effectFile, out _effectTimeLeft);
+                if (!voice.usePosition)
+                {
+                    _voiceEntry = Sound.PlayGuiStream(voice.voiceFile, false, 1f);
+                    _effectEntry = voice.effectFile != "" ? Sound.PlayGuiStream(voice.effectFile, false, 1f) : null;
+                }
+                else
+                {
+                    _voiceEntry = Sound.Play(voice.voiceFile, false, 1f, voice.position, voice.minDistance, voice.maxDistance,
+                                             RTXMnesia.Sound.SoundEntryType.Gui, false, true, 0, true);
+                    _effectEntry = voice.effectFile != ""
+                        ? Sound.Play(voice.effectFile, false, 1f, voice.position, voice.minDistance, voice.maxDistance,
+                                     RTXMnesia.Sound.SoundEntryType.Gui, false, true, 0, true)
+                        : null;
+                }
+                if (_voiceEntry != null) _voiceEntryId = _voiceEntry.Id;
+                if (_effectEntry != null) _effectEntryId = _effectEntry.Id;
                 CurrentVoice = voice.voiceFile;
                 CurrentText = voice.text;
-                // TODO step 6 (sound): stream the voice (GUI or 3D at the position) and the effect sound.
 
                 // Extra check in case the voices do not load.
-                if (_voices.Count == 0 && !_voiceLoaded && !_effectLoaded)
+                if (_voices.Count == 0 && _voiceEntry == null && _effectEntry == null)
                 {
                     string callback = _overCallback;
                     Reset();
@@ -515,22 +537,12 @@ namespace RTXMnesia.Effects
                 }
             }
 
-            bool TryDuration(string file, out float duration)
-            {
-                duration = 0f;
-                var language = Handler.Map != null ? Handler.Map.language : null;
-                if (language != null && language.TryGetVoice(file, out var v))
-                {
-                    duration = v.duration;
-                    return true;
-                }
-                HplLog.Warn($"Voice '{file}' not found in the language folder");
-                return false;
-            }
-
             public override void Reset()
             {
-                _voiceLoaded = _effectLoaded = false;
+                if (VoiceValid) _voiceEntry.Stop();
+                _voiceEntry = null;
+                if (EffectValid) _effectEntry.Stop();
+                _effectEntry = null;
                 CurrentText = "";
                 CurrentVoice = "";
                 _voices.Clear();
@@ -550,11 +562,12 @@ namespace RTXMnesia.Effects
             int _step;
             float _textTime;
 
-            public void Start(string text)
+            public void Start(string text, string sound = "")
             {
                 Active = true;
                 _step = 0;
                 Alpha = 0f;
+                Handler.Map.sound.PlayGuiSoundData(sound, RTXMnesia.Sound.SoundEntryType.Gui);
                 Text = text ?? "";
                 _textTime = 3f + 0.15f * Text.Length;
                 TextAlpha = 0f;
@@ -563,7 +576,7 @@ namespace RTXMnesia.Effects
                 if (player != null) player.FadeFOVMulTo(0.5f, 0.5f);
                 Handler.RadialBlur.FadeTo(0.15f, 3f);
                 Handler.RadialBlur.SetBlurStartDist(0.6f);
-                // TODO step 6: sound, enemies reset (BroadcastEnemyMessage).
+                // TODO step 6: enemies reset (BroadcastEnemyMessage).
             }
 
             /// <summary>Any action key skips the text (DoAction).</summary>

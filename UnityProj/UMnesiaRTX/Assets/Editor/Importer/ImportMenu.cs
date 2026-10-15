@@ -66,6 +66,16 @@ namespace RTXMnesia.Importer
             ConvertLevel(AmnesiaPaths.ToSourceRelative(abs));
         }
 
+        [MenuItem(Menu + "Sounds (sounds, music, voices)", priority = 35)]
+        static void Sounds()
+        {
+            var log = new ImportLog();
+            SoundConverter.Convert(log, LanguageConverter.Convert(LanguageConverter.DefaultLanguage, log));
+            log.Save("Sounds");
+        }
+
+        public static void ConvertSoundsBatch() => Sounds();
+
         [MenuItem(Menu + "Open import log", priority = 40)]
         static void OpenLog()
         {

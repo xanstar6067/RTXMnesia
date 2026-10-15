@@ -26,6 +26,13 @@ namespace RTXMnesia.Dynamics
         public readonly AmnesiaBody Data;
         public readonly Rigidbody Rigidbody;
         public readonly Collider[] Colliders;
+        /// <summary>Its contact messages (impacts of props, surface sounds).</summary>
+        public readonly HplBodyContacts Contacts;
+        /// <summary>Scrape / roll sound state (HplSurfaceSounds).</summary>
+        public readonly HplSurfaceSounds.State SurfaceState = new();
+        /// <summary>Creation order: a contact pair of two bodies is handled once, by the earlier one.</summary>
+        public readonly int Order = _orderCount++;
+        static int _orderCount;
         public readonly HplPhysicsWorld World;
         /// <summary>The script entity of the body (HplProp), like iPhysicsBody::GetUserData.</summary>
         public object UserData;
@@ -61,6 +68,9 @@ namespace RTXMnesia.Dynamics
             Rigidbody.solverIterations = 12;
             Rigidbody.solverVelocityIterations = 4;
             _continuous = data.continuousCollision;
+            Contacts = data.GetComponent<HplBodyContacts>();
+            if (Contacts == null) Contacts = data.gameObject.AddComponent<HplBodyContacts>();
+            Contacts.Body = this;
             SetLinearDamping(data.linearDamping);
             SetAngularDamping(data.angularDamping);
             Gravity = data.hasGravity;

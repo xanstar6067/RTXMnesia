@@ -11,7 +11,7 @@ namespace RTXMnesia.Props
     /// cLuxProp_Wheel (LuxProp_Wheel.cpp): a wheel turned with circular mouse moves. Its own angle accumulates
     /// over turns (the joint angle wraps at ±π); limits in that angle are mapped to joint limits near the current
     /// joint angle each step. States -1 / 1 at the limits go to connections; stuck states; auto move to an angle.
-    /// Sounds: step 6.
+    /// Limit and stuck sounds as the original.
     /// </summary>
     public sealed class PropWheel : HplProp
     {
@@ -55,7 +55,12 @@ namespace RTXMnesia.Props
             _spinDir = ToSpinDir(VarString("SpinDir", "BothWays"));
             _slowDownRotation = VarBool("SlowDownRotation", true);
             _skipMiddleState = VarBool("SkipMiddleState", true);
+            _minLimitSound = VarString("MinLimitSound", "");
+            _maxLimitSound = VarString("MaxLimitSound", "");
+            _stuckSound = VarString("StuckSound", "");
         }
+
+        string _minLimitSound = "", _maxLimitSound = "", _stuckSound = "";
 
         protected override void OnSetupAfterLoad()
         {
@@ -175,6 +180,13 @@ namespace RTXMnesia.Props
             _angle += add;
             _prevJointAngle = _jointAngle;
 
+            // Moving while stuck: the stuck sound.
+            if (StuckState != 0 && IsInteractedWith && _stuckSoundTimer <= 0f && Mathf.Abs(add) > 0.01f * timeStep)
+            {
+                PlaySound("WheelStuck", _stuckSound, true, true);
+                _stuckSoundTimer = 1.5f;
+            }
+
             float spinVal = 0f;
             if (_spinDir == 1 && _angle > _lastToMax)
             {
@@ -281,9 +293,18 @@ namespace RTXMnesia.Props
             if (CurrentState == state) return;
             if (_skipMiddleState && state == 0) return;
             CurrentState = state;
-            if (CurrentState == 1) ConnectionStateChange(1);
-            else if (CurrentState == -1) ConnectionStateChange(-1);
-            // Limit sounds: step 6.
+            string sound = "";
+            if (CurrentState == 1)
+            {
+                sound = _maxLimitSound;
+                ConnectionStateChange(1);
+            }
+            else if (CurrentState == -1)
+            {
+                sound = _minLimitSound;
+                ConnectionStateChange(-1);
+            }
+            if (effects && sound != "") PlaySoundAt("WheelSound", sound, _hinge.PivotPoint);
         }
 
         void ResetAutoMove()

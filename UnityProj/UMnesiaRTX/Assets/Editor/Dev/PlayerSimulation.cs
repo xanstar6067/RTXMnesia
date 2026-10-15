@@ -240,6 +240,21 @@ namespace RTXMnesia.EditorDev
                                          $"limits {j.MinAngle * Mathf.Rad2Deg:0.#}..{j.MaxAngle * Mathf.Rad2Deg:0.#}°");
                             continue;
                         }
+                        case "sounds":
+                        {
+                            // sounds: the playing sound entries, sound entities and music.
+                            var snd = map?.sound;
+                            if (snd == null) { log.Warn("sounds needs an HplMap with a sound handler"); continue; }
+                            log.Info($"t={time,6:0.00}   music \"{snd.Music.CurrentSongName}\" vol {snd.Music.CurrentSongVolume:0.00} | " +
+                                     $"global world vol {snd.GetGlobalVolume(RTXMnesia.Sound.SoundEntryType.World):0.00} speed {snd.GetGlobalSpeed(RTXMnesia.Sound.SoundEntryType.World):0.00}");
+                            foreach (var e in snd.Entries)
+                                log.Info($"t={time,6:0.00}   entry {e.Name} {e.Type}{(e.Is3D && !e.Relative ? $" 3D {Vector3.Distance(e.Position, snd.ListenerPosition):0.0} m ({e.MinDistance:0.#}..{e.MaxDistance:0.#})" : "")} " +
+                                         $"loop {e.Loop} t {e.ElapsedTime:0.00}/{e.Clip.length:0.00} mul {e.VolumeMul:0.00}");
+                            foreach (var s in snd.SoundEntities)
+                                log.Info($"t={time,6:0.00}   entity {s.Name} ({s.Data.name}) active {s.Active} stopped {s.IsStopped()} " +
+                                         $"at {s.WorldPosition:F1} {Vector3.Distance(s.WorldPosition, snd.ListenerPosition):0.0} m");
+                            continue;
+                        }
                         case "overlaps":
                         {
                             // overlaps Entity: penetrations of its body colliders with each other and with the world.
@@ -314,7 +329,7 @@ namespace RTXMnesia.EditorDev
                      $"fade {e.Fade.Alpha:0.00} trail {e.ImageTrail.Amount:0.00} sepia {e.Sepia.Amount:0.00} blur {e.RadialBlur.Size:0.00} " +
                      $"flash {e.Flash.Alpha:0.00} | voice {voice} \"{Short(e.PlayVoice.Active ? e.PlayVoice.CurrentText : "")}\" | " +
                      $"msg \"{Short(hud.Messages.Alpha > 0f ? hud.Messages.Text : "")}\" hint \"{Short(hud.Hints.Alpha > 0f ? hud.Hints.Text : "")}\" " +
-                     $"quest {hud.Messages.QuestAlpha:0.00} | timers {map.TimerCount} sanity {player.sanity:0}");
+                     $"quest {hud.Messages.QuestAlpha:0.00} | timers {map.TimerCount} sanity {player.sanity:0} | snd {map.sound?.Entries.Count ?? 0} music \"{map.sound?.Music?.CurrentSongName}\"");
         }
 
         static void Call(object target, string method) =>

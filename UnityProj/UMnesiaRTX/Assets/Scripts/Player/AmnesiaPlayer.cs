@@ -685,12 +685,36 @@ namespace RTXMnesia.Player
             lampOil = Mathf.Clamp(lampOil + x, 0f, 100f);
         }
 
+        /// <summary>The map's sound handler and physics materials (set by the map).</summary>
+        [NonSerialized] public Sound.HplSoundHandler sound;
+        [NonSerialized] public HplSurfaces surfaces;
+
+        /// <summary>The player's sounds (jump, crouch, fall damage): PlayGuiSoundData as a world sound.</summary>
         public void PlaySound(string soundName)
         {
-            // TODO step 6 (sound): play the .snt like PlayGuiSoundData.
+            if (sound != null) sound.PlayGuiSoundData(soundName, RTXMnesia.Sound.SoundEntryType.World);
         }
 
-        public void OnFootSound(FootSound type, string moveType) => FootSounded?.Invoke(type, moveType);
+        /// <summary>
+        /// cLuxMoveState_Normal::FootSound: step_&lt;walk|run|sneak&gt;_&lt;step type&gt; of the material under the
+        /// feet (the body the gravity collided with; "rock" without one). Water steps and enemy hearing: step 6.
+        /// </summary>
+        public void OnFootSound(FootSound type, string moveType)
+        {
+            FootSounded?.Invoke(type, moveType);
+            if (sound == null) return;
+            string step = "rock";
+            var ground = Body != null ? Body.GroundCollider : null;
+            if (ground != null && surfaces != null)
+            {
+                var body = HplPhysics.BodyOf(ground);
+                var pm = ground.sharedMaterial;
+                var surface = surfaces.GetOrDefault(body != null ? body.material : pm != null ? pm.name : null);
+                if (surface != null) step = surface.stepType;
+            }
+            string name = type == FootSound.Step ? $"step_{moveType}_{step}" : $"step_run_{step}";
+            sound.PlayGuiSoundData(name, RTXMnesia.Sound.SoundEntryType.World);
+        }
 
         void SetFreeCamera(bool active)
         {

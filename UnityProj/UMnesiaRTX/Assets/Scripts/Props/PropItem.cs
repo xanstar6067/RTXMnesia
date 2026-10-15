@@ -60,7 +60,7 @@ namespace RTXMnesia.Props
             if (removeProp)
             {
                 Map.DestroyEntity(this);
-                // "ui/pick_" + PickSound: step 6.
+                Map.sound.PlayGuiSoundData("ui/pick_" + _pickSound, RTXMnesia.Sound.SoundEntryType.World);
                 if (HplGame.ShowPickUpMessage(_itemType))
                 {
                     var hud = Map.hud;
@@ -75,7 +75,7 @@ namespace RTXMnesia.Props
     }
 
     /// <summary>
-    /// cLuxProp_LevelDoor (LuxProp_LevelDoor.cpp): a door to another map. Locked: the locked text (and sound, step 6),
+    /// cLuxProp_LevelDoor (LuxProp_LevelDoor.cpp): a door to another map. Locked: the locked sound and text,
     /// at most every 2 s; else the map changes (map switching comes later: logged).
     /// </summary>
     public sealed class PropLevelDoor : HplProp
@@ -115,6 +115,7 @@ namespace RTXMnesia.Props
             {
                 if (_lockedCount <= 0f)
                 {
+                    Map.sound.PlayGuiSoundData(LockedSound, RTXMnesia.Sound.SoundEntryType.World);
                     if (_lockedTextCat != "" && _lockedTextEntry != "")
                         Map.hud.Messages.SetMessage(Map.hud.Translate(_lockedTextCat, _lockedTextEntry), 0f);
                     _lockedCount = 2f;

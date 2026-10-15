@@ -2,15 +2,15 @@
 
 Функции, которые движок Amnesia предоставляет скриптам `.hps` (регистрируются в `src/.../amnesia/src/game/LuxScriptHandler.cpp`, всего 261).
 Сгенерировано по копии игры в `source/`; «гл.1» и «всего» — число вызовов в скриптах первой главы и всей игры.
-Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но поведения ещё нет: звук, экраны журнала и инвентаря, затухание моделей); — пропускается с одним предупреждением в логе (часть движка не портирована).
+Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но поведения ещё нет: экраны журнала и инвентаря, затухание моделей, враги); — пропускается с одним предупреждением в логе (часть движка не портирована).
 
 ## Нужны для главы 1 (по частоте)
 
 | Функция | гл.1 | всего | Статус | Сигнатура |
 |---|---:|---:|:---:|---|
 | `AddTimer` | 535 | 1240 | ✓ | `void AddTimer(string &in asName, float afTime, string &in asFunction)` |
-| `PlaySoundAtEntity` | 501 | 1069 | — | `void PlaySoundAtEntity(string &in asSoundName, string &in asSoundFile, string &in asEntity, float afFadeSpeed, bool abSaveSound)` |
-| `PreloadSound` | 247 | 628 | — | `void PreloadSound(string& asSoundFile)` |
+| `PlaySoundAtEntity` | 501 | 1069 | ✓ | `void PlaySoundAtEntity(string &in asSoundName, string &in asSoundFile, string &in asEntity, float afFadeSpeed, bool abSaveSound)` |
+| `PreloadSound` | 247 | 628 | ✓ | `void PreloadSound(string& asSoundFile)` |
 | `GetLocalVarInt` | 197 | 525 | ✓ | `int GetLocalVarInt(string &in asName)` |
 | `SetEntityActive` | 180 | 548 | ✓ | `void SetEntityActive(string &in asName, bool abActive)` |
 | `AddEntityCollideCallback` | 165 | 412 | ✓ | `void AddEntityCollideCallback(string &in asParentName, string &in asChildName, string &in asFunction, bool abDeleteOnCollide, int alStates)` |
@@ -19,11 +19,11 @@
 | `CreateParticleSystemAtEntity` | 119 | 243 | — | `void CreateParticleSystemAtEntity(string &in asPSName, string &in asPSFile, string &in asEntity, bool abSavePS)` |
 | `SetPlayerMoveSpeedMul` | 118 | 232 | ✓ | `void SetPlayerMoveSpeedMul(float afMul)` |
 | `SetLocalVarInt` | 115 | 352 | ✓ | `void SetLocalVarInt(string &in asName, int alVal)` |
-| `StopSound` | 90 | 281 | — | `void StopSound(string &in asSoundName, float afFadeTime)` |
+| `StopSound` | 90 | 281 | ✓ | `void StopSound(string &in asSoundName, float afFadeTime)` |
 | `FadeLightTo` | 89 | 267 | ✓ | `void FadeLightTo(string &in asLightName, float afR, float afG, float afB, float afA, float afRadius, float afTime)` |
 | `StartScreenShake` | 78 | 185 | ✓ | `void StartScreenShake(float afAmount, float afTime, float afFadeInTime,float afFadeOutTime)` |
-| `PlayMusic` | 75 | 178 | — | `void PlayMusic(string &in asMusicFile, bool abLoop, float afVolume, float afFadeTime, int alPrio, bool abResume)` |
-| `PlayGuiSound` | 66 | 295 | — | `void PlayGuiSound(string &in asSoundFile, float afVolume)` |
+| `PlayMusic` | 75 | 178 | ✓ | `void PlayMusic(string &in asMusicFile, bool abLoop, float afVolume, float afFadeTime, int alPrio, bool abResume)` |
+| `PlayGuiSound` | 66 | 295 | ✓ | `void PlayGuiSound(string &in asSoundFile, float afVolume)` |
 | `AddLocalVarInt` | 63 | 133 | ✓ | `void AddLocalVarInt(string &in asName, int alVal)` |
 | `SetPlayerRunSpeedMul` | 62 | 149 | ✓ | `void SetPlayerRunSpeedMul(float afMul)` |
 | `FadeImageTrailTo` | 58 | 91 | ✓ | `void FadeImageTrailTo(float afAmount, float afSpeed)` |
@@ -57,12 +57,12 @@
 | `SetPropActiveAndFade` | 21 | 87 | ~ | `void SetPropActiveAndFade(string &in asName, bool abActive, float afFadeTime)` |
 | `FadeSepiaColorTo` | 21 | 27 | ✓ | `void FadeSepiaColorTo(float afAmount, float afSpeed)` |
 | `DestroyParticleSystem` | 21 | 59 | — | `void DestroyParticleSystem(string &in asName)` |
-| `StopMusic` | 20 | 49 | — | `void StopMusic(float afFadeTime, int alPrio)` |
+| `StopMusic` | 20 | 49 | ✓ | `void StopMusic(float afFadeTime, int alPrio)` |
 | `GiveSanityBoostSmall` | 20 | 39 | ✓ | `void GiveSanityBoostSmall()` |
 | `SetSwingDoorDisableAutoClose` | 18 | 28 | ✓ | `void SetSwingDoorDisableAutoClose(string &in asName, bool abDisableAutoClose)` |
 | `SetPlayerActive` | 17 | 57 | ✓ | `void SetPlayerActive(bool abActive)` |
 | `ResetProp` | 17 | 41 | ✓ | `void ResetProp(string &in asName)` |
-| `FadeGlobalSoundVolume` | 16 | 34 | — | `void FadeGlobalSoundVolume(float afDestVolume, float afTime)` |
+| `FadeGlobalSoundVolume` | 16 | 34 | ✓ | `void FadeGlobalSoundVolume(float afDestVolume, float afTime)` |
 | `UnBlockHint` | 15 | 15 | ✓ | `void UnBlockHint(string &in asName)` |
 | `SetWheelStuckState` | 15 | 22 | ✓ | `void SetWheelStuckState(string &in asName, int alState, bool abEffects)` |
 | `SetMapDisplayNameEntry` | 15 | 33 | ✓ | `void SetMapDisplayNameEntry(string &in asNameEntry)` |
@@ -73,7 +73,7 @@
 | `AutoSave` | 14 | 31 | — | `void AutoSave()` |
 | `SetEntityInteractionDisabled` | 13 | 19 | ✓ | `void SetEntityInteractionDisabled(string& asName, bool abDisabled)` |
 | `BlockHint` | 13 | 13 | ✓ | `void BlockHint(string &in asName)` |
-| `AddEffectVoice` | 13 | 36 | ~ | `void AddEffectVoice(string &in asVoiceFile, string &in asEffectFile, string &in asTextCat, string &in asTextEntry, bool abUsePostion,  string &in asPosEnitity, float afMinDistance, float afMaxDistance)` |
+| `AddEffectVoice` | 13 | 36 | ✓ | `void AddEffectVoice(string &in asVoiceFile, string &in asEffectFile, string &in asTextCat, string &in asTextEntry, bool abUsePostion,  string &in asPosEnitity, float afMinDistance, float afMaxDistance)` |
 | `AddBodyImpulse` | 13 | 23 | ✓ | `void AddBodyImpulse(string &in asName, float afX, float afY, float afZ, string &in asCoordSystem)` |
 | `SetLeverStuckState` | 12 | 39 | ✓ | `void SetLeverStuckState(string &in asName, int alState, bool abEffects)` |
 | `RemoveItem` | 12 | 55 | ~ | `void RemoveItem(string &in asName)` |
@@ -117,7 +117,7 @@
 | `SetLevelDoorLocked` | 4 | 6 | ✓ | `void SetLevelDoorLocked(string &in asName, bool abLocked)` |
 | `SetInventoryDisabled` | 4 | 11 | ~ | `void SetInventoryDisabled(bool abX)` |
 | `GetTimerTimeLeft` | 4 | 10 | ✓ | `float GetTimerTimeLeft(string &in asName)` |
-| `FadeGlobalSoundSpeed` | 4 | 10 | — | `void FadeGlobalSoundSpeed(float afDestSpeed, float afTime)` |
+| `FadeGlobalSoundSpeed` | 4 | 10 | ✓ | `void FadeGlobalSoundSpeed(float afDestSpeed, float afTime)` |
 | `ClearSavedMaps` | 4 | 10 | — | `void ClearSavedMaps()` |
 | `StringSub` | 3 | 12 | ✓ | `string& StringSub(string &in asString, int alStart, int alCount)` |
 | `SetSkyBoxActive` | 3 | 3 | — | `void SetSkyBoxActive(bool abActive)` |

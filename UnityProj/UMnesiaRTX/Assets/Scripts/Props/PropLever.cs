@@ -10,7 +10,7 @@ namespace RTXMnesia.Props
     /// <summary>
     /// cLuxProp_Lever (LuxProp_Lever.cpp): a hinged lever with three states (-1 min, 0 middle, 1 max) sent to its
     /// connections; it can get stuck at a limit and moves back to its rest angle by itself when let go.
-    /// Limit and stuck sounds: step 6.
+    /// Limit and stuck sounds as the original.
     /// </summary>
     public sealed class PropLever : HplProp
     {
@@ -56,6 +56,27 @@ namespace RTXMnesia.Props
             _autoMoveGoal = ToAutoMoveGoal(VarString("AutoMoveGoal", "Middle"));
             _autoMoveSpeedFactor = VarFloat("AutoMoveSpeedFactor", 2f);
             _autoMoveMaxSpeed = VarFloat("AutoMoveMaxSpeed", 8f);
+            _minLimitSound = VarString("MinLimitSound", "");
+            _maxLimitSound = VarString("MaxLimitSound", "");
+            _stuckSound = VarString("StuckSound", "");
+        }
+
+        string _minLimitSound = "", _maxLimitSound = "", _stuckSound = "";
+
+        /// <summary>cLuxProp_Lever::UpdateCheckStuckSound: moving it while stuck plays the stuck sound (every 1.5 s).</summary>
+        void UpdateCheckStuckSound(float timeStep)
+        {
+            if (StuckState == 0 || !IsInteractedWith) return;
+            if (_stuckSoundTimer > 0f)
+            {
+                _stuckSoundTimer -= timeStep;
+                return;
+            }
+            if (_hinge.Child.AngularVelocity.sqrMagnitude > 0.01f)
+            {
+                PlaySound("LeverStuck", _stuckSound, true, true);
+                _stuckSoundTimer = 1.5f;
+            }
         }
 
         protected override void OnSetupAfterLoad()
@@ -114,7 +135,7 @@ namespace RTXMnesia.Props
         {
             if (_hinge == null) return;
             float angle = _hinge.GetAngle();
-            if (StuckState != 0 && IsInteractedWith && _stuckSoundTimer > 0f) _stuckSoundTimer -= timeStep; // stuck sound: step 6
+            UpdateCheckStuckSound(timeStep);
             UpdateCheckLimit(angle);
             UpdateAutoMove(angle, timeStep);
         }
@@ -202,7 +223,9 @@ namespace RTXMnesia.Props
             if (CurrentState == state) return;
             CurrentState = state;
             ConnectionStateChange(CurrentState);
-            // Limit sounds: step 6. Interact connections (ropes, move objects): with the connection port.
+            string sound = CurrentState == 1 ? _maxLimitSound : CurrentState == -1 ? _minLimitSound : "";
+            if (effects && sound != "") PlaySoundAt("LeverSound", sound, _hinge.PivotPoint);
+            // Interact connections (ropes, move objects): with the connection port.
         }
     }
 }

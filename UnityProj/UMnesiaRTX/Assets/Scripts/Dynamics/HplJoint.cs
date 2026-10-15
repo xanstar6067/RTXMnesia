@@ -331,8 +331,118 @@ namespace RTXMnesia.Dynamics
                 if (max) MaxLimitReached?.Invoke(this);
                 else MinLimitReached?.Invoke(this);
             }
-            // LimitEffect: the limit sound comes with step 6.
+            if (max) LimitEffect(Data.maxLimitSound, Data.maxLimitMinSpeed, Data.maxLimitMaxSpeed);
+            else LimitEffect(Data.minLimitSound, Data.minLimitMinSpeed, Data.minLimitMaxSpeed);
             _hasCollided = true;
+        }
+
+        Sound.HplSoundHandler SoundHandler => Child.World.SurfaceSounds.Sound;
+
+        /// <summary>iPhysicsJoint::LimitEffect: the limit sound at the child body, louder the faster it hits.</summary>
+        void LimitEffect(string sound, float minSpeed, float maxSpeed)
+        {
+            if (string.IsNullOrEmpty(sound) || _hasCollided || SoundHandler == null) return;
+            Vector3 vel = Child.LinearVelocity - (Parent != null ? Parent.LinearVelocity : Vector3.zero);
+            float speed = Mathf.Min(vel.magnitude, maxSpeed);
+            if (speed < minSpeed) return;
+            var s = SoundHandler.CreateSoundEntity("LimitSound", sound, true);
+            if (s == null) return;
+            s.IsSaved = false;
+            s.Volume = (speed - minSpeed) / (maxSpeed - minSpeed);
+            s.Position = Child.Position;
+        }
+
+        Sound.HplSoundEntity _moveSound;
+        int _speedCount;
+        Matrix4x4 _prevChild, _prevParent;
+
+        /// <summary>
+        /// iPhysicsJoint::OnPhysicsUpdate: the move sound (a door's creak) while the child moves faster than
+        /// MinMoveSpeed relative to the parent, its pitch and volume by the speed (CalcSoundFreq).
+        /// </summary>
+        internal void UpdateSound()
+        {
+            bool frozen = !(Parent != null && Parent.Enabled) && !Child.Enabled;
+            if (frozen && _moveSound == null) return;
+            if (string.IsNullOrEmpty(Data.moveSound) || SoundHandler == null || SoundHandler.Silent) return;
+
+            Vector3 vel = Data.moveSpeedAngular
+                ? Child.AngularVelocity - (Parent != null ? Parent.AngularVelocity : Vector3.zero)
+                : Child.LinearVelocity - (Parent != null ? Parent.LinearVelocity : Vector3.zero);
+            Matrix4x4 child = Child.Data.transform.localToWorldMatrix;
+            Matrix4x4 parent = Parent != null ? Parent.Data.transform.localToWorldMatrix : Matrix4x4.identity;
+            if (child == _prevChild && parent == _prevParent) vel = Vector3.zero;
+            _prevChild = child;
+            _prevParent = parent;
+            float speed = vel.magnitude;
+
+            if (_moveSound != null && !SoundExists(_moveSound)) _moveSound = null;
+            if (_moveSound != null)
+            {
+                if (speed <= Mathf.Max(Data.minMoveSpeed - 0.2f, 0.1f))
+                {
+                    _moveSound.FadeOut(4.3f);
+                    _moveSound = null;
+                    return;
+                }
+                var entry = _moveSound.GetEntry(Sound.SoundEntityType.Main);
+                if (entry != null)
+                {
+                    CalcSoundFreq(speed, out float freq, out float volume);
+                    entry.SetSpeedMul(freq);
+                    entry.SetVolumeMul(volume);
+                }
+                _moveSound.Position = PivotPoint;
+            }
+            else if (speed > Data.minMoveSpeed)
+            {
+                if (_speedCount >= 3)
+                {
+                    _speedCount = 0;
+                    _moveSound = SoundHandler.CreateSoundEntity("MoveSound", Data.moveSound, true);
+                    if (_moveSound != null)
+                    {
+                        _moveSound.IsSaved = false;
+                        _moveSound.FadeIn(3.3f);
+                        _moveSound.Position = PivotPoint;
+                    }
+                }
+                else _speedCount++;
+            }
+            else _speedCount = 0;
+        }
+
+        bool SoundExists(Sound.HplSoundEntity sound)
+        {
+            foreach (var s in SoundHandler.SoundEntities) if (s == sound) return true;
+            return false;
+        }
+
+        void CalcSoundFreq(float speed, out float freq, out float volume)
+        {
+            float abs = Mathf.Abs(speed);
+            if (abs >= Data.middleMoveSpeed)
+            {
+                if (abs >= Data.maxMoveFreqSpeed)
+                {
+                    freq = Data.maxMoveFreq;
+                    volume = Data.maxMoveVolume;
+                    return;
+                }
+                float t = (abs - Data.middleMoveSpeed) / (Data.maxMoveFreqSpeed - Data.middleMoveSpeed);
+                freq = (1f - t) + t * Data.maxMoveFreq;
+                volume = Data.middleMoveVolume * (1f - t) + t * Data.maxMoveVolume;
+                return;
+            }
+            if (abs <= Data.minMoveFreqSpeed)
+            {
+                freq = Data.minMoveFreq;
+                volume = Data.minMoveVolume;
+                return;
+            }
+            float u = (Data.middleMoveSpeed - abs) / (Data.middleMoveSpeed - Data.minMoveFreqSpeed);
+            freq = (1f - u) + u * Data.minMoveFreq;
+            volume = Data.middleMoveVolume * (1f - u) + u * Data.minMoveVolume;
         }
 
         /// <summary>CheckBreakage: true when the joint is to be removed.</summary>
@@ -343,7 +453,15 @@ namespace RTXMnesia.Dynamics
             float force = Joint.currentForce.magnitude;
             if (force >= BreakForce || Broken)
             {
-                // Break sound: step 6.
+                if (!string.IsNullOrEmpty(Data.breakSound) && SoundHandler != null)
+                {
+                    var s = SoundHandler.CreateSoundEntity("BreakSound", Data.breakSound, true);
+                    if (s != null)
+                    {
+                        s.IsSaved = false;
+                        s.Position = PivotPoint;
+                    }
+                }
                 return true;
             }
             return false;

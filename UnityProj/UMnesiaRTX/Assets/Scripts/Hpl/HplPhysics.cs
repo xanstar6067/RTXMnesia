@@ -40,6 +40,13 @@ namespace RTXMnesia.Hpl
             return body == null || body.collideCharacter;
         }
 
+        /// <summary>cSoundRayCallback: only entity bodies with BlocksSound block sounds (static geometry does not).</summary>
+        public static bool BlocksSound(Collider c)
+        {
+            var body = BodyOf(c);
+            return body != null && body.blocksSound;
+        }
+
         /// <summary>
         /// iPhysicsWorld::CheckShapeWorldCollision: is <paramref name="shape"/> at this pose inside anything?
         /// PhysX returns one separation per collider; a collider is re-tested a few times so concave

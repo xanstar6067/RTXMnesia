@@ -51,6 +51,7 @@ namespace RTXMnesia.Ui
             };
             Messages.duration = Hints.duration = text;
             Messages.fontSize = menu != null ? menu.GetVector2("Messages", "GameMessageFontSize", new Vector2(18f, 18f)) : new Vector2(18f, 18f);
+            Messages.QuestAddedSound = menu != null ? menu.GetString("Messages", "QuestAddedSound", "") : "";
             Hints.fontSize = menu != null ? menu.GetVector2("Hints", "FontSize", new Vector2(15f, 15f)) : new Vector2(15f, 15f);
             Hints.yPos = menu != null ? menu.GetFloat("Hints", "YPos", 40f) : 40f;
             Hints.textDurationMul = menu != null ? menu.GetFloat("Hints", "TextDurationMul", 1.5f) : 1.5f;
@@ -374,6 +375,9 @@ namespace RTXMnesia.Ui
             public TextDuration duration;
             public Vector2 fontSize = new(18f, 18f);
             public System.Func<string, string> parse;
+            /// <summary>menu.cfg Messages QuestAddedSound, played by the map's sound handler.</summary>
+            public string QuestAddedSound = "";
+            public RTXMnesia.Sound.HplSoundHandler Sound;
             public string Text { get; private set; } = "";
             public float Alpha { get; private set; }
             public float QuestAlpha { get; private set; }
@@ -415,7 +419,8 @@ namespace RTXMnesia.Ui
                     if (QuestAlpha < 0.1f)
                     {
                         QuestAlpha += timeStep;
-                        // TODO step 6 (sound): Messages QuestAddedSound when crossing 0.1.
+                        // Played here so that it does not come at once (the original's comment).
+                        if (QuestAlpha >= 0.1f && Sound != null) Sound.PlayGuiSoundData(QuestAddedSound, RTXMnesia.Sound.SoundEntryType.Gui);
                     }
                     else if (QuestAlpha < 1f)
                     {

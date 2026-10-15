@@ -22,13 +22,12 @@ namespace RTXMnesia.ScriptApi
 
         protected void StartEffectEmotionFlash(string asTextCat, string asTextEntry, string asSound)
         {
-            Effects.EmotionFlash.Start(Translate(asTextCat, asTextEntry));
-            if (!string.IsNullOrEmpty(asSound)) NotPorted(nameof(StartEffectEmotionFlash) + " sound", "the sound system (step 6)");
+            Effects.EmotionFlash.Start(Translate(asTextCat, asTextEntry), asSound);
         }
 
         protected void SetInDarknessEffectsActive(bool abX) => NotPorted(nameof(SetInDarknessEffectsActive), "darkness effects (step 6, insanity)");
 
-        /// <summary>The position is the first body of the entity (3D voices are heard with step 6).</summary>
+        /// <summary>The position is the first body of the entity.</summary>
         protected void AddEffectVoice(string asVoiceFile, string asEffectFile, string asTextCat, string asTextEntry, bool abUsePostion,
                                       string asPosEnitity, float afMinDistance, float afMaxDistance)
         {
@@ -61,27 +60,97 @@ namespace RTXMnesia.ScriptApi
         protected void StopCurrentInsanityEvent() { }
         protected bool InsanityEventIsActive() => false;
 
-        // ------------------------------------------------------------------ sounds and music (step 6)
+        // ------------------------------------------------------------------ sounds and music
 
-        protected void PlayGuiSound(string asSoundFile, float afVolume) => NotPorted(nameof(PlayGuiSound), "the sound system (step 6)");
+        protected Sound.HplSoundHandler SoundHandler => Map.sound;
+
+        /// <summary>A .snt (no or "snt" extension) as a GUI sound, otherwise a sound file.</summary>
+        protected void PlayGuiSound(string asSoundFile, float afVolume)
+        {
+            string ext = System.IO.Path.GetExtension(asSoundFile ?? "").TrimStart('.').ToLowerInvariant();
+            if (ext == "" || ext == "snt") SoundHandler.PlayGuiSoundData(asSoundFile, Sound.SoundEntryType.Gui, afVolume);
+            else SoundHandler.PlayGui(asSoundFile, false, afVolume);
+        }
 
         protected void PreloadSound(string asSoundFile) { }
 
-        protected void PlaySoundAtEntity(string asSoundName, string asSoundFile, string asEntity, float afFadeSpeed, bool abSaveSound) =>
-            NotPorted(nameof(PlaySoundAtEntity), "the sound system (step 6)");
+        /// <summary>
+        /// The sound is removed when over (the original ignores abSaveSound for that). On "Player" it plays
+        /// without position; otherwise it follows the entity, or with abSaveSound stays where the entity is now.
+        /// The fade argument is a time (fade speed 1 / time).
+        /// </summary>
+        protected void PlaySoundAtEntity(string asSoundName, string asSoundFile, string asEntity, float afFadeSpeed, bool abSaveSound)
+        {
+            float fadeSpeed = afFadeSpeed == 0f ? 0f : 1f / afFadeSpeed;
+            if (asEntity == "Player")
+            {
+                var s = SoundHandler.CreateSoundEntity(asSoundName, asSoundFile, true);
+                if (s == null) return;
+                s.ForcePlayAsGuiSound = true;
+                s.IsSaved = abSaveSound;
+                if (afFadeSpeed > 0f) s.FadeIn(fadeSpeed);
+                return;
+            }
+            var entity = GetEntity(asEntity);
+            if (entity == null) return;
+            var sound = SoundHandler.CreateSoundEntity(asSoundName, asSoundFile, true);
+            if (sound == null) return;
+            if (!abSaveSound) sound.Parent = entity.AttachTransform;
+            else sound.Position = entity.AttachTransform.position;
+            sound.IsSaved = abSaveSound;
+            if (afFadeSpeed > 0f) sound.FadeIn(fadeSpeed);
+        }
 
-        protected void FadeInSound(string asSoundName, float afFadeTime, bool abPlayStart) => NotPorted(nameof(FadeInSound), "the sound system (step 6)");
+        protected void FadeInSound(string asSoundName, float afFadeTime, bool abPlayStart)
+        {
+            float fadeSpeed = afFadeTime == 0f ? 0f : 1f / afFadeTime;
+            var sound = SoundHandler.GetSoundEntity(asSoundName);
+            if (sound == null)
+            {
+                HplLog.Error($"Could not find sound entity '{asSoundName}'");
+                return;
+            }
+            if (fadeSpeed <= 0f) sound.Play(abPlayStart);
+            else sound.FadeIn(fadeSpeed);
+        }
 
-        protected void StopSound(string asSoundName, float afFadeTime) => NotPorted(nameof(StopSound), "the sound system (step 6)");
+        /// <summary>Every sound entity with the name.</summary>
+        protected void StopSound(string asSoundName, float afFadeTime)
+        {
+            float fadeSpeed = afFadeTime == 0f ? 0f : 1f / afFadeTime;
+            bool found = false;
+            foreach (var sound in SoundHandler.SoundEntities)
+            {
+                if (sound.Name != asSoundName) continue;
+                if (fadeSpeed <= 0f) sound.Stop(true);
+                else sound.FadeOut(fadeSpeed);
+                found = true;
+            }
+            if (!found) HplLog.Error($"Could not find sound entity '{asSoundName}'");
+        }
 
         protected void PlayMusic(string asMusicFile, bool abLoop, float afVolume, float afFadeTime, int alPrio, bool abResume) =>
-            NotPorted(nameof(PlayMusic), "the music handler (step 6)");
+            SoundHandler.Music.Play(asMusicFile, abLoop, afVolume, afFadeTime, alPrio, abResume);
 
-        protected void StopMusic(float afFadeTime, int alPrio) => NotPorted(nameof(StopMusic), "the music handler (step 6)");
+        protected void StopMusic(float afFadeTime, int alPrio) => SoundHandler.Music.Stop(afFadeTime, alPrio);
 
-        protected void FadeGlobalSoundVolume(float afDestVolume, float afTime) => NotPorted(nameof(FadeGlobalSoundVolume), "the sound system (step 6)");
+        /// <summary>The script's own global volume request (world sounds); back at 1 it is removed.</summary>
+        protected void FadeGlobalSoundVolume(float afDestVolume, float afTime)
+        {
+            var entry = SoundHandler.GlobalVolume.GetEntry(GlobalVolumeTypeScript, true);
+            float speed = afTime > 0f ? Mathf.Abs(afDestVolume - entry.Val) / afTime : 1000f;
+            SoundHandler.FadeGlobalVolume(afDestVolume, speed, Sound.SoundEntryType.World, GlobalVolumeTypeScript, afDestVolume == 1f);
+        }
 
-        protected void FadeGlobalSoundSpeed(float afDestSpeed, float afTime) => NotPorted(nameof(FadeGlobalSoundSpeed), "the sound system (step 6)");
+        protected void FadeGlobalSoundSpeed(float afDestSpeed, float afTime)
+        {
+            var entry = SoundHandler.GlobalSpeed.GetEntry(GlobalVolumeTypeScript, true);
+            float speed = afTime > 0f ? Mathf.Abs(afDestSpeed - entry.Val) / afTime : 1000f;
+            SoundHandler.FadeGlobalSpeed(afDestSpeed, speed, Sound.SoundEntryType.World, GlobalVolumeTypeScript, afDestSpeed == 1f);
+        }
+
+        /// <summary>eLuxGlobalVolumeType_Script.</summary>
+        const int GlobalVolumeTypeScript = 0;
 
         // ------------------------------------------------------------------ particle systems (.ps converter)
 

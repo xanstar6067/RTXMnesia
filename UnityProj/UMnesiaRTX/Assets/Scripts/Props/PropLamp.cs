@@ -59,7 +59,7 @@ namespace RTXMnesia.Props
             float add = min * (1f - increase) + max * increase;
             player.AddSanity(add, false);
             player.tinderboxes -= 1;
-            // ui_use_tinderbox sound: step 6.
+            Map.sound.PlayGuiSoundData("ui_use_tinderbox", RTXMnesia.Sound.SoundEntryType.Gui);
             RunCallbackFunc("OnIgnite");
             SetLit(true, true);
             return true;

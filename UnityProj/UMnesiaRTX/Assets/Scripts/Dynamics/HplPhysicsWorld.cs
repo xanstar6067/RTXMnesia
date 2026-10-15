@@ -28,8 +28,12 @@ namespace RTXMnesia.Dynamics
         readonly Collider[] _overlaps = new Collider[64];
         static bool _layersSet;
 
+        /// <summary>Impact, scrape and roll sounds (set its Sound and Surfaces).</summary>
+        public readonly HplSurfaceSounds SurfaceSounds;
+
         public HplPhysicsWorld()
         {
+            SurfaceSounds = new HplSurfaceSounds(this);
             if (_layersSet) return;
             _layersSet = true;
             for (int layer = 0; layer < 32; layer++) Physics.IgnoreLayerCollision(NoCollideLayer, layer, true);
@@ -97,6 +101,7 @@ namespace RTXMnesia.Dynamics
         {
             foreach (var body in Bodies) body.BeforeSimulate(timeStep);
             foreach (var joint in Joints) joint.BeforeSimulate();
+            SurfaceSounds.BeforeSimulate();
         }
 
         public void AfterSimulate(float timeStep)
@@ -112,6 +117,8 @@ namespace RTXMnesia.Dynamics
                 else i++;
             }
             foreach (var body in Bodies) body.AfterSimulate(timeStep);
+            foreach (var joint in Joints) joint.UpdateSound();
+            SurfaceSounds.AfterSimulate(timeStep);
         }
 
         /// <summary>A whole step with an explicit simulation (edit mode, Physics.simulationMode = Script).</summary>
@@ -128,6 +135,7 @@ namespace RTXMnesia.Dynamics
             foreach (var body in new List<HplPhysicsBody>(bodies))
             {
                 foreach (var joint in new List<HplJoint>(body.Joints)) DestroyJoint(joint);
+                SurfaceSounds.OnBodyRemoved(body);
                 Bodies.Remove(body);
                 _byRigidbody.Remove(body.Rigidbody);
                 _byData.Remove(body.Data);

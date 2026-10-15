@@ -231,6 +231,30 @@ namespace RTXMnesia.ScriptApi
         public virtual Transform AttachTransform => Bodies.Count > 0 ? Bodies[0].Transform : GameObject.transform;
 
         /// <summary>
+        /// iLuxEntity::PlaySound: a sound entity "&lt;entity&gt;_&lt;name&gt;" that follows the entity (attach) or
+        /// stays where it is now.
+        /// </summary>
+        public Sound.HplSoundEntity PlaySound(string name, string file, bool removeWhenDone, bool attach)
+        {
+            if (string.IsNullOrEmpty(file) || Map == null || Map.sound == null) return null;
+            var sound = Map.sound.CreateSoundEntity(Name + "_" + name, file, removeWhenDone);
+            if (sound == null) return null;
+            var t = AttachTransform;
+            if (attach) sound.Parent = t;
+            else sound.Position = t.position;
+            return sound;
+        }
+
+        /// <summary>cWorld::CreateSoundEntity + SetPosition: a sound that plays once at a point.</summary>
+        public Sound.HplSoundEntity PlaySoundAt(string name, string file, Vector3 position)
+        {
+            if (string.IsNullOrEmpty(file) || Map == null || Map.sound == null) return null;
+            var sound = Map.sound.CreateSoundEntity(name, file, true);
+            if (sound != null) sound.Position = position;
+            return sound;
+        }
+
+        /// <summary>
         /// iLuxEntity::ConnectionStateChange: the change callback, then every connection that uses this state gets
         /// it (inverted if set) and runs its callback (connection name, this entity, connected entity, state).
         /// </summary>
@@ -286,7 +310,18 @@ namespace RTXMnesia.ScriptApi
         }
 
         /// <summary>Bodies, mesh, lights, billboards, particles and sounds of the entity follow its active state.</summary>
-        protected virtual void OnSetActive(bool active) => GameObject.SetActive(active);
+        protected virtual void OnSetActive(bool active)
+        {
+            GameObject.SetActive(active);
+            // iLuxProp::OnSetActive: its own sound entities play / stop.
+            if (Map == null || Map.sound == null) return;
+            foreach (var sound in Map.SoundEntitiesUnder(GameObject.transform))
+            {
+                sound.Active = true;
+                if (active) sound.Play(false);
+                else sound.Stop(false);
+            }
+        }
 
         /// <summary>iLuxEntity::UpdateLogic (only for active entities).</summary>
         public void UpdateLogic(float timeStep)

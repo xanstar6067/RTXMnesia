@@ -38,7 +38,7 @@ namespace RTXMnesia.World
         public float breakForce = 1000f;
         public string breakSound = "";
 
-        [Header("Sounds (step 6)")]
+        [Header("Sounds")]
         public string moveSound = "";
         public bool moveSpeedAngular;
         public float minMoveSpeed = 0.5f, minMoveFreq = 0.9f, minMoveVolume = 0.3f, minMoveFreqSpeed = 0.9f;

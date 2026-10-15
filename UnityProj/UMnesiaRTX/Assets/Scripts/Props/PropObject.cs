@@ -114,8 +114,7 @@ namespace RTXMnesia.Props
         {
             foreach (var body in PhysicsBodies)
             {
-                var contacts = body.Data.GetComponent<HplBodyContacts>() ?? body.Data.gameObject.AddComponent<HplBodyContacts>();
-                contacts.Body = body;
+                var contacts = body.Contacts;
                 contacts.Collided -= OnBodyCollide;
                 contacts.Collided += OnBodyCollide;
             }
@@ -291,7 +290,8 @@ namespace RTXMnesia.Props
             if (_containedItem != "")
                 Map.CreateEntity(Name + "_item", _containedItem, center, Quaternion.identity, Vector3.one);
 
-            // Break sound and particle system: step 6 / particle converter.
+            PlaySoundAt(Name + "_BreakSound", _breakSound, center);
+            // Break particle system: with the particle converter.
             RunCallbackFunc("Break");
         }
 
