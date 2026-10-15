@@ -40,6 +40,20 @@ namespace RTXMnesia.Dynamics
 
         public HplSurfaceSounds(HplPhysicsWorld world) => _world = world;
 
+        public void FadeOutLoopSounds(float speed)
+        {
+            void Fade(State state)
+            {
+                if (Exists(state.ScrapeSound)) state.ScrapeSound.FadeOut(speed);
+                if (Exists(state.RollSound)) state.RollSound.FadeOut(speed);
+                state.ScrapeSound = state.RollSound = null;
+                state.ScrapeAgainst = null;
+            }
+            foreach (var body in _world.Bodies) Fade(body.SurfaceState);
+            foreach (var state in _activeStatic) Fade(state);
+            _activeStatic.Clear();
+        }
+
         // ------------------------------------------------------------------ per step
 
         /// <summary>iPhysicsBody::UpdateBeforeSimulate: the slide and collision flags of this step.</summary>

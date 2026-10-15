@@ -147,7 +147,7 @@ namespace RTXMnesia.Effects
                 CoreUtils.DrawFullScreen(cmd, _material, props, CopyPass);
                 RTHandle input = _menuSharp;
                 // LuxMainMenu::RenderBlurTexture: one blur plus six further H/V pairs.
-                for (int i = 0; i < 7; i++)
+                for (int i = 0; i < (ui.InventoryOpen ? 0 : 7); i++)
                 {
                     props.SetTexture(SourceId, input);
                     CoreUtils.SetRenderTarget(cmd, _menuTemp, ClearFlag.None);
@@ -159,10 +159,10 @@ namespace RTXMnesia.Effects
                 }
             }
             props.SetTexture(MenuSharpId, _menuSharp);
-            props.SetTexture(SourceId, _menuBlur);
+            props.SetTexture(SourceId, ui.InventoryOpen ? _menuSharp : _menuBlur);
             props.SetFloat(MenuBlendId, ui.MenuOpacity);
             CoreUtils.SetRenderTarget(cmd, ctx.cameraColorBuffer, ClearFlag.None);
-            CoreUtils.DrawFullScreen(cmd, _material, props, 5);
+            CoreUtils.DrawFullScreen(cmd, _material, props, ui.InventoryOpen ? 6 : 5);
         }
 
         void ReleaseMenu()

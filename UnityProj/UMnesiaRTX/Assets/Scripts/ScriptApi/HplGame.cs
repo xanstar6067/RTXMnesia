@@ -30,6 +30,22 @@ namespace RTXMnesia.ScriptApi
             public int count = 1;
         }
 
+        public sealed class CombineCallback
+        {
+            public string name, itemA, itemB, function;
+            public bool autoDestroy;
+        }
+        public static readonly List<CombineCallback> CombineCallbacks = new();
+        public static Levels.InventoryScript InventoryScript { get; private set; }
+
+        public static void EnsureInventoryScript(HplMap map)
+        {
+            bool first = InventoryScript == null;
+            InventoryScript ??= new Levels.InventoryScript();
+            InventoryScript.Map = map;
+            if (first) InventoryScript.OnStart();
+        }
+
         /// <summary>Notes and diaries picked up (cLuxJournal::AddNote / AddDiary); the journal screen is step 6.</summary>
         public static readonly List<(string type, string textEntry, string image)> JournalEntries = new();
         public static int Coins;
@@ -44,7 +60,16 @@ namespace RTXMnesia.ScriptApi
             return "";
         }
 
-        static bool HasCount(string type) => type is "Health" or "Sanity" or "LampOil" or "Tinderbox";
+        public static bool HasCount(string type) => type is "Health" or "Sanity" or "LampOil" or "Tinderbox";
+
+        public static bool HasType(string type) => Items.Exists(i => i.type == type);
+
+        public static void RemoveItem(Item item)
+        {
+            if (item == null) return;
+            if (HasCount(item.type) && --item.count > 0) return;
+            Items.Remove(item);
+        }
 
         /// <summary>
         /// cLuxInventory::AddItem with the item types' BeforeAddItem (LuxItemType.cpp): tinderboxes and coins only
@@ -80,7 +105,8 @@ namespace RTXMnesia.ScriptApi
                 }
             }
 
-            var item = new Item { name = name, type = type, subType = subType, image = "graphics/item/" + image, amount = amount, val = val, extraVal = extraVal };
+            image ??= "";
+            var item = new Item { name = name, type = type, subType = subType, image = image.StartsWith("graphics/", StringComparison.OrdinalIgnoreCase) ? image : "graphics/item/" + image, amount = amount, val = val, extraVal = extraVal };
 
             bool consumed = false;
             switch (type)
@@ -127,6 +153,13 @@ namespace RTXMnesia.ScriptApi
             }
             removeProp = true;
             if (consumed) return null;
+            int capacity = map.menuConfig != null ? map.menuConfig.GetInt("Inventory", "SlotsRows", 3) * map.menuConfig.GetInt("Inventory", "SlotsColumns", 6) : 18;
+            if (Items.Count >= capacity)
+            {
+                hud.Messages.SetMessage(hud.Translate("Inventory", "TooManyItemsOfSort"), 0f);
+                removeProp = false;
+                return null;
+            }
             Items.Add(item);
             return item;
         }
@@ -150,6 +183,9 @@ namespace RTXMnesia.ScriptApi
             Items.Clear();
             JournalEntries.Clear();
             Coins = 0;
+            CombineCallbacks.Clear();
+            InventoryScript = null;
+            Player.PlayerStateVars.InventoryItem = null;
         }
 
         /// <summary>cLuxGlobalDataHandler::GetVar: created empty on first use.</summary>

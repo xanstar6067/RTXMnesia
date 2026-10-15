@@ -39,6 +39,13 @@ namespace RTXMnesia.Dynamics
             for (int layer = 0; layer < 32; layer++) Physics.IgnoreLayerCollision(NoCollideLayer, layer, true);
         }
 
+        /// <summary>iPhysicsWorld::FadeoutAllLoopSounds: frozen props must not keep scraping / creaking in UI.</summary>
+        public void FadeOutLoopSounds(float speed)
+        {
+            SurfaceSounds.FadeOutLoopSounds(speed);
+            foreach (var joint in Joints) joint.FadeOutLoopSound(speed);
+        }
+
         /// <summary>Creates the bodies of an entity (body name "&lt;entity&gt;_&lt;body&gt;") and then its joints.</summary>
         public List<HplPhysicsBody> AddEntity(Transform entity, HplSurfaces surfaces, bool interpolate)
         {

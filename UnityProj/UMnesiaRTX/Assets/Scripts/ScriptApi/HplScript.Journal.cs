@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace RTXMnesia.ScriptApi
 {
     // Messages, quests, notes, hints and the inventory (LuxScriptHandler.cpp → cLuxMessageHandler, cLuxJournal,
-    // cLuxHintHandler, cLuxInventory). Journal and inventory screens come with step 6; their data is kept now.
+    // cLuxHintHandler, cLuxInventory). The journal screen follows the inventory port.
     public abstract partial class HplScript
     {
         protected void SetMessage(string asTextCategory, string asTextEntry, float afTime) =>
@@ -58,35 +58,55 @@ namespace RTXMnesia.ScriptApi
 
         public bool InventoryDisabled { get; private set; }
 
-        protected void ExitInventory() { }
+        protected void ExitInventory() => Map.GameUi?.CloseInventory();
 
         protected void SetInventoryDisabled(bool abX) => InventoryDisabled = abX;
 
         protected void SetInventoryMessage(string asTextCategory, string asTextEntry, float afTime) =>
-            NotPorted(nameof(SetInventoryMessage), "the inventory screen (step 6)");
+            Map.GameUi?.Inventory?.SetMessage(Hud.ParseString(Translate(asTextCategory, asTextEntry)), afTime);
 
         protected void GiveItem(string asName, string asType, string asSubTypeName, string asImageName, float afAmount)
         {
-            if (HplGame.GetItem(asName) != null) return;
-            HplGame.Items.Add(new HplGame.Item { name = asName, type = asType, subType = asSubTypeName, image = asImageName, amount = afAmount });
+            string type = HplGame.ItemType(asType);
+            if (type != "") HplGame.AddItem(Map, asName, type, asSubTypeName, asImageName, afAmount, "", "", out _);
         }
 
-        /// <summary>The item data of the .ent (type, image, amount) comes with the inventory (step 6); HasItem works now.</summary>
+        /// <summary>Item variables from the generated .ent definition bank, without creating a world prop.</summary>
         protected void GiveItemFromFile(string asName, string asFileName)
         {
-            if (HplGame.GetItem(asName) == null) HplGame.Items.Add(new HplGame.Item { name = asName, type = asFileName });
-            NotPorted(nameof(GiveItemFromFile) + " item data", "the inventory (step 6)");
+            var bank = UnityEngine.Resources.Load<Ui.HplInventoryAssets>(Ui.HplInventoryAssets.ResourceName);
+            var item = bank != null ? bank.Item(asFileName) : null;
+            if (item == null) { HplLog.Error("Item definition not found: " + asFileName); return; }
+            HplGame.AddItem(Map, asName, HplGame.ItemType(item.type), item.subType, item.image, item.amount, "", "", out _);
         }
 
-        protected void RemoveItem(string asName) => HplGame.Items.RemoveAll(i => i.name == asName);
+        // The string overload removes the entire inventory entry; item-type consumption uses the pointer
+        // overload (HplGame.RemoveItem) and decrements a counted stack by one, as in LuxInventory.cpp.
+        protected void RemoveItem(string asName) => HplGame.Items.Remove(HplGame.GetItem(asName));
 
         protected bool HasItem(string asName) => HplGame.GetItem(asName) != null;
 
-        readonly List<(string name, string item, string entity, string function, bool autoDestroy)> _useItemCallbacks = new();
+        sealed class UseItemCallback
+        {
+            public string name, item, entity, function;
+            public bool autoDestroy;
+        }
+        readonly List<UseItemCallback> _useItemCallbacks = new();
 
-        /// <summary>Kept until items can be used on entities (inventory, step 6).</summary>
         protected void AddUseItemCallback(string asName, string asItem, string asEntity, string asFunction, bool abAutoDestroy) =>
-            _useItemCallbacks.Add((asName, asItem, asEntity, asFunction, abAutoDestroy));
+            _useItemCallbacks.Add(new UseItemCallback { name = asName, item = asItem, entity = asEntity, function = asFunction, autoDestroy = abAutoDestroy });
+
+        public bool HasUseItemCallback(string item, string entity) => _useItemCallbacks.Exists(c => c.item == item && c.entity == entity);
+
+        public bool TryUseItem(string item, string entity)
+        {
+            var callback = _useItemCallbacks.Find(c => c.item == item && c.entity == entity);
+            if (callback == null) return false;
+            // A callback may remove itself, the item, the entity, or register a replacement with the same name.
+            Invoke(callback.function, new object[] { callback.item, callback.entity });
+            if (callback.autoDestroy) _useItemCallbacks.Remove(callback);
+            return true;
+        }
 
         protected void RemoveUseItemCallback(string asName)
         {
@@ -96,8 +116,12 @@ namespace RTXMnesia.ScriptApi
         }
 
         protected void AddCombineCallback(string asName, string asItemA, string asItemB, string asFunction, bool abAutoDestroy) =>
-            NotPorted(nameof(AddCombineCallback), "the inventory (step 6)");
+            HplGame.CombineCallbacks.Add(new HplGame.CombineCallback { name = asName, itemA = asItemA, itemB = asItemB, function = asFunction, autoDestroy = abAutoDestroy });
 
-        protected void RemoveCombineCallback(string asName) { }
+        protected void RemoveCombineCallback(string asName)
+        {
+            int i = HplGame.CombineCallbacks.FindIndex(c => c.name == asName);
+            if (i >= 0) HplGame.CombineCallbacks.RemoveAt(i);
+        }
     }
 }

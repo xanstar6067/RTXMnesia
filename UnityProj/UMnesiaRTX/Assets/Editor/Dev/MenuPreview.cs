@@ -44,7 +44,9 @@ namespace RTXMnesia.EditorDev
             {
                 if (!Application.isBatchMode) throw new InvalidOperationException("Menu preview is batch-only.");
                 MenuConverter.ConvertBatch();
+                InventoryConverter.ConvertBatch();
                 PauseTests.Run();
+                InventoryTests.Run();
                 EditorSceneManager.OpenScene("Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity", OpenSceneMode.Single);
                 SessionState.SetInt(ExitCodeKey, 1);
                 SessionState.SetFloat("RTXMnesia.MenuPreview.Start", (float)EditorApplication.timeSinceStartup);

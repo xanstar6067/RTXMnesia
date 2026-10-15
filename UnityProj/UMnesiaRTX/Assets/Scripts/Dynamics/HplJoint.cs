@@ -356,6 +356,13 @@ namespace RTXMnesia.Dynamics
         int _speedCount;
         Matrix4x4 _prevChild, _prevParent;
 
+        internal void FadeOutLoopSound(float speed)
+        {
+            if (_moveSound != null && SoundHandler != null && SoundExists(_moveSound)) _moveSound.FadeOut(speed);
+            _moveSound = null;
+            _speedCount = 0;
+        }
+
         /// <summary>
         /// iPhysicsJoint::OnPhysicsUpdate: the move sound (a door's creak) while the child moves faster than
         /// MinMoveSpeed relative to the parent, its pitch and volume by the speed (CalcSoundFreq).

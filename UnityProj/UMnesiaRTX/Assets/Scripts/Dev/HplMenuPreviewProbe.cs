@@ -57,6 +57,39 @@ namespace RTXMnesia.Dev
             }
             Debug.Log($"PASS: Play-mode menu, {vertices} text vertices; screenshots {folder}");
             map.GameUi.Resume();
+            // Synthetic contents for visual checks only. This batch never saves a scene or a game.
+            map.player.active = true;
+            // The first map intentionally blocks inventory throughout its introduction.
+            if (map.Script != null) typeof(HplScript).GetProperty(nameof(HplScript.InventoryDisabled)).SetValue(map.Script, false);
+            map.player.health = 65;
+            map.player.sanity = 45;
+            map.player.lampOil = 42;
+            map.player.tinderboxes = 7;
+            HplGame.Items.Clear();
+            var inventory = map.GameUi.Inventory;
+            foreach (string file in new[] { "lantern.ent", "potion_health.ent", "potion_health.ent", "potion_sanity.ent", "potion_oil.ent", "key_laboratory.ent", "glass_container.ent" })
+            {
+                var definition = inventory.Assets.Item(file);
+                if (definition == null) { Debug.LogError("Preview item missing: " + file); Finish(1); yield break; }
+                HplGame.AddItem(map, file, definition.type, definition.subType, definition.image, definition.amount, "", "", out _);
+            }
+            if (!map.GameUi.OpenInventory()) { Debug.LogError("Inventory refused to open"); Finish(1); yield break; }
+            Canvas inventoryCanvas = null;
+            foreach (var canvas in map.GetComponentsInChildren<Canvas>()) if (canvas.name == "HPL inventory") inventoryCanvas = canvas;
+            if (inventoryCanvas == null) { Debug.LogError("Inventory canvas missing"); Finish(1); yield break; }
+            inventoryCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+            inventoryCanvas.worldCamera = camera;
+            inventoryCanvas.planeDistance = 1;
+            foreach (var child in inventoryCanvas.GetComponentsInChildren<Transform>(true)) child.gameObject.layer = 31;
+            yield return new WaitForSecondsRealtime(1.3f);
+            inventory.Select(1);
+            inventory.View.Refresh(1, Vector2.zero);
+            Capture(target, Path.Combine(folder, "Inventory.png"), camera, inventoryCanvas);
+            inventory.SetMessage(inventory.T("CombinationDoesNotWork"), -1);
+            inventory.View.Refresh(1, Vector2.zero);
+            Capture(target, Path.Combine(folder, "InventoryMessage.png"), camera, inventoryCanvas);
+            map.GameUi.Resume();
+            Debug.Log("PASS: Play-mode inventory screenshots");
             camera.targetTexture = null;
             target.Release();
             Destroy(target);

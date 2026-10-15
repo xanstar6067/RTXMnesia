@@ -2,7 +2,7 @@
 
 Функции, которые движок Amnesia предоставляет скриптам `.hps` (регистрируются в `src/.../amnesia/src/game/LuxScriptHandler.cpp`, всего 261).
 Сгенерировано по копии игры в `source/`; «гл.1» и «всего» — число вызовов в скриптах первой главы и всей игры.
-Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но поведения ещё нет: экраны журнала и инвентаря, затухание моделей, враги); — пропускается с одним предупреждением в логе (часть движка не портирована).
+Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но поведения ещё нет: экран журнала, затухание моделей, враги); — пропускается с одним предупреждением в логе (часть движка не портирована).
 
 ## Нужны для главы 1 (по частоте)
 
@@ -37,11 +37,11 @@
 | `MovePlayerHeadPos` | 45 | 75 | ✓ | `void MovePlayerHeadPos(float afX, float afY, float afZ, float afSpeed, float afSlowDownDist)` |
 | `AddEnemyPatrolNode` | 44 | 175 | — | `void AddEnemyPatrolNode(string &in asEnemyName, string &in asNodeName, float afWaitTime, string &in asAnimation)` |
 | `GiveSanityDamage` | 43 | 100 | ~ | `void GiveSanityDamage(float afAmount, bool abUseEffect)` |
-| `GiveItemFromFile` | 43 | 109 | ~ | `void GiveItemFromFile(string& asName, string& asFileName)` |
+| `GiveItemFromFile` | 43 | 109 | ✓ | `void GiveItemFromFile(string& asName, string& asFileName)` |
 | `RemoveTimer` | 41 | 112 | ✓ | `void RemoveTimer(string &in asName)` |
 | `GetGlobalVarInt` | 40 | 87 | ✓ | `int GetGlobalVarInt(string &in asName)` |
 | `GetLocalVarString` | 38 | 44 | ✓ | `string& GetLocalVarString(string &in asName)` |
-| `AddUseItemCallback` | 35 | 230 | ~ | `void AddUseItemCallback(string &in asName, string &in asItem, string &in asEntity, string &in asFunction, bool abAutoDestroy)` |
+| `AddUseItemCallback` | 35 | 230 | ✓ | `void AddUseItemCallback(string &in asName, string &in asItem, string &in asEntity, string &in asFunction, bool abAutoDestroy)` |
 | `FadeRadialBlurTo` | 29 | 116 | ✓ | `void FadeRadialBlurTo(float afSize, float afSpeed)` |
 | `AddPropImpulse` | 27 | 56 | ✓ | `void AddPropImpulse(string &in asName, float afX, float afY, float afZ, string &in asCoordSystem)` |
 | `AddPropForce` | 27 | 28 | ✓ | `void AddPropForce(string &in asName, float afX, float afY, float afZ, string &in asCoordSystem)` |
@@ -76,7 +76,7 @@
 | `AddEffectVoice` | 13 | 36 | ✓ | `void AddEffectVoice(string &in asVoiceFile, string &in asEffectFile, string &in asTextCat, string &in asTextEntry, bool abUsePostion,  string &in asPosEnitity, float afMinDistance, float afMaxDistance)` |
 | `AddBodyImpulse` | 13 | 23 | ✓ | `void AddBodyImpulse(string &in asName, float afX, float afY, float afZ, string &in asCoordSystem)` |
 | `SetLeverStuckState` | 12 | 39 | ✓ | `void SetLeverStuckState(string &in asName, int alState, bool abEffects)` |
-| `RemoveItem` | 12 | 55 | ~ | `void RemoveItem(string &in asName)` |
+| `RemoveItem` | 12 | 55 | ✓ | `void RemoveItem(string &in asName)` |
 | `GiveHint` | 12 | 12 | ✓ | `void GiveHint(string &in asName, string &in asMessageCat, string &in asMessageEntry, float afTimeShown)` |
 | `GetLocalVarFloat` | 12 | 33 | ✓ | `float GetLocalVarFloat(string &in asName)` |
 | `CheckPoint` | 12 | 48 | ~ | `void CheckPoint(string &in asName,string &in asStartPos ,string &in asCallback, string &in asDeathHintCat, string &in asDeathHintEntry)` |
@@ -109,13 +109,13 @@
 | `SetLocalVarFloat` | 5 | 29 | ✓ | `void SetLocalVarFloat(string &in asName, float afVal)` |
 | `SetFogProperties` | 5 | 6 | ~ | `void SetFogProperties(float afStart, float afEnd, float afFalloffExp, bool abCulling)` |
 | `SetFogColor` | 5 | 6 | ✓ | `void SetFogColor(float afR, float afG, float afB, float afA)` |
-| `HasItem` | 5 | 24 | ~ | `bool HasItem(string &in asName)` |
+| `HasItem` | 5 | 24 | ✓ | `bool HasItem(string &in asName)` |
 | `GivePlayerDamage` | 5 | 32 | ~ | `void GivePlayerDamage(float afAmount, string &in asType, bool abSpinHead, bool abLethal)` |
 | `AddGlobalVarInt` | 5 | 13 | ✓ | `void AddGlobalVarInt(string &in asName, int alVal)` |
 | `SetPlayerLampOil` | 4 | 4 | ✓ | `void SetPlayerLampOil(float afOil)` |
 | `SetMoveObjectStateExt` | 4 | 5 | ✓ | `void SetMoveObjectStateExt(string &in asName, float afState, float afAcc, float afMaxSpeed, float afSlowdownDist, bool abResetSpeed)` |
 | `SetLevelDoorLocked` | 4 | 6 | ✓ | `void SetLevelDoorLocked(string &in asName, bool abLocked)` |
-| `SetInventoryDisabled` | 4 | 11 | ~ | `void SetInventoryDisabled(bool abX)` |
+| `SetInventoryDisabled` | 4 | 11 | ✓ | `void SetInventoryDisabled(bool abX)` |
 | `GetTimerTimeLeft` | 4 | 10 | ✓ | `float GetTimerTimeLeft(string &in asName)` |
 | `FadeGlobalSoundSpeed` | 4 | 10 | ✓ | `void FadeGlobalSoundSpeed(float afDestSpeed, float afTime)` |
 | `ClearSavedMaps` | 4 | 10 | — | `void ClearSavedMaps()` |
@@ -147,7 +147,7 @@
 | `RemoveHint` | 1 | 1 | ✓ | `void RemoveHint(string &in asName)` |
 | `QuestIsCompleted` | 1 | 2 | ✓ | `bool QuestIsCompleted(string &in asName)` |
 | `InteractConnectPropWithMoveObject` | 1 | 4 | — | `void InteractConnectPropWithMoveObject(string &in asName, string &in asPropName, string &in asMoveObjectName, bool abInteractOnly,bool abInvert, int alStatesUsed)` |
-| `GiveItem` | 1 | 17 | ~ | `void GiveItem(string &in asName, string &in asType, string &in asSubTypeName, string &in asImageName, float afAmount)` |
+| `GiveItem` | 1 | 17 | ✓ | `void GiveItem(string &in asName, string &in asType, string &in asSubTypeName, string &in asImageName, float afAmount)` |
 | `GetPlayerLampOil` | 1 | 1 | ✓ | `float GetPlayerLampOil()` |
 | `GetLeverState` | 1 | 5 | ✓ | `int GetLeverState(string &in asName)` |
 | `GetEntityExists` | 1 | 3 | ✓ | `bool GetEntityExists(string &in asName)` |
@@ -176,7 +176,7 @@
 | `AddPlayerBodyForce` | 5 | ✓ | `void AddPlayerBodyForce(float afX, float afY, float afZ, bool abUseLocalCoords)` |
 | `StartCredits` | 4 | — | `void StartCredits(string &in asMusic, bool abLoopMusic, string &in asTextCat, string &in asTextEntry, int alEndNum)` |
 | `ShowEnemyPlayerPosition` | 4 | — | `void ShowEnemyPlayerPosition(string &in asName)` |
-| `RemoveUseItemCallback` | 4 | ~ | `void RemoveUseItemCallback(string &in asName)` |
+| `RemoveUseItemCallback` | 4 | ✓ | `void RemoveUseItemCallback(string &in asName)` |
 | `QuestIsAdded` | 4 | ✓ | `bool QuestIsAdded(string &in asName)` |
 | `GetPlayerYSpeed` | 4 | ✓ | `float GetPlayerYSpeed()` |
 | `GetFlashbackIsActive` | 4 | — | `bool GetFlashbackIsActive()` |
@@ -195,6 +195,19 @@
 | `CreateDataCache` | 1 | — | `void CreateDataCache()` |
 | `AttachBodyToStickyArea` | 1 | — | `void AttachBodyToStickyArea(string& asAreaName, string& asBody)` |
 
-## Не используются в основной кампании (можно не портировать)
+## Общий скрипт инвентаря
 
-`AddCombineCallback`, `AddDiary`, `AddGlobalVarFloat`, `AddGlobalVarString`, `AddKeyPart`, `AddLocalVarString`, `AddPlayerSanity`, `AlertEnemyOfPlayerPresence`, `AttachPropToProp`, `AttachPropToStickyArea`, `ChangeManPigPose`, `ExitInventory`, `FadeEnemyToSmoke`, `FadeInSound`, `ForceTeslaPigSighting`, `GetBodyMass`, `GetEnemyStateName`, `GetEntityPosX`, `GetEntityPosY`, `GetEntityPosZ`, `GetGlobalVarFloat`, `GetPlayerPosX`, `GetPlayerPosY`, `GetPlayerPosZ`, `GetPropHealth`, `GetPropIsInteractedWith`, `GetSwingDoorLocked`, `InsanityEventIsActive`, `MathAbs`, `MathAcos`, `MathAsin`, `MathAtan`, `MathAtan2`, `MathClamp`, `MathCos`, `MathMax`, `MathMin`, `MathPow`, `MathSin`, `MathSqrt`, `MathTan`, `MovePlayerForward`, `PlaceEntityAtEntity`, `ProgLog`, `RemoveCombineCallback`, `ReplaceEntity`, `SetAllowStickyAreaAttachment`, `SetBodyMass`, `SetButtonSwitchedOn`, `SetEnemyIsHallucination`, `SetEnemySanityDecreaseActive`, `SetEntityPos`, `SetEntityVisible`, `SetGlobalVarFloat`, `SetInDarknessEffectsActive`, `SetInventoryMessage`, `SetLanternLitCallback`, `SetLevelDoorLockedSound`, `SetLevelDoorLockedText`, `SetMultiSliderCallback`, `SetMultiSliderStuckState`, `SetPlayerFallDamageDisabled`, `SetPlayerJumpForceMul`, `SetPlayerPermaDeathSound`, `SetPlayerPos`, `SetSkyBoxTexture`, `SetTeslaPigEasyEscapeDisabled`, `SetTeslaPigFadeDisabled`, `SetTeslaPigSoundDisabled`, `StartDemoEnd`, `StartInsanityEvent`, `StartPlayerSpawnPS`, `StartRandomInsanityEvent`, `StopCurrentInsanityEvent`, `StopPlayerSpawnPS`, `StringToBool`, `StringToFloat`, `StringToInt`, `TeleportEnemyToEntity`, `TeleportEnemyToNode`
+Исходная статистика выше считала скрипты карт. Отдельный `maps/main/inventory.hps` тоже перенесён вручную — [журнал переноса](inventory.md).
+
+| Функция | Статус | Поведение |
+|---|:---:|---|
+| `AddCombineCallback` | ✓ | Общий реестр игры, вызов InventoryScript с каноническим порядком пары, одноразовое удаление по объекту коллбэка |
+| `RemoveCombineCallback` | ✓ | Удаление первого совпадающего имени |
+| `ExitInventory` | ✓ | Закрытие сообщения либо выход с плавным переходом, как ExitPressed |
+| `SetInventoryMessage` | ✓ | Локализация, ParseString, сообщение ждёт ручного закрытия, как исходный Update |
+
+GiveItemFromFile читает определения `.ent` из генерируемого HplInventoryAssets. Подбор записок / дневников пока сохраняет данные для следующего этапа журнала. RemoveItem по имени удаляет всю запись; использование расходника уменьшает стопку на одну единицу.
+
+## Остальные функции без вызовов в скриптах карт (можно не портировать)
+
+`AddDiary`, `AddGlobalVarFloat`, `AddGlobalVarString`, `AddKeyPart`, `AddLocalVarString`, `AddPlayerSanity`, `AlertEnemyOfPlayerPresence`, `AttachPropToProp`, `AttachPropToStickyArea`, `ChangeManPigPose`, `FadeEnemyToSmoke`, `FadeInSound`, `ForceTeslaPigSighting`, `GetBodyMass`, `GetEnemyStateName`, `GetEntityPosX`, `GetEntityPosY`, `GetEntityPosZ`, `GetGlobalVarFloat`, `GetPlayerPosX`, `GetPlayerPosY`, `GetPlayerPosZ`, `GetPropHealth`, `GetPropIsInteractedWith`, `GetSwingDoorLocked`, `InsanityEventIsActive`, `MathAbs`, `MathAcos`, `MathAsin`, `MathAtan`, `MathAtan2`, `MathClamp`, `MathCos`, `MathMax`, `MathMin`, `MathPow`, `MathSin`, `MathSqrt`, `MathTan`, `MovePlayerForward`, `PlaceEntityAtEntity`, `ProgLog`, `ReplaceEntity`, `SetAllowStickyAreaAttachment`, `SetBodyMass`, `SetButtonSwitchedOn`, `SetEnemyIsHallucination`, `SetEnemySanityDecreaseActive`, `SetEntityPos`, `SetEntityVisible`, `SetGlobalVarFloat`, `SetInDarknessEffectsActive`, `SetLanternLitCallback`, `SetLevelDoorLockedSound`, `SetLevelDoorLockedText`, `SetMultiSliderCallback`, `SetMultiSliderStuckState`, `SetPlayerFallDamageDisabled`, `SetPlayerJumpForceMul`, `SetPlayerPermaDeathSound`, `SetPlayerPos`, `SetSkyBoxTexture`, `SetTeslaPigEasyEscapeDisabled`, `SetTeslaPigFadeDisabled`, `SetTeslaPigSoundDisabled`, `StartDemoEnd`, `StartInsanityEvent`, `StartPlayerSpawnPS`, `StartRandomInsanityEvent`, `StopCurrentInsanityEvent`, `StopPlayerSpawnPS`, `StringToBool`, `StringToFloat`, `StringToInt`, `TeleportEnemyToEntity`, `TeleportEnemyToNode`

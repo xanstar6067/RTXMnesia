@@ -7,7 +7,7 @@ namespace RTXMnesia.Ui
     /// <summary>
     /// Runtime UI owner. MainMenu's in-game pause is separate from SetPlayerActive / effect pauses.
     /// Runs before device input so neither opening nor closing a screen leaks a click into the world.
-    /// Inventory / Journal will have their own sound policy (LuxInventory / LuxJournal::OnEnterContainer).
+    /// Inventory keeps ambience / music running while pausing the current voice (LuxInventory::OnEnterContainer).
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public sealed class HplGameUi : MonoBehaviour
@@ -19,6 +19,8 @@ namespace RTXMnesia.Ui
         public int PauseGeneration { get; private set; }
         public HplUserSettings Settings { get; private set; }
         public HplUserSettings DraftSettings { get; private set; }
+        public HplInventory Inventory { get; private set; }
+        public bool InventoryOpen { get; private set; }
         /// <summary>Real render time excluding menu pauses, including pauses with no rendered frames.</summary>
         public double RenderTime => (IsPaused ? _pauseStartedAt : Time.realtimeSinceStartupAsDouble) - _pausedDuration;
 
@@ -40,6 +42,7 @@ namespace RTXMnesia.Ui
             Settings = HplUserSettings.Load(map);
             if (Application.isPlaying) Settings.Apply(map);
             _menu = new HplPauseMenu(map, transform);
+            Inventory = new HplInventory(map);
         }
 
         void Update()
@@ -49,14 +52,28 @@ namespace RTXMnesia.Ui
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
             {
                 if (!IsPaused) Pause();
+                else if (InventoryOpen && Inventory.MessageActive) Inventory.DismissMessage();
                 else if (ConfirmingQuit || ShowingOptions) ShowPauseMenu();
                 else _closing = true;
                 return;
             }
+            if (keyboard != null && keyboard.tabKey.wasPressedThisFrame && (!IsPaused || InventoryOpen))
+            {
+                if (InventoryOpen) CloseInventory(); else OpenInventory();
+                return;
+            }
             if (!IsPaused) return;
-            float fadeTime = _map.menuConfig != null ? _map.menuConfig.GetFloat("Main", _closing ? "MainFadeOutTimeFast" : "MainFadeInTime", _closing ? 0.3f : 1f) : (_closing ? 0.3f : 1f);
+            float fadeTime = _map.menuConfig != null ? _map.menuConfig.GetFloat(InventoryOpen ? "Inventory" : "Main", InventoryOpen ? (_closing ? "FadeOutTime" : "FadeInTime") : (_closing ? "MainFadeOutTimeFast" : "MainFadeInTime"), _closing ? 0.3f : 1f) : (_closing ? 0.3f : 1f);
             MenuOpacity = Mathf.MoveTowards(MenuOpacity, _closing ? 0f : 1f, Time.unscaledDeltaTime / Mathf.Max(0.001f, fadeTime));
             if (_closing && MenuOpacity <= 0f) { Resume(); return; }
+
+            if (InventoryOpen)
+            {
+                _map.sound?.StepMenu(Time.unscaledDeltaTime);
+                Inventory.Tick(Time.unscaledDeltaTime);
+                UpdateInventoryInput(keyboard);
+                return;
+            }
 
             // Keep the UI cursor available even if the editor or a focus transition relocks it.
             Cursor.lockState = CursorLockMode.None;
@@ -92,7 +109,51 @@ namespace RTXMnesia.Ui
                 Activate(_selected);
         }
 
-        public void Pause()
+        public void Pause() => EnterScreen(false);
+
+        public bool OpenInventory()
+        {
+            if (IsPaused || _map?.player == null || !_map.player.active || _map.player.IsDead ||
+                _map.Script?.InventoryDisabled == true || _map.player.States?.CurrentType == Player.PlayerStateType.Ladder) return false;
+            EnterScreen(true);
+            return true;
+        }
+
+        public void CloseInventory()
+        {
+            if (!InventoryOpen) return;
+            if (Inventory.MessageActive) Inventory.DismissMessage();
+            else _closing = true;
+        }
+
+        void UpdateInventoryInput(Keyboard keyboard)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = !Inventory.View.HasCursor;
+            var mouse = Mouse.current;
+            Vector2 position = mouse != null ? mouse.position.ReadValue() : Vector2.zero;
+            if (!_closing)
+            {
+                if (keyboard != null)
+                {
+                    if (keyboard.leftArrowKey.wasPressedThisFrame) Inventory.Navigate(-1, 0);
+                    if (keyboard.rightArrowKey.wasPressedThisFrame) Inventory.Navigate(1, 0);
+                    if (keyboard.upArrowKey.wasPressedThisFrame) Inventory.Navigate(0, -1);
+                    if (keyboard.downArrowKey.wasPressedThisFrame) Inventory.Navigate(0, 1);
+                    if (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame) Inventory.UseSelected();
+                }
+                if (mouse != null)
+                {
+                    int hit = Inventory.View.HitTest(position);
+                    if (mouse.delta.ReadValue().sqrMagnitude > 0) Inventory.Select(hit);
+                    if (mouse.leftButton.wasPressedThisFrame) Inventory.PointerDown(hit, Inventory.View.VirtualPoint(position));
+                    if (mouse.leftButton.wasReleasedThisFrame) Inventory.PointerUp(hit);
+                }
+            }
+            Inventory.View.Refresh(MenuOpacity, position);
+        }
+
+        void EnterScreen(bool inventory)
         {
             if (IsPaused || _map == null || _menu == null) return;
             _previousTimeScale = Time.timeScale;
@@ -101,25 +162,44 @@ namespace RTXMnesia.Ui
             _hudWasEnabled = _map.hud != null && _map.hud.Canvas != null && _map.hud.Canvas.enabled;
             _pauseStartedAt = Time.realtimeSinceStartupAsDouble;
             IsPaused = true;
+            InventoryOpen = inventory;
             PauseGeneration++;
             MenuOpacity = 0.01f;
             _closing = false;
             _dragSlider = null;
             _map.player?.SetUiInputBlocked(true);
-            _map.sound?.SetMenuPaused(true);
+            if (inventory)
+            {
+                _map.PhysicsWorld?.FadeOutLoopSounds(1f);
+                _map.effects?.PlayVoice.SetInventoryPaused(true);
+                _map.sound?.SetInventoryActive(true);
+            }
+            else _map.sound?.SetMenuPaused(true);
             // Stops Unity's automatic physics too; HplMap also guards explicit Step calls.
             Time.timeScale = 0f;
             if (_map.hud != null && _map.hud.Canvas != null) _map.hud.Canvas.enabled = false;
             Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = !_menu.HasCursor;
-            ShowPauseMenu();
+            Cursor.visible = inventory ? !Inventory.View.HasCursor : !_menu.HasCursor;
+            if (inventory)
+            {
+                Inventory.Open();
+                Inventory.View.Refresh(MenuOpacity, Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
+            }
+            else ShowPauseMenu();
         }
 
         public void Resume()
         {
             if (!IsPaused) return;
+            if (InventoryOpen)
+            {
+                _map.effects?.PlayVoice.SetInventoryPaused(false);
+                _map.sound?.SetInventoryActive(false);
+                Inventory.Close();
+            }
             _pausedDuration += Time.realtimeSinceStartupAsDouble - _pauseStartedAt;
             IsPaused = false;
+            InventoryOpen = false;
             ConfirmingQuit = false;
             ShowingOptions = false;
             DraftSettings = null;
@@ -154,7 +234,7 @@ namespace RTXMnesia.Ui
 
         public void OpenOptions(int tab = -1)
         {
-            if (!IsPaused) return;
+            if (!IsPaused || InventoryOpen) return;
             if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, 3);
             ShowingOptions = true;
             _dragSlider = null;
@@ -223,6 +303,12 @@ namespace RTXMnesia.Ui
 
         void OnApplicationFocus(bool focused)
         {
+            if (InventoryOpen)
+            {
+                // The inventory stays open, but an unfocused application must not keep playing its ambience.
+                _map.sound?.SetMenuPaused(!focused);
+                return;
+            }
             // Focus returning never resumes gameplay without a deliberate action.
             if (!focused && _map != null && _map.player != null && _map.player.readDevices) Pause();
         }
@@ -233,6 +319,10 @@ namespace RTXMnesia.Ui
             Resume();
         }
 
-        void OnDestroy() => _menu?.Destroy();
+        void OnDestroy()
+        {
+            _menu?.Destroy();
+            Inventory?.View.Destroy();
+        }
     }
 }

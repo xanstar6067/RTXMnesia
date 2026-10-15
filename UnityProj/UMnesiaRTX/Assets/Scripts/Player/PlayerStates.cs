@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace RTXMnesia.Player
 {
-    /// <summary>eLuxPlayerState (LuxTypes.h). HandObject, UseItem and Ladder come with step 4.4 / 6.</summary>
+    /// <summary>eLuxPlayerState (LuxTypes.h). HandObject and Ladder come with step 4.4.</summary>
     public enum PlayerStateType { Normal, HandObject, UseItem, InteractGrab, InteractPush, InteractSlide, InteractSwingDoor, InteractLever, InteractWheel, Ladder }
 
     /// <summary>eLuxPlayerAction (input actions the states react to).</summary>
@@ -18,6 +18,7 @@ namespace RTXMnesia.Player
         public static HplProp InteractProp;
         /// <summary>The focus point, HPL2 space.</summary>
         public static Vector3 InteractPos;
+        public static HplGame.Item InventoryItem;
 
         public static void SetupInteraction(HplPhysicsBody body, Vector3 hplInteractPos)
         {
@@ -74,6 +75,7 @@ namespace RTXMnesia.Player
         {
             _player = player;
             Add(new PlayerStateNormal(player));
+            Add(new PlayerStateUseItem(player));
             Add(new PlayerStateInteractGrab(player));
             Add(new PlayerStateInteractPush(player));
             Add(new PlayerStateInteractSlide(player));

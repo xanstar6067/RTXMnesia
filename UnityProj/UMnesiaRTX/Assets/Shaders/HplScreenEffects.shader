@@ -119,6 +119,17 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
         float3 sharp = LOAD_TEXTURE2D_X(_HplMenuSharp, uint2(v.positionCS.xy)).rgb;
         return float4(SRGBToLinear(lerp(sharp, LoadSource(int2(v.positionCS.xy)), _HplMenuBlend)), 1);
     }
+    float4 InventoryComposite(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float3 color = LoadSource(int2(v.positionCS.xy));
+        // inventory_screen_effect_frag.glsl: dark sepia, no menu blur.
+        float3 sepia = float3(dot(color, float3(0.39, 0.769, 0.189)),
+                              dot(color, float3(0.349, 0.686, 0.168)),
+                              dot(color, float3(0.272, 0.534, 0.131)));
+        sepia = pow(max(0, sepia * 0.35), 1.5);
+        return float4(SRGBToLinear(lerp(color, sepia, _HplMenuBlend)), 1);
+    }
     ENDHLSL
 
     SubShader
@@ -173,6 +184,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment MenuComposite
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Inventory background"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment InventoryComposite
             ENDHLSL
         }
     }

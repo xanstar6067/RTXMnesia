@@ -13,12 +13,14 @@ namespace RTXMnesia.Player
     /// calls its OnInteract and interact callback when it is close enough and allows it. The crosshair shows what
     /// the interaction would be. Focused items get the outline of the effect renderer. Holster → hand object (4.4).
     /// </summary>
-    public sealed class PlayerStateNormal : PlayerState
+    public class PlayerStateNormal : PlayerState
     {
         const float RayLength = 20f;
         static readonly RaycastHit[] Hits = new RaycastHit[64];
 
         public PlayerStateNormal(AmnesiaPlayer player) : base(player, PlayerStateType.Normal) { }
+        protected PlayerStateNormal(AmnesiaPlayer player, PlayerStateType type) : base(player, type) { }
+        protected virtual string FocusItemName => null;
 
         public override void OnEnterState(PlayerStateType previous)
         {
@@ -32,7 +34,7 @@ namespace RTXMnesia.Player
         {
             Vector3 start = Player.LogicCameraPosition;
             Vector3 dir = Player.LogicCameraRotation * Vector3.forward;
-            GetClosestEntity(start, dir, RayLength, out float distance, out var body, out var entity);
+            GetClosestEntity(start, dir, RayLength, out float distance, out var body, out var entity, FocusItemName);
             Player.FocusDistance = distance;
             Player.BodyInFocus = body;
             Player.EntityInFocus = entity;
@@ -71,14 +73,14 @@ namespace RTXMnesia.Player
         }
 
         /// <summary>iLuxPlayerState_DefaultBase::ShowOutlineOnEntity: items that can be picked up.</summary>
-        static bool ShowOutlineOnEntity(HplEntity entity, HplPhysicsBody body) =>
+        protected virtual bool ShowOutlineOnEntity(HplEntity entity, HplPhysicsBody body) =>
             entity is Props.PropItem && entity.CanInteract(body) && !entity.InteractionDisabled;
 
         /// <summary>
         /// cLuxClosestEntityCallback: the nearest body along the ray. Inactive entities, characters and areas or
         /// non-colliding bodies that cannot be interacted with are skipped; level geometry blocks (entity null).
         /// </summary>
-        public static bool GetClosestEntity(Vector3 start, Vector3 dir, float length, out float distance, out HplPhysicsBody body, out HplEntity entity)
+        public static bool GetClosestEntity(Vector3 start, Vector3 dir, float length, out float distance, out HplPhysicsBody body, out HplEntity entity, string useItem = null)
         {
             distance = 9999999f;
             body = null;
@@ -104,7 +106,7 @@ namespace RTXMnesia.Player
                 {
                     if (!hitEntity.Active) continue;
                     bool collides = hitBody != null && hitBody.Collide && !c.isTrigger;
-                    if (!collides && !hitEntity.CanInteract(hitBody)) continue;
+                    if (!collides && !hitEntity.CanInteract(hitBody) && !(useItem != null && map?.Script?.HasUseItemCallback(useItem, hitEntity.Name) == true)) continue;
                 }
                 distance = hit.distance;
                 body = hitBody;

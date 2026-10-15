@@ -49,6 +49,17 @@ namespace RTXMnesia.Sound
 
         public void EnsureMusic() => Music ??= new HplMusicHandler(this);
 
+        /// <summary>Inventory / Journal: engine sound clocks keep running while the map and physics are frozen.</summary>
+        public void StepMenu(float timeStep)
+        {
+            if (MenuPaused) return;
+            EnsureMusic();
+            UpdateEntries(timeStep);
+            Music.Update(timeStep);
+        }
+
+        public void SetInventoryActive(bool active) => FadeGlobalVolume(active ? 0.5f : 1f, 0.5f, SoundEntryType.World, 3, !active);
+
         /// <summary>cLuxMapHandler::PauseSoundsAndMusic, with a separate pause reason for existing voice pauses.</summary>
         public void SetMenuPaused(bool paused)
         {
@@ -464,7 +475,7 @@ namespace RTXMnesia.Sound
         float _normalVolume, _volumeMul = 1f, _volumeFadeDest = 1f, _volumeFadeSpeed;
         float _normalSpeed = 1f, _speedMul = 1f, _speedFadeDest = 1f, _speedFadeSpeed;
         float _blockMul = 1f, _blockFadeDest = 1f, _blockFadeSpeed;
-        bool _stopAfterFadeOut, _firstTime = true, _stopped, _paused, _menuPaused;
+        bool _stopAfterFadeOut, _firstTime = true, _stopped, _paused, _menuPaused, _inventoryPaused;
         float _elapsed;
 
         /// <summary>Still in the handler's list (cSoundHandler::IsValid).</summary>
@@ -490,7 +501,7 @@ namespace RTXMnesia.Sound
         public bool IsPlaying => !_stopped && (Loop || _elapsed < Clip.length);
         public float ElapsedTime => _elapsed;
         public float VolumeMul => _volumeMul;
-        public bool IsPaused => _paused || _menuPaused;
+        public bool IsPaused => _paused || _menuPaused || _inventoryPaused;
 
         /// <summary>cSoundEntry::Update: false when the sound is over.</summary>
         internal bool Update(float timeStep)
@@ -512,15 +523,15 @@ namespace RTXMnesia.Sound
             if (Is3D && !Relative) Update3DSpecifics();
             else _source.volume = _normalVolume * _volumeMul * _handler.GetGlobalVolume(Type);
 
-            if (_firstTime && !_handler.Silent)
+            if (_firstTime && !_handler.Silent && !IsPaused)
             {
                 _source.loop = Loop;
                 if (!_stopped) _source.Play();
                 _firstTime = false;
             }
-            else if (!_paused && !_stopped) _elapsed += timeStep * speed;
+            else if (!IsPaused && !_stopped) _elapsed += timeStep * speed;
 
-            if (!IsPlaying && !_paused)
+            if (_stopped || (!IsPlaying && !IsPaused))
             {
                 _source.Stop();
                 return false;
@@ -613,6 +624,13 @@ namespace RTXMnesia.Sound
         {
             bool wasPaused = IsPaused;
             _menuPaused = paused;
+            ApplyPause(wasPaused);
+        }
+
+        internal void SetInventoryPaused(bool paused)
+        {
+            bool wasPaused = IsPaused;
+            _inventoryPaused = paused;
             ApplyPause(wasPaused);
         }
 

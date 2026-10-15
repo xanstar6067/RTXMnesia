@@ -245,7 +245,7 @@ namespace RTXMnesia.Ui
             Texture2D texture = null;
             if (player != null && player.States != null && player.showCrossHairIcons)
             {
-                bool draw = showCrossHair;
+                bool draw = showCrossHair || player.States.CurrentType == Player.PlayerStateType.UseItem;
                 if (!draw)
                 {
                     var e = player.EntityInFocus;
@@ -253,6 +253,7 @@ namespace RTXMnesia.Ui
                 }
                 var kind = draw ? player.States.Current.GetCrosshair() : null;
                 if (kind.HasValue && (int)kind.Value < crosshairs.Length) texture = crosshairs[(int)kind.Value];
+                if (draw && player.States.Current is Player.PlayerStateUseItem useItem) texture = _map.GameUi?.Inventory?.Icon(useItem.Item);
             }
             // The fade is drawn in HPL2's HUD set above the crosshair and focus text (z 3.2 vs 1): it darkens them.
             float fade = _map != null && _map.effects != null ? Mathf.Clamp01(_map.effects.Fade.Alpha) : 0f;
@@ -261,6 +262,8 @@ namespace RTXMnesia.Ui
             {
                 _crosshair.texture = texture;
                 _crosshair.color = new Color(1f - fade, 1f - fade, 1f - fade, 1f);
+                if (player.States.Current is Player.PlayerStateUseItem useItem && useItem.Highlight)
+                    _crosshair.color = new Color(1f - fade, 1f - fade, 1f - fade, 0.75f + 0.25f * Mathf.Sin(Time.time * 3));
                 Place(_crosshair.rectTransform, new Rect((800f - texture.width) * 0.5f, (600f - texture.height) * 0.5f, texture.width, texture.height));
             }
 

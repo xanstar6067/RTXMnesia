@@ -503,6 +503,12 @@ namespace RTXMnesia.Effects
 
             public void SetOverCallback(string function) => _overCallback = function ?? "";
 
+            public void SetInventoryPaused(bool paused)
+            {
+                if (VoiceValid) _voiceEntry.SetInventoryPaused(paused);
+                if (EffectValid) _effectEntry.SetInventoryPaused(paused);
+            }
+
             public bool IsActive => Active;
 
             public override void Update(float timeStep)

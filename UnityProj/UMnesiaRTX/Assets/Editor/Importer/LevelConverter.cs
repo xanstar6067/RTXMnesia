@@ -1361,6 +1361,7 @@ namespace RTXMnesia.Importer
                 : FontConverter.Convert(focusFont, map.language, _index, _log);
             map.hud = hud;
             MenuConverter.Convert(_index, map.language, map.menuConfig, _log);
+            InventoryConverter.Convert(_index, map.language, _log);
 
             var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
             sound.bank = SoundConverter.Convert(_log, map.language);
