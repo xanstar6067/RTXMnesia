@@ -307,6 +307,26 @@ namespace RTXMnesia.EditorDev
                             }
                             continue;
                         }
+                        case "insanity":
+                        {
+                            // insanity [Name|random|stop]: start / stop an insanity event, then the handler's state.
+                            if (map == null) { log.Warn("insanity needs an HplMap"); continue; }
+                            if (p.Length > 1)
+                            {
+                                if (p[1] == "random") RTXMnesia.Effects.HplInsanity.StartEvent(map);
+                                else if (p[1] == "stop") RTXMnesia.Effects.HplInsanity.StopCurrentEvent();
+                                else RTXMnesia.Effects.HplInsanity.StartEvent(map, p[1]);
+                            }
+                            var ev = RTXMnesia.Effects.HplInsanity.CurrentEvent;
+                            string detail = ev switch
+                            {
+                                RTXMnesia.Effects.InsanityEventBugs b => $"bugs {b.Bugs.Count} alpha {(b.Bugs.Count > 0 ? b.Bugs[0].alpha : 0f):0.00} pos {(b.Bugs.Count > 0 ? b.Bugs[0].pos : Vector2.zero):F0}",
+                                RTXMnesia.Effects.InsanityEventSoundStream st => $"fade {st.FadeAlpha:0.00} color {st.FadeColor} subtitle \"{st.Subtitle}\"",
+                                _ => "",
+                            };
+                            log.Info($"t={time,6:0.00}   {RTXMnesia.Effects.HplInsanity.Describe()} possible {RTXMnesia.Effects.HplInsanity.NewEventIsPossible(map)} sanity {player.sanity:0.0} {detail}");
+                            continue;
+                        }
                         case "health":
                         {
                             // health: health, the hurt effect, HUD splashes / flash, death and the check point.

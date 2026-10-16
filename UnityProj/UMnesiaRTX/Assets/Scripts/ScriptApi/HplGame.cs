@@ -210,6 +210,8 @@ namespace RTXMnesia.ScriptApi
         public static void Reset()
         {
             EnemyActivateSoundCount = 0f;
+            // cLuxInsanityHandler::Reset (its disabled sets and used events stay, as in HPL2).
+            Effects.HplInsanity.Reset();
             GlobalVars.Clear();
             Quests.Clear();
             HintsGiven.Clear();

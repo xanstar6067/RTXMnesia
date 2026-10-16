@@ -161,7 +161,7 @@
 - `OnStart` регистрирует отсутствующий `CollideAreaGuardianDoor2Checkpoint`. Динамические `EventStep3`, `EventStep5` и другие необъявленные шаги также остаются как в оригинале: фиктивных обработчиков нет.
 - `AreaGuardianEffectsFloor_lump_1`, *lump_21_, *lump_26_, `wood_beam_3`, `barrel01_1`, `barrel01_2` отсутствуют в исходной карте и не создаются скриптом. Сброс обращается к ним. Для развилки 28–35 существуют зоны с суффиксами _1/_2; сброс записывает `CaveInUnblockedPath`, а чтение идёт из `CaveInPathUnblocked`. Исходное несовпадение сохранено.
 - StopSound/DestroyParticleSystem могут обращаться к уже завершённым или ещё не созданным записям (`slimeps`, `push`, `GuardianScream`, `GuardianEndFearFog`, `SlimeLoopOnPlayer`, `rumblex`). В диагностике это записано отдельно, без подмены логики.
-- `SetInsanitySetEnabled`, `InteractConnectPropWithRope`, attached props, `DetachFromStickyArea`, `AutoSave`, `StartCredits` ещё NotPorted. Прямой вызов Sticky/rope callbacks в диагностике проверяет скрипт, а не физическое прикрепление/канат. `ChangePlayerStateToNormal`, PreloadSound/PreloadParticleSystem — пустые API. Grunt уже имеет ИИ, но прохождение всей погони игроком этим тестом не доказано.
+- `SetInsanitySetEnabled` с 2026-10-17 работает (события безумия перенесены (CLAUDE.md «События безумия»): набор `Ch03` включается, `Ch02` выключается; строка `skipped` ниже — из прогона до этого). `InteractConnectPropWithRope`, attached props, `DetachFromStickyArea`, `AutoSave`, `StartCredits` ещё NotPorted. Прямой вызов Sticky/rope callbacks в диагностике проверяет скрипт, а не физическое прикрепление/канат. `ChangePlayerStateToNormal`, PreloadSound/PreloadParticleSystem — пустые API. Grunt уже имеет ИИ, но прохождение всей погони игроком этим тестом не доказано.
 
 ## Проверки карты
 
@@ -201,7 +201,7 @@
 | `PreloadParticleSystem` | пустая операция |
 | `PreloadSound` | пустая операция |
 | `RemoveAttachedPropFromProp` | NotPorted / условная реализация |
-| `SetInsanitySetEnabled` | NotPorted / условная реализация |
+| `SetInsanitySetEnabled` | ✓ (2026-10-17) |
 | `StartCredits` | NotPorted / условная реализация |
 
 Все отчёты далее — внутри `UnityProj/UMnesiaRTX/Logs/`, вне git. PlayerSimulation: `-batchmode -quit`, GPU, `-seed 1`, шаг 1/60; импорт/аудит — `-batchmode -nographics -quit`. Ни один отчёт с WARNING [Script] ERROR не трактуется как чистый скрипт только из-за 0 errors.

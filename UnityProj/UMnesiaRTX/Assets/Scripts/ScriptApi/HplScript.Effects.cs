@@ -54,11 +54,16 @@ namespace RTXMnesia.ScriptApi
 
         // ------------------------------------------------------------------ insanity (step 6)
 
-        protected void SetInsanitySetEnabled(string asSet, bool abX) => NotPorted(nameof(SetInsanitySetEnabled), "insanity events (step 6)");
-        protected void StartRandomInsanityEvent() => NotPorted(nameof(StartRandomInsanityEvent), "insanity events (step 6)");
-        protected void StartInsanityEvent(string asEventName) => NotPorted(nameof(StartInsanityEvent), "insanity events (step 6)");
-        protected void StopCurrentInsanityEvent() { }
-        protected bool InsanityEventIsActive() => false;
+        // cLuxInsanityHandler (Effects/HplInsanity): one handler for the whole game.
+        protected void SetInsanitySetEnabled(string asSet, bool abX)
+        {
+            if (abX) RTXMnesia.Effects.HplInsanity.EnableSet(asSet);
+            else RTXMnesia.Effects.HplInsanity.DisableSet(asSet);
+        }
+        protected void StartRandomInsanityEvent() => RTXMnesia.Effects.HplInsanity.StartEvent(Map);
+        protected void StartInsanityEvent(string asEventName) => RTXMnesia.Effects.HplInsanity.StartEvent(Map, asEventName);
+        protected void StopCurrentInsanityEvent() => RTXMnesia.Effects.HplInsanity.StopCurrentEvent();
+        protected bool InsanityEventIsActive() => RTXMnesia.Effects.HplInsanity.CurrentEventIndex >= 0;
 
         // ------------------------------------------------------------------ sounds and music
 

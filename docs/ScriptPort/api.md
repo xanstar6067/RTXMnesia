@@ -131,7 +131,7 @@
 | `SetSanityDrainDisabled` | 2 | 7 | ✓ | `void SetSanityDrainDisabled(bool abX)` |
 | `SetPropStaticPhysics` | 2 | 12 | ✓ | `void SetPropStaticPhysics(string &in asName, bool abX)` |
 | `SetPlayerCrouching` | 2 | 14 | ✓ | `void SetPlayerCrouching(bool abCrouch)` |
-| `SetInsanitySetEnabled` | 2 | 6 | — | `void SetInsanitySetEnabled(string &in asSet, bool abX)` |
+| `SetInsanitySetEnabled` | 2 | 6 | ✓ | `void SetInsanitySetEnabled(string &in asSet, bool abX)` |
 | `SetEntityCustomFocusCrossHair` | 2 | 5 | ✓ | `void SetEntityCustomFocusCrossHair(string &in asName, string &in asCrossHair)` |
 | `SetEntityCallbackFunc` | 2 | 2 | ~ | `void SetEntityCallbackFunc(string &in asName, string &in asCallback)` |
 | `SetEnemyDisabled` | 2 | 3 | ✓ | `void SetEnemyDisabled(string &in asName, bool abDisabled)` |
@@ -224,7 +224,7 @@ GiveItemFromFile читает определения `.ent` из генерир�
 
 ## Рассудок и темнота
 
-`GiveSanityDamage` — ✓: подсказка SanityHit, удар `cLuxPlayerSanity::StartHit` (звук, наезд камеры), потеря рассудка с эффектом (сердцебиение, утечка, эффект безумия), обморок ниже 0. `SetSanityDrainDisabled` — ✓: отключает потерю рассудка в темноте (`cLuxPlayerInDarkness`). `SetInDarknessEffectsActive` — ✓ (без вызовов в картах): `cLuxPlayerInDarkness::SetActive`. `SetInsanitySetEnabled`, `StartInsanityEvent`, `StartRandomInsanityEvent` — пока пропускаются (`cLuxInsanityHandler`).
+`GiveSanityDamage` — ✓: подсказка SanityHit, удар `cLuxPlayerSanity::StartHit` (звук, наезд камеры), потеря рассудка с эффектом (сердцебиение, утечка, эффект безумия), обморок ниже 0. `SetSanityDrainDisabled` — ✓: отключает потерю рассудка в темноте (`cLuxPlayerInDarkness`). `SetInDarknessEffectsActive` — ✓ (без вызовов в картах): `cLuxPlayerInDarkness::SetActive`. `SetInsanitySetEnabled` — ✓, а также без вызовов в картах `StartInsanityEvent`, `StartRandomInsanityEvent`, `StopCurrentInsanityEvent`, `InsanityEventIsActive` — ✓: `cLuxInsanityHandler` (`Effects/HplInsanity`, CLAUDE.md «События безумия»); неизвестное имя события ничего не делает, как в HPL2.
 
 ## Урон и смерть
 

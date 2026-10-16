@@ -454,6 +454,9 @@ namespace RTXMnesia.ScriptApi
         public override HplEntityType Type => AreaType == "Rope" ? HplEntityType.Rope : HplEntityType.Area;
 
         bool _itemInteraction;
+        readonly bool _insanityAutoDisable;
+        readonly float _insanityCheckTimeMin, _insanityCheckTimeMax;
+        float _insanityCheckCount;
         readonly string _flashbackFile, _flashbackCallback;
         readonly Collider[] _flashbackPlayerShape;
         float _flashbackCheckCollisionCount;
@@ -497,6 +500,15 @@ namespace RTXMnesia.ScriptApi
                 LadderMinY = area.transform.position.y - area.size.y / 2f;
             }
             else if (AreaType == "Liquid") Liquid = new HplLiquidArea(this, area, surfaces);
+            else if (AreaType == "Insanity")
+            {
+                // cLuxAreaLoader_Insanity / cLuxArea_Insanity: the maximum is read with the original's key typo
+                // "IsanityArea_CheckTimeMax" (missing in game.cfg → 0), so checks come every 0-1 s instead of 1-15 s.
+                _insanityAutoDisable = area.GetVariable("AutoDisable") == "true";
+                _insanityCheckTimeMin = gameConfig != null ? gameConfig.GetFloat("Insanity", "InsanityArea_CheckTimeMin", 0f) : 0f;
+                _insanityCheckTimeMax = gameConfig != null ? gameConfig.GetFloat("Insanity", "IsanityArea_CheckTimeMax", 0f) : 0f;
+                _insanityCheckCount = Hpl.HplMath.RandRectf(_insanityCheckTimeMin, _insanityCheckTimeMax);
+            }
         }
 
         public string LadderMaterial { get; } = "metal";
@@ -515,6 +527,11 @@ namespace RTXMnesia.ScriptApi
                 Liquid.Update(Map, timeStep);
                 return;
             }
+            if (AreaType == "Insanity")
+            {
+                UpdateInsanity(timeStep);
+                return;
+            }
             if (AreaType != "Flashback" || timeStep < Time.fixedDeltaTime * 0.8f) return;
             _flashbackCheckCollisionCount -= timeStep;
             if (_flashbackCheckCollisionCount > 0f) return;
@@ -528,6 +545,27 @@ namespace RTXMnesia.ScriptApi
             SetActive(false);
             player.Flashback.Start(_flashbackFile, _flashbackCallback);
         }
+
+        /// <summary>
+        /// cLuxArea_Insanity::OnUpdate: at random intervals, if the player's current shape touches the area and a new
+        /// insanity event is possible, a random event starts (the area turns off first with AutoDisable).
+        /// </summary>
+        void UpdateInsanity(float timeStep)
+        {
+            _insanityCheckCount -= timeStep;
+            if (_insanityCheckCount > 0f) return;
+            _insanityCheckCount = Hpl.HplMath.RandRectf(_insanityCheckTimeMin, _insanityCheckTimeMax);
+
+            var body = Map.player != null ? Map.player.Body : null;
+            if (body == null || body.Shapes.Count == 0) return;
+            _insanityPlayerShape[0] = body.Shapes[body.ActiveSize];
+            if (!HplCollision.BodiesCollide(GetBodyColliders(0), _insanityPlayerShape)) return;
+            if (!Effects.HplInsanity.NewEventIsPossible(Map)) return;
+            if (_insanityAutoDisable) SetActive(false);
+            Effects.HplInsanity.StartEvent(Map);
+        }
+
+        static readonly Collider[] _insanityPlayerShape = new Collider[1];
 
         // cLuxArea_Script and cLuxArea_Ladder; other areas (signs, examine, ropes) are not ported yet.
         public override bool CanInteract(Dynamics.HplPhysicsBody body) =>

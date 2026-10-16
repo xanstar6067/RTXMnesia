@@ -453,6 +453,8 @@ namespace RTXMnesia.ScriptApi
 
             // cLuxPlayer::Update (its collide callbacks before the camera effects, the body moves later)
             if (player != null) player.StepLogic(timeStep, _checkPlayerCallbacks);
+            // cLuxInsanityHandler::Update (the module after the player).
+            if (!menuBackground) Effects.HplInsanity.Update(this, timeStep);
 
             hud.Step(timeStep);
             effects.Step(timeStep);
@@ -751,6 +753,7 @@ namespace RTXMnesia.ScriptApi
                 if (runScript && Script != null) Script.Run(Script.OnLeave, "OnLeave");
                 HplSavedMaps.SaveMap(this);
                 sound.FadeOutAll(Sound.SoundEntryType.World, 0.5f, true);
+                Effects.HplInsanity.OnMapLeave();
                 _leaving = true;
                 HplMapChange.Begin(this, scene, newName, _mapChange.startPos, _mapChange.sound);
                 return false;
@@ -766,6 +769,7 @@ namespace RTXMnesia.ScriptApi
             if (runScript && Script != null) Script.Run(Script.OnLeave, "OnLeave");
             HplSavedMaps.SaveMap(this);
             sound.FadeOutAll(Sound.SoundEntryType.World, 0.5f, true);
+            Effects.HplInsanity.OnMapLeave();
             _leaving = true;
             HplMapChange.Begin(this, scene, MapName, startPos, "");
         }

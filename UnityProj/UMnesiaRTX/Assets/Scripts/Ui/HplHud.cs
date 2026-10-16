@@ -53,6 +53,10 @@ namespace RTXMnesia.Ui
         RawImage _hurtNoise, _hudFlash, _deathFade;
         RectTransform _screen, _splashLayer;
         readonly List<RawImage> _splashImages = new();
+        // Insanity events (cLuxInsanityHandler::OnDraw): the sound stream's screen fade and the bugs (z 0).
+        RawImage _insanityFade, _insanityFadeImage;
+        RectTransform _insanityLayer;
+        readonly List<RawImage> _bugImages = new();
         Material _alphaMaterial, _modulativeMaterial;
         readonly RawImage[] _crosshairGlow = new RawImage[3];
         Vector2 _voiceFontSize = new(18f, 18f);
@@ -244,6 +248,76 @@ namespace RTXMnesia.Ui
 
             RefreshCrosshair();
             RefreshPlayerEffects();
+            RefreshInsanity(effects);
+        }
+
+        /// <summary>
+        /// The current insanity event's OnDraw. Sound stream: the subtitle (font 18, rows of 600 from x = 400 − 300 / 2,
+        /// ending at y = 580, z 4) while subtitles are on and no voice plays; the fade (z 0) — a modulative white rect
+        /// colored FadeColor × alpha + white × (1 − alpha), or the fade image at FadeColor × alpha. Bugs: the bug image
+        /// at its size × the bug's size, turned around its center, alpha blended (z 0). Under HPL2's screen fade.
+        /// </summary>
+        void RefreshInsanity(HplEffects effects)
+        {
+            float fade = effects != null ? Mathf.Clamp01(effects.Fade.Alpha) : 0f;
+            Vector2 full = ((RectTransform)_canvas.transform).rect.size;
+            if (full.x <= 0f || full.y <= 0f) full = new Vector2(800f, 600f);
+            var current = RTXMnesia.Effects.HplInsanity.CurrentEvent;
+
+            var stream = current as RTXMnesia.Effects.InsanityEventSoundStream;
+            bool fadeOn = stream != null && stream.FadeScreen;
+            _insanityFade.enabled = fadeOn && stream.FadeImage == null;
+            _insanityFadeImage.enabled = fadeOn && stream.FadeImage != null;
+            if (fadeOn)
+            {
+                float a = stream.FadeAlpha;
+                Color c = stream.FadeColor;
+                if (stream.FadeImage == null)
+                {
+                    _insanityFade.rectTransform.sizeDelta = full;
+                    _insanityFade.color = new Color(c.r * a + 1f - a, c.g * a + 1f - a, c.b * a + 1f - a, 1f);
+                }
+                else
+                {
+                    _insanityFadeImage.rectTransform.sizeDelta = full;
+                    _insanityFadeImage.texture = stream.FadeImage;
+                    _insanityFadeImage.color = new Color(c.r * a * (1f - fade), c.g * a * (1f - fade), c.b * a * (1f - fade), c.a * a);
+                }
+            }
+            if (stream != null && showSubtitles && !string.IsNullOrEmpty(stream.Subtitle) && defaultFont != null &&
+                (effects == null || !effects.PlayVoice.Active))
+            {
+                var size = new Vector2(18f, 18f);
+                var rows = defaultFont.GetWordWrapRows(600f, size, stream.Subtitle);
+                var pos = new Vector2(400f - 300f / 2f, 580f - rows.Count * (18f + 2f));
+                foreach (string row in rows)
+                {
+                    _gameText.DrawFont(row, pos, size, Color.white);
+                    pos.y += 18f + 2f;
+                }
+            }
+
+            var bugs = current as RTXMnesia.Effects.InsanityEventBugs;
+            int count = bugs != null && bugs.BugImage != null ? bugs.Bugs.Count : 0;
+            while (_bugImages.Count < count) _bugImages.Add(CreateImage(_insanityLayer, "Insanity bug", new Rect(0f, 0f, 1f, 1f), _alphaMaterial));
+            for (int i = 0; i < _bugImages.Count; i++)
+            {
+                var image = _bugImages[i];
+                image.enabled = i < count;
+                if (i >= count) continue;
+                var bug = bugs.Bugs[i];
+                var texture = bugs.BugImage;
+                Vector2 size = new Vector2(texture.width, texture.height) * bug.sizeMul;
+                image.texture = texture;
+                image.color = new Color(1f - fade, 1f - fade, 1f - fade, bug.alpha);
+                var rect = image.rectTransform;
+                rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = size;
+                rect.anchoredPosition = new Vector2(bug.pos.x + size.x * 0.5f, -(bug.pos.y + size.y * 0.5f));
+                // HPL2 turns by MatrixRotateZ in y-down GUI space: clockwise on screen.
+                rect.localEulerAngles = new Vector3(0f, 0f, -bug.angle * Mathf.Rad2Deg);
+            }
         }
 
         /// <summary>
@@ -436,6 +510,11 @@ namespace RTXMnesia.Ui
             _modulativeMaterial = GuiMaterial("HUD modulative", UnityEngine.Rendering.BlendMode.DstColor, UnityEngine.Rendering.BlendMode.Zero);
             _hurtNoise = CreateFullScreenImage("Hurt noise", _modulativeMaterial);
             _hudFlash = CreateFullScreenImage("HUD flash", _alphaMaterial);
+            _insanityFade = CreateFullScreenImage("Insanity fade", _modulativeMaterial);
+            _insanityFadeImage = CreateFullScreenImage("Insanity fade image", _alphaMaterial);
+            _insanityLayer = new GameObject("Insanity bugs", typeof(RectTransform)).GetComponent<RectTransform>();
+            _insanityLayer.SetParent(screen, false);
+            Place(_insanityLayer, new Rect(0f, 0f, 800f, 600f));
             _splashLayer = new GameObject("Damage splashes", typeof(RectTransform)).GetComponent<RectTransform>();
             _splashLayer.SetParent(screen, false);
             Place(_splashLayer, new Rect(0f, 0f, 800f, 600f));
