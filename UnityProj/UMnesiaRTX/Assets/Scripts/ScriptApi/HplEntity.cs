@@ -147,6 +147,25 @@ namespace RTXMnesia.ScriptApi
 
         public void RemoveInstantly(HplEntity entity) => _callbacks.RemoveAll(c => c.entity == entity);
 
+        /// <summary>cLuxCollideCallback_SaveData: the callbacks by entity name (map cache).</summary>
+        public List<(string entity, string function, bool deleteWhenColliding, int states)> Export()
+        {
+            var list = new List<(string, string, bool, int)>();
+            foreach (var c in _callbacks)
+                if (c.entity != null) list.Add((c.entity.Name, c.function, c.deleteWhenColliding, c.states));
+            return list;
+        }
+
+        /// <summary>cLuxCollideCallback_SaveData::ToCallback: entities that no longer exist are skipped.</summary>
+        public void Import(HplMap map, List<(string entity, string function, bool deleteWhenColliding, int states)> list)
+        {
+            foreach (var (name, function, delete, states) in list)
+            {
+                var entity = map.GetEntityByName(name);
+                if (entity != null) _callbacks.Add(new Callback { entity = entity, function = function, deleteWhenColliding = delete, states = states });
+            }
+        }
+
         public void Clear()
         {
             _callbacks.Clear();
@@ -203,6 +222,8 @@ namespace RTXMnesia.ScriptApi
         public bool IsLookedAt { get; private set; }
         public string CallbackFunc = "";
         public string ConnectionStateChangeCallback = "";
+        /// <summary>iLuxEntity::mbFullGameSave: the map cache keeps the whole entity, not only its flags.</summary>
+        public bool FullGameSave;
         public bool InteractionDisabled;
         public float MaxFocusDistance;
         public FocusCrosshair CustomFocusCrossHair = FocusCrosshair.Default;
@@ -452,20 +473,81 @@ namespace RTXMnesia.ScriptApi
                 string max = area.GetVariable("MaxFocusDistance");
                 if (!string.IsNullOrEmpty(max) && Hpl.HplMath.Atof(max) >= 0f) MaxFocusDistance = Hpl.HplMath.Atof(max);
             }
+            else if (AreaType == "Ladder")
+            {
+                // cLuxAreaLoader_Ladder::LoadVariables, cLuxArea_Ladder::SetupAfterLoad: the forward of the area (its
+                // local Z axis), the top and bottom of its box.
+                LadderMaterial = area.GetVariable("Material") ?? "metal";
+                MaxFocusDistance = gameConfig != null ? gameConfig.GetFloat("Player_Interaction", "Ladder_MaxFocusDist") : 0f;
+                LadderForward = area.transform.forward;
+                LadderMaxY = area.transform.position.y + area.size.y / 2f;
+                LadderMinY = area.transform.position.y - area.size.y / 2f;
+            }
         }
+
+        public string LadderMaterial { get; } = "metal";
+        public Vector3 LadderForward { get; }
+        public float LadderMaxY { get; }
+        public float LadderMinY { get; }
 
         public override int BodyCount => 1;
         public override IReadOnlyList<Collider> GetBodyColliders(int index) => Bodies[0].Colliders;
 
-        // cLuxArea_Script; other areas (ladders, signs, examine) come with step 4.4.
+        // cLuxArea_Script and cLuxArea_Ladder; other areas (signs, examine, ropes) are not ported yet.
         public override bool CanInteract(Dynamics.HplPhysicsBody body) =>
-            AreaType == "Script" && (_itemInteraction || InteractCallback != "");
+            AreaType == "Ladder" || AreaType == "Script" && (_itemInteraction || InteractCallback != "");
 
-        public override bool OnInteract(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos) =>
-            AreaType == "Script" && InteractCallback != "";
+        public override bool OnInteract(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos)
+        {
+            if (AreaType == "Ladder") return OnInteractLadder();
+            return AreaType == "Script" && InteractCallback != "";
+        }
+
+        /// <summary>
+        /// cLuxArea_Ladder::OnInteract: the first position in front of the ladder (from GetStartPosition upwards in
+        /// 0.1 m steps, then one more step) where the player fits, then the ladder state.
+        /// </summary>
+        bool OnInteractLadder()
+        {
+            var player = Map != null ? Map.player : null;
+            if (player == null) return false;
+            var body = player.Body;
+            Vector3 startPos = LadderStartPosition(player);
+            bool found = false, firstTry = true;
+            do
+            {
+                if (body.CheckCharacterFits(startPos, false, 0, Hpl.HplPhysics.Epsilon))
+                {
+                    if (!firstTry) startPos += new Vector3(0f, 0.1f, 0f);
+                    found = true;
+                    break;
+                }
+                firstTry = false;
+                startPos += new Vector3(0f, 0.1f, 0f);
+            }
+            while (startPos.y <= LadderMaxY - 0.2f);
+            if (!found) return false;
+
+            RTXMnesia.Player.PlayerStateVars.SetupLadder(this, startPos);
+            player.States.ChangeState(RTXMnesia.Player.PlayerStateType.Ladder);
+            return true;
+        }
+
+        /// <summary>cLuxArea_Ladder::GetStartPosition: in front of the ladder at the player's height, kept inside the ladder.</summary>
+        public Vector3 LadderStartPosition(RTXMnesia.Player.AmnesiaPlayer player)
+        {
+            Vector3 charSize = player.BodySize;
+            Vector3 pos = player.Body.Position;
+            Vector3 ladderPos = GameObject.transform.position + LadderForward * charSize.x * 0.6f;
+            ladderPos.y = pos.y + 0.05f;
+            if (ladderPos.y > LadderMaxY - charSize.y * 0.3f) ladderPos.y = LadderMaxY - charSize.y * 0.3f;
+            if (ladderPos.y - charSize.y / 2f < LadderMinY) ladderPos.y = LadderMinY + charSize.y / 2f + 0.1f;
+            return ladderPos;
+        }
 
         public override FocusCrosshair GetFocusCrosshair(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos)
         {
+            if (AreaType == "Ladder") return FocusCrosshair.Ladder;
             if (AreaType != "Script") return FocusCrosshair.LastEnum;
             if (InteractCallback == "") return FocusCrosshair.Default;
             return CustomFocusCrossHair == FocusCrosshair.Default ? FocusCrosshair.Grab : CustomFocusCrossHair;

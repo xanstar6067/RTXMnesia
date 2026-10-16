@@ -34,6 +34,11 @@ namespace RTXMnesia.Effects
         public readonly RadialBlurEffect RadialBlur = new();
         public readonly EmotionFlashEffect EmotionFlash = new();
 
+        /// <summary>cLuxPostEffect_Insanity (cLuxPostEffectHandler, LuxPostEffects.cpp): set by the player's sanity.</summary>
+        public readonly InsanityEffect Insanity = new();
+        /// <summary>Insanity textures (Resources/HplPostEffects.asset), null if not imported.</summary>
+        public HplPostEffectAssets PostEffectAssets { get; private set; }
+
         /// <summary>cLuxEffectRenderer: focus outline and item flash (drawn by HplEffectRendererPass).</summary>
         public readonly HplEffectRenderer Renderer = new();
 
@@ -57,6 +62,8 @@ namespace RTXMnesia.Effects
                 SanityGainFlash.FadeOutTime = cfg.GetFloat("Player_General", "SanityGain_FadeOutTime", 1.25f);
                 SanityGainFlash.Sound = cfg.GetString("Player_General", "SanityGain_Sound", "");
             }
+            PostEffectAssets = Resources.Load<HplPostEffectAssets>(HplPostEffectAssets.ResourceName);
+            if (PostEffectAssets == null) Debug.LogWarning("[RTXMnesia] Post effect resources are not imported (Import > Post effect resources): no insanity effect");
             CreatePass();
         }
 
@@ -110,7 +117,47 @@ namespace RTXMnesia.Effects
         {
             foreach (var e in _effects)
                 if (e.Active) e.Update(timeStep);
+            // cLuxPostEffectHandler::Update: active post effects.
+            if (Insanity.Active) Insanity.Update(timeStep);
             Renderer.Update(timeStep);
+        }
+
+        /// <summary>
+        /// Map change: HPL2 keeps one effect handler for all maps; here each map scene has its own. The fade
+        /// (going black, then FadeIn from CheckMapChange), image trail, flash and screen shakes go on in the next
+        /// map; cLuxEffectHandler::OnMapLeave fades sepia and radial blur to 0 in 1 s.
+        /// </summary>
+        public sealed class Carry
+        {
+            public readonly FadeEffect Fade = new();
+            public readonly FlashEffect Flash = new();
+            public readonly AmountEffect ImageTrail = new(), Sepia = new();
+            public readonly RadialBlurEffect RadialBlur = new();
+            public readonly ShakeScreenEffect ScreenShake = new();
+        }
+
+        public Carry CaptureCarry()
+        {
+            Sepia.FadeTo(0f, 1f);
+            RadialBlur.FadeTo(0f, 1f);
+            var carry = new Carry();
+            carry.Fade.CopyFrom(Fade);
+            carry.Flash.CopyFrom(Flash);
+            carry.ImageTrail.CopyFrom(ImageTrail);
+            carry.Sepia.CopyFrom(Sepia);
+            carry.RadialBlur.CopyFrom(RadialBlur);
+            carry.ScreenShake.CopyFrom(ScreenShake);
+            return carry;
+        }
+
+        public void ApplyCarry(Carry carry)
+        {
+            Fade.CopyFrom(carry.Fade);
+            Flash.CopyFrom(carry.Flash);
+            ImageTrail.CopyFrom(carry.ImageTrail);
+            Sepia.CopyFrom(carry.Sepia);
+            RadialBlur.CopyFrom(carry.RadialBlur);
+            ScreenShake.CopyFrom(carry.ScreenShake);
         }
 
         /// <summary>cLuxEffectHandler::Reset (new game, map change).</summary>
@@ -126,6 +173,25 @@ namespace RTXMnesia.Effects
         }
 
         // ================================================================== effects
+
+        /// <summary>
+        /// cLuxPostEffect_Insanity: the screen is displaced by two of three amplitude maps blended over time
+        /// (AnimCount 0.15/s) along sine waves (T advances WaveSpeed/s) and pushed along the zoom map
+        /// (posteffect_insanity_frag.glsl). Drawn before the image trail (composite priority 25).
+        /// </summary>
+        public sealed class InsanityEffect
+        {
+            public const int AmpMapCount = 3;
+            public bool Active;
+            public float WaveAlpha, ZoomAlpha, WaveSpeed, T, AnimCount;
+
+            public void Update(float timeStep)
+            {
+                T += timeStep * WaveSpeed;
+                AnimCount += timeStep * 0.15f;
+                if (AnimCount >= AmpMapCount) AnimCount -= AmpMapCount;
+            }
+        }
 
         public abstract class Effect
         {
@@ -158,6 +224,14 @@ namespace RTXMnesia.Effects
             }
 
             public bool IsFading => (_goalAlpha == 0f && Alpha > 0f) || (_goalAlpha == 1f && Alpha < 1f);
+
+            public void CopyFrom(FadeEffect o)
+            {
+                Active = o.Active;
+                Alpha = o.Alpha;
+                _goalAlpha = o._goalAlpha;
+                _fadeSpeed = o._fadeSpeed;
+            }
 
             public override void Update(float timeStep)
             {
@@ -203,6 +277,17 @@ namespace RTXMnesia.Effects
                 _fadeInSpeed = 1f / fadeIn;
                 _whiteSpeed = 1f / white;
                 _fadeOutSpeed = 1f / fadeOut;
+            }
+
+            public void CopyFrom(FlashEffect o)
+            {
+                Active = o.Active;
+                Alpha = o.Alpha;
+                _step = o._step;
+                _count = o._count;
+                _fadeInSpeed = o._fadeInSpeed;
+                _whiteSpeed = o._whiteSpeed;
+                _fadeOutSpeed = o._fadeOutSpeed;
             }
 
             public override void Update(float timeStep)
@@ -305,6 +390,14 @@ namespace RTXMnesia.Effects
                 Active = true;
             }
 
+            public void CopyFrom(AmountEffect o)
+            {
+                Active = o.Active;
+                Amount = o.Amount;
+                _goal = o._goal;
+                _speed = o._speed;
+            }
+
             public override void Update(float timeStep)
             {
                 if (_goal < Amount)
@@ -349,6 +442,15 @@ namespace RTXMnesia.Effects
 
             public void SetBlurStartDist(float dist) => StartDist = dist;
 
+            public void CopyFrom(RadialBlurEffect o)
+            {
+                Active = o.Active;
+                Size = o.Size;
+                StartDist = o.StartDist;
+                _goal = o._goal;
+                _speed = o._speed;
+            }
+
             public override void Update(float timeStep)
             {
                 if (_goal < Size)
@@ -388,6 +490,13 @@ namespace RTXMnesia.Effects
             }
 
             readonly List<Shake> _shakes = new();
+
+            public void CopyFrom(ShakeScreenEffect o)
+            {
+                Active = o.Active;
+                _shakes.Clear();
+                _shakes.AddRange(o._shakes);
+            }
 
             public void Start(float amount, float time, float fadeInTime, float fadeOutTime)
             {

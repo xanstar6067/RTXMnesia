@@ -102,6 +102,9 @@ namespace RTXMnesia.Player
                     if (hitEntity == null) continue;
                 }
 
+                // Level geometry that does not collide (char colliders) does not block (GetCollide() == false).
+                if (hitEntity == null && c.gameObject.layer == Dynamics.HplPhysicsWorld.NoCollideLayer) continue;
+
                 if (hitEntity != null)
                 {
                     if (!hitEntity.Active) continue;

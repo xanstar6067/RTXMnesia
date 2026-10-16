@@ -25,7 +25,7 @@ namespace RTXMnesia.ScriptApi
             Effects.EmotionFlash.Start(Translate(asTextCat, asTextEntry), asSound);
         }
 
-        protected void SetInDarknessEffectsActive(bool abX) => NotPorted(nameof(SetInDarknessEffectsActive), "darkness effects (step 6, insanity)");
+        protected void SetInDarknessEffectsActive(bool abX) => Player.InDarkness.SetActive(abX);
 
         /// <summary>The position is the first body of the entity.</summary>
         protected void AddEffectVoice(string asVoiceFile, string asEffectFile, string asTextCat, string asTextEntry, bool abUsePostion,

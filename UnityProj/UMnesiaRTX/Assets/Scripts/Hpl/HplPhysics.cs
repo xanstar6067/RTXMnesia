@@ -17,6 +17,9 @@ namespace RTXMnesia.Hpl
 
         public delegate void CollisionCallback(Collider other, Vector3 normal, float depth);
 
+        /// <summary>kEpsilonf of HPL2 (Math.h).</summary>
+        public const float Epsilon = 0.0001f;
+
         const int MaxPenetrationIterations = 4;
 
         static readonly Collider[] Overlaps = new Collider[128];

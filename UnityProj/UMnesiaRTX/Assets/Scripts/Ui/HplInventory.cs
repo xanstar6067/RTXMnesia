@@ -121,9 +121,8 @@ namespace RTXMnesia.Ui
                     sound = "ui_use_oil";
                     break;
                 case "Lantern":
-                    if (player.lanternDisabled) return false;
-                    player.lanternActive = !player.lanternActive;
-                    if (_map.LanternLitCallback != "") _map.RunScript(_map.LanternLitCallback, player.lanternActive);
+                    // cLuxItemType_Lantern::OnUse
+                    player.Lantern.SetActive(!player.lanternActive, true);
                     return true;
                 case "Puzzle":
                     if (player.States == null) return false;

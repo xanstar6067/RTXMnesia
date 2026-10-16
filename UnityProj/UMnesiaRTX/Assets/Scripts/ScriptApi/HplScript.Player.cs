@@ -133,21 +133,11 @@ namespace RTXMnesia.ScriptApi
             Player.PlaceAtStart(start);
         }
 
-        // Lantern: flags only until the lantern exists (step 4.4).
-        protected void SetLanternActive(bool abX, bool abUseEffects)
-        {
-            if (Player.lanternDisabled && abX) return;
-            Player.lanternActive = abX;
-            NotPorted(nameof(SetLanternActive), "the lantern (step 4.4)");
-        }
+        protected void SetLanternActive(bool abX, bool abUseEffects) => Player.Lantern.SetActive(abX, abUseEffects);
 
         protected bool GetLanternActive() => Player.lanternActive;
 
-        protected void SetLanternDisabled(bool abX)
-        {
-            Player.lanternDisabled = abX;
-            if (abX) Player.lanternActive = false;
-        }
+        protected void SetLanternDisabled(bool abX) => Player.Lantern.SetDisabled(abX);
 
         protected void SetLanternLitCallback(string asCallback) => Map.LanternLitCallback = asCallback ?? "";
     }

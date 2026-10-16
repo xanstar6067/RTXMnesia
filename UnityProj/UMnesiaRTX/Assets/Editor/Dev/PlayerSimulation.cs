@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using RTXMnesia.Hpl;
 using RTXMnesia.Importer;
@@ -54,6 +55,12 @@ namespace RTXMnesia.EditorDev
 
             if (int.TryParse(ImportMenu.Arg("-seed", ""), out int seed)) HplMath.Seed(seed);
             HplGame.Reset();
+            // -globals "name=value;…": global script variables set by other maps (hub return visits).
+            foreach (string pair in ImportMenu.Arg("-globals", "").Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                int eq = pair.IndexOf('=');
+                if (eq > 0) HplGame.SetGlobalVar(pair.Substring(0, eq).Trim(), pair.Substring(eq + 1).Trim());
+            }
 
             float time = 0f;
             void OnLog(string message, string stack, LogType type)
@@ -238,6 +245,50 @@ namespace RTXMnesia.EditorDev
                             foreach (var j in prop.Joints)
                                 log.Info($"t={time,6:0.00}   joint {j.Name} {j.Type}: angle {j.GetAngle() * Mathf.Rad2Deg:0.0}° dist {j.GetDistance():0.000} " +
                                          $"limits {j.MinAngle * Mathf.Rad2Deg:0.#}..{j.MaxAngle * Mathf.Rad2Deg:0.#}°");
+                            continue;
+                        }
+                        case "active":
+                        {
+                            // active Entity true|false: SetEntityActive for maps whose script is not ported.
+                            var entity = map?.GetEntityByName(p.Length > 1 ? p[1] : "");
+                            if (entity == null) { log.Warn($"No entity '{raw.Trim()}'"); continue; }
+                            entity.SetActive(p.Length < 3 || p[2] == "true");
+                            log.Info($"t={time,6:0.00}   {entity.Name} active {entity.Active}");
+                            Step(1);
+                            break;
+                        }
+                        case "fitsup":
+                        {
+                            // fitsup dy: does the standing body fit dy higher, and what does it touch there.
+                            Vector3 test = player.Body.Position + new Vector3(0f, Arg(1, 0.1f), 0f);
+                            bool fits = player.Body.CheckCharacterFits(test, out Vector3 push, false, 0, HplPhysics.Epsilon);
+                            log.Info($"t={time,6:0.00}   fits {fits} at {test:F3} push {push:F4}");
+                            player.Body.ForEachCollision(test, 0, (c, n, d) =>
+                                log.Info($"t={time,6:0.00}     {c.name} ({c.GetType().Name}, layer {c.gameObject.layer}, {c.transform.root.name}) normal {n:F2} depth {d:0.0000}"));
+                            continue;
+                        }
+                        case "lightsoff":
+                        {
+                            // lightsoff: hide every light of the scene except the player's darkness light (darkness tests).
+                            int count = 0;
+                            foreach (var l in RTXMnesia.World.AmnesiaLight.All.ToArray())
+                                if (!l.excludeFromLightLevel) { l.SetVisible(false); count++; }
+                            log.Info($"t={time,6:0.00}   lightsoff: {count} lights hidden");
+                            continue;
+                        }
+                        case "sanity":
+                        {
+                            // sanity [value]: set the sanity, then log the light level, darkness and sanity effects.
+                            if (p.Length > 1) player.SetSanity(arg);
+                            var dark = player.InDarkness;
+                            var ins = map?.effects?.Insanity;
+                            log.Info($"t={time,6:0.00}   sanity {player.sanity:0.00} light ext {player.LightLevel.ExtendedLightLevel:0.000} normal {player.LightLevel.NormalLightLevel:0.000} " +
+                                     $"| darkness {dark.IsInDarkness} light {(dark.AmbientLight != null ? dark.AmbientLight.CurrentColor.ToString() : "-")} " +
+                                     $"| hit {player.SanityHelper.HitAlpha:0.00} drain {player.SanityHelper.SanityDrainVolume:0.00} sway {player.CamDirEffects.SwayAlpha:0.00} " +
+                                     $"collapse {player.InsanityCollapseHelper.Active} | insanity {(ins != null ? $"{ins.Active} wave {ins.WaveAlpha:0.00} zoom {ins.ZoomAlpha:0.00}" : "-")}");
+                            foreach (var l in RTXMnesia.World.AmnesiaLight.All
+                                         .Select(l => (l, v: l.LightLevelAt(player.Body.Position, 3f))).Where(x => x.v > 0f).OrderByDescending(x => x.v).Take(3))
+                                log.Info($"t={time,6:0.00}     light {l.l.name}: {l.v:0.000} visible {l.l.Visible} box {l.l.box}");
                             continue;
                         }
                         case "sounds":

@@ -77,7 +77,8 @@ namespace RTXMnesia.Ui
 
         void Update()
         {
-            if (_map == null || Menu == null || IsTransitioning) return;
+            // The load screen between maps takes the input (cLuxInputHandler LoadScreen state).
+            if (_map == null || Menu == null || IsTransitioning || HplLoadScreen.Active) return;
             if (!IsTitleScreen && (_map.player == null || !_map.player.readDevices)) return;
             var keyboard = Keyboard.current;
             if (keyboard != null && RouteKeys(keyboard)) return;

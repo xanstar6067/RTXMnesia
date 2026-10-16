@@ -108,6 +108,17 @@ namespace RTXMnesia.ScriptApi
             return true;
         }
 
+        /// <summary>cLuxUseItemCallback list of the map (map cache).</summary>
+        public List<(string name, string item, string entity, string function, bool autoDestroy)> ExportUseItemCallbacks() =>
+            _useItemCallbacks.ConvertAll(c => (c.name, c.item, c.entity, c.function, c.autoDestroy));
+
+        public void ImportUseItemCallbacks(List<(string name, string item, string entity, string function, bool autoDestroy)> list)
+        {
+            _useItemCallbacks.Clear();
+            foreach (var (name, item, entity, function, autoDestroy) in list)
+                _useItemCallbacks.Add(new UseItemCallback { name = name, item = item, entity = entity, function = function, autoDestroy = autoDestroy });
+        }
+
         protected void RemoveUseItemCallback(string asName)
         {
             int i = _useItemCallbacks.FindIndex(c => c.name == asName);

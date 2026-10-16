@@ -31,7 +31,8 @@ namespace RTXMnesia.Sound
         }
 
         const int EnemyMusicTypes = 2; // eLuxEnemyMusic: Search, Attack
-        readonly HplSoundHandler _handler;
+        HplSoundBank _bank;
+        Transform _parent;
         MusicEntry _mainSong;
         readonly List<MusicEntry> _fadingSongs = new();
         readonly Dictionary<string, float> _resumePositions = new();
@@ -44,7 +45,11 @@ namespace RTXMnesia.Sound
         /// <summary>cLuxMusicHandler::mfVolumeMul: Sound / InGameMusicVolume of game.cfg.</summary>
         public float GameVolumeMul = 1f;
 
-        public HplMusicHandler(HplSoundHandler handler) => _handler = handler;
+        public HplMusicHandler(HplSoundHandler handler)
+        {
+            _bank = handler.bank;
+            _parent = handler.transform;
+        }
 
         public string CurrentSongName => _mainSong?.File ?? "";
         public float CurrentSongVolume => _mainSong?.Volume ?? 0f;
@@ -172,7 +177,7 @@ namespace RTXMnesia.Sound
 
         public void SetVolumeMul(float mul) => _volumeMul = _volumeMulFadeGoal = mul;
 
-        void UpdateSongs(float timeStep)
+        void UpdateSongs(float timeStep, bool advanceClock = true)
         {
             if (_paused) return;
             if (_volumeMul < _volumeMulFadeGoal) _volumeMul = Mathf.Min(_volumeMul + timeStep * _volumeMulFadeSpeed, _volumeMulFadeGoal);
@@ -180,7 +185,7 @@ namespace RTXMnesia.Sound
 
             if (_mainSong != null)
             {
-                _mainSong.Elapsed += timeStep;
+                if (advanceClock) _mainSong.Elapsed += timeStep;
                 if (!_mainSong.IsPlaying)
                 {
                     Release(_mainSong);
@@ -198,7 +203,7 @@ namespace RTXMnesia.Sound
             for (int i = 0; i < _fadingSongs.Count;)
             {
                 var song = _fadingSongs[i];
-                song.Elapsed += timeStep;
+                if (advanceClock) song.Elapsed += timeStep;
                 song.Volume -= song.VolumeAdd * timeStep;
                 if (song.Volume <= 0f)
                 {
@@ -221,14 +226,14 @@ namespace RTXMnesia.Sound
 
         MusicEntry LoadAndStart(string file, bool loop, bool resume)
         {
-            var clip = _handler.bank != null ? _handler.bank.GetClip(file) : null;
+            var clip = _bank != null ? _bank.GetClip(file) : null;
             if (clip == null)
             {
                 HplLog.Error($"Couldn't load music '{file}'");
                 return null;
             }
             var go = new GameObject("Music " + file) { hideFlags = HideFlags.DontSave };
-            go.transform.SetParent(_handler.transform, false);
+            go.transform.SetParent(_parent, false);
             var source = go.AddComponent<AudioSource>();
             source.playOnAwake = false;
             source.spatialBlend = 0f;
@@ -253,6 +258,44 @@ namespace RTXMnesia.Sound
             if (song.Source == null) return;
             if (Application.isPlaying) Object.Destroy(song.Source.gameObject);
             else Object.DestroyImmediate(song.Source.gameObject);
+        }
+
+        /// <summary>
+        /// The music handler is one for the whole game (cMusicHandler, cLuxMusicHandler): a map change moves it,
+        /// with its playing sources, to the next map's sound handler (or, while the scenes switch, to a node that
+        /// survives the load).
+        /// </summary>
+        internal void MoveTo(Transform parent)
+        {
+            _parent = parent;
+            if (_mainSong?.Source != null) _mainSong.Source.transform.SetParent(parent, false);
+            foreach (var s in _fadingSongs)
+                if (s.Source != null) s.Source.transform.SetParent(parent, false);
+        }
+
+        /// <summary>cLuxMusicHandler::OnMapEnter: enemy music stops (priorities 8 and up).</summary>
+        public void OnMapEnter()
+        {
+            for (int i = 0; i < EnemyMusicTypes; i++) Stop(2f, 8 + i);
+        }
+
+        /// <summary>
+        /// cLuxMusicHandler::OnMapLeave: enemy music stops, then 60 updates of 0.1 s finish the fades (the streams
+        /// play on by themselves, so only volumes move, not the play clocks).
+        /// </summary>
+        public void OnMapLeave()
+        {
+            OnMapEnter();
+            for (int i = 0; i < 60; i++)
+            {
+                UpdateSongs(0.1f, false);
+                if (_currentMaxPrio >= 0 && _mainSong == null)
+                {
+                    _gameMusic[_currentMaxPrio].File = "";
+                    _currentMaxPrio = -1;
+                    PlayHighestPriority();
+                }
+            }
         }
 
         internal void StopAllNow()

@@ -180,6 +180,9 @@ namespace RTXMnesia.Player
             _moving[(int)dir] = true;
         }
 
+        /// <summary>iCharacterBody::ResetClimbing.</summary>
+        public void ResetClimbing() => _climbing = false;
+
         public void StopMovement()
         {
             _velocity = Vector3.zero;
@@ -240,6 +243,10 @@ namespace RTXMnesia.Player
             Vector3 a = new(Mathf.Abs(pushBack.x), Mathf.Abs(pushBack.y), Mathf.Abs(pushBack.z));
             return epsilon == 0f ? a == Vector3.zero : a.x < epsilon && a.y < epsilon && a.z < epsilon;
         }
+
+        /// <summary>Debug: the colliders the shape of this size would touch at the position.</summary>
+        public void ForEachCollision(Vector3 position, int sizeIndex, HplPhysics.CollisionCallback callback) =>
+            CheckCollision(out _, position, callback, sizeIndex);
 
         public bool CheckRayIntersection(Vector3 start, Vector3 end, out float distance, out Vector3 normal) =>
             HplPhysics.Raycast(start, end, out distance, out normal, out _);

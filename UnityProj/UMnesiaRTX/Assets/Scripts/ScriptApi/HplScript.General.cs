@@ -127,9 +127,9 @@ namespace RTXMnesia.ScriptApi
         }
 
         protected void ChangeMap(string asMapName, string asStartPos, string asStartSound, string asEndSound) =>
-            NotPorted(nameof(ChangeMap) + $"({asMapName}, {asStartPos})", "map changes (after the other chapter 1 maps are imported)");
+            Map.ChangeMap(asMapName, asStartPos, asStartSound, asEndSound);
 
-        protected void ClearSavedMaps() { }
+        protected void ClearSavedMaps() => HplSavedMaps.Reset();
 
         protected void CreateDataCache() { }
 
@@ -153,9 +153,8 @@ namespace RTXMnesia.ScriptApi
         protected void SetFogProperties(float afStart, float afEnd, float afFalloffExp, bool abCulling) =>
             Map.SetFog(start: afStart, end: afEnd, falloffExp: afFalloffExp);
 
-        /// <summary>Kept for the loading screen of the next map (step 6).</summary>
         protected void SetupLoadScreen(string asTextCat, string asTextEntry, int alRandomNum, string asImageFile) =>
-            Map.LoadScreen = (asTextCat, asTextEntry, alRandomNum, asImageFile);
+            Ui.HplLoadScreen.SetupLoadText(asTextCat, asTextEntry, alRandomNum, asImageFile);
 
         // ------------------------------------------------------------------ math and conversions
 

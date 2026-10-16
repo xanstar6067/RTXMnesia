@@ -18,6 +18,9 @@ namespace RTXMnesia.Props
 
         public PropItem(AmnesiaEntity entity) : base(entity, HplEntityType.Prop) { }
 
+        /// <summary>cLuxProp_Item::mlSpawnContainerID: the broken object it came out of ("" for a placed item).</summary>
+        public string SpawnContainer = "";
+
         protected override string DefaultFocusDistanceKey => "Item_DefaultMaxFocusDist";
 
         protected override void LoadVariables()
@@ -95,19 +98,27 @@ namespace RTXMnesia.Props
 
     /// <summary>
     /// cLuxProp_LevelDoor (LuxProp_LevelDoor.cpp): a door to another map. Locked: the locked sound and text,
-    /// at most every 2 s; else the map changes (map switching comes later: logged).
+    /// at most every 2 s; else the map changes with the door's enter / exit sounds.
     /// </summary>
     public sealed class PropLevelDoor : HplProp
     {
         string _textEntry = "", _mapFile = "", _startPos = "", _lockedTextCat = "", _lockedTextEntry = "";
+        string _enterSound = "", _exitSound = "";
         float _lockedCount;
 
         public bool Locked;
         public string LockedSound = "";
+        public string MapFile => _mapFile;
 
         public PropLevelDoor(AmnesiaEntity entity) : base(entity, HplEntityType.Prop) { }
 
         protected override string DefaultFocusDistanceKey => "LevelDoor_DefaultMaxFocusDist";
+
+        protected override void LoadVariables()
+        {
+            _enterSound = VarString("EnterSound", "");
+            _exitSound = VarString("ExitSound", "");
+        }
 
         protected override void LoadInstanceVariables()
         {
@@ -140,7 +151,7 @@ namespace RTXMnesia.Props
                     _lockedCount = 2f;
                 }
             }
-            else Map.ChangeMap(_mapFile, _startPos);
+            else Map.ChangeMap(_mapFile, _startPos, _enterSound, _exitSound);
             return true;
         }
 

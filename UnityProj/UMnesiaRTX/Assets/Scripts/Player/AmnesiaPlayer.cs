@@ -85,7 +85,7 @@ namespace RTXMnesia.Player
         public event Action SanityGained;
         /// <summary>GiveSanityDamage (hint, hit effect).</summary>
         public event Action SanityHit;
-        /// <summary>Sanity reached 0 (insanity collapse, step 6).</summary>
+        /// <summary>Sanity went below 0: the insanity collapse started (<see cref="InsanityCollapseHelper"/>).</summary>
         public event Action InsanityCollapse;
         /// <summary>Health reached 0 (death, step 6).</summary>
         public event Action Died;
@@ -97,7 +97,7 @@ namespace RTXMnesia.Player
         public bool PressingRun { get; private set; }
         public bool PressingJump { get; private set; }
         public Vector3 CameraRight => playerCamera != null ? playerCamera.transform.right : Body.Right;
-        public float MoveSpeedMul => scriptMoveSpeedMul * interactionMoveSpeedMul;
+        public float MoveSpeedMul => scriptMoveSpeedMul * interactionMoveSpeedMul * (InsanityCollapseHelper != null ? InsanityCollapseHelper.SpeedMul : 1f);
         public float RunSpeedMul => scriptRunSpeedMul;
 
         // ------------------------------------------------------------------ interaction (step 4.3)
@@ -160,11 +160,69 @@ namespace RTXMnesia.Player
             _yawLimited = false;
         }
 
-        /// <summary>cLuxPlayer::DoAction: the state first; lantern toggling comes with step 4.4.</summary>
+        // ------------------------------------------------------------------ map change
+
+        /// <summary>
+        /// What a map change keeps: HPL2 has one cLuxPlayer for the whole game, here every map scene has its own.
+        /// cLuxPlayer::OnMapLeave resets the FOV / aspect / roll fades and the state (Normal); the script settings,
+        /// health, sanity, oil, lantern, crouching and head offsets stay.
+        /// </summary>
+        public sealed class Carry
+        {
+            public float moveSpeedMul, runSpeedMul, jumpForceMul, lookSpeedMul;
+            public bool jumpDisabled, crouchDisabled, noFallDamage, showCrossHairIcons, sanityDrainDisabled;
+            public bool lanternActive, lanternDisabled, crouching;
+            public float health, sanity, lampOil;
+            public int tinderboxes;
+            public HeadOffset[] headOffsets;
+            // cLuxPlayerHands: the held object, its state and fade.
+            public string handObject;
+            public PlayerHands.HandsState handState;
+            public float handAlpha;
+        }
+
+        public Carry CaptureCarry() => new()
+        {
+            moveSpeedMul = scriptMoveSpeedMul, runSpeedMul = scriptRunSpeedMul, jumpForceMul = scriptJumpForceMul,
+            lookSpeedMul = lookSpeedMul, jumpDisabled = jumpDisabled, crouchDisabled = crouchDisabled,
+            noFallDamage = noFallDamage, showCrossHairIcons = showCrossHairIcons, sanityDrainDisabled = sanityDrainDisabled,
+            lanternActive = lanternActive, lanternDisabled = lanternDisabled,
+            crouching = MoveState != null && MoveState.Crouching,
+            health = health, sanity = sanity, lampOil = lampOil, tinderboxes = tinderboxes,
+            headOffsets = (HeadOffset[])_headOffsets.Clone(),
+            handObject = Hands != null ? Hands.CurrentHandObject : "",
+            handState = Hands != null ? Hands.State : PlayerHands.HandsState.Disabled,
+            handAlpha = Hands != null ? Hands.HandObjectAlpha : 0f,
+        };
+
+        public void ApplyCarry(Carry c)
+        {
+            scriptMoveSpeedMul = c.moveSpeedMul;
+            scriptRunSpeedMul = c.runSpeedMul;
+            scriptJumpForceMul = c.jumpForceMul;
+            lookSpeedMul = c.lookSpeedMul;
+            jumpDisabled = c.jumpDisabled;
+            crouchDisabled = c.crouchDisabled;
+            noFallDamage = c.noFallDamage;
+            showCrossHairIcons = c.showCrossHairIcons;
+            sanityDrainDisabled = c.sanityDrainDisabled;
+            lanternActive = c.lanternActive;
+            lanternDisabled = c.lanternDisabled;
+            health = c.health;
+            sanity = c.sanity;
+            lampOil = c.lampOil;
+            tinderboxes = c.tinderboxes;
+            Array.Copy(c.headOffsets, _headOffsets, Math.Min(c.headOffsets.Length, _headOffsets.Length));
+            if (c.crouching && MoveState != null) MoveState.RestoreCrouch();
+            Hands?.Restore(c.handObject, c.handState, c.handAlpha);
+        }
+
+        /// <summary>cLuxPlayer::DoAction: the state first; if it lets the action through, the lantern key toggles the lantern.</summary>
         public void DoAction(PlayerAction action, bool pressed)
         {
             if (States == null) return;
-            States.Current.OnDoAction(action, pressed);
+            if (States.Current.OnDoAction(action, pressed) && action == PlayerAction.Lantern && pressed)
+                Lantern?.SetActive(!lanternActive, true);
         }
 
         public void Scroll(float amount) => States?.Current.OnScroll(amount);
@@ -174,12 +232,13 @@ namespace RTXMnesia.Player
         {
             if (_freeCameraActive) return;
             States?.Current.PostUpdate(dt);
+            Hands?.PostUpdate();
         }
 
         /// <summary>Step sound request: type and walk/run/sneak (sounds come with the sound system).</summary>
         public event Action<FootSound, string> FootSounded;
 
-        struct HeadOffset
+        public struct HeadOffset
         {
             public bool moving;
             public Vector3 add, goal;
@@ -254,10 +313,37 @@ namespace RTXMnesia.Player
             LookAt = new PlayerLookAt(this);
             MoveState.OnEnterState();
             States = new PlayerStates(this);
+            Lantern = new PlayerLantern(this, cfg);
+            LightLevel = new PlayerLightLevel(this, cfg);
+            InDarkness = new PlayerInDarkness(this, cfg);
+            SanityHelper = new PlayerSanity(this, cfg);
+            CamDirEffects = new PlayerCamDirEffects(this, cfg);
+            InsanityCollapseHelper = new PlayerInsanityCollapse(this, cfg);
+            // The hands are a world entity of Play mode (edit-mode simulations have no animation clock).
+            if (Application.isPlaying) Hands = PlayerHands.Create(this, cfg);
         }
+
+        /// <summary>cLuxPlayerHands: the hands and hand objects (null if not imported or outside Play mode).</summary>
+        public PlayerHands Hands { get; private set; }
+        /// <summary>cLuxPlayerLantern.</summary>
+        public PlayerLantern Lantern { get; private set; }
+        /// <summary>cLuxPlayerLightLevel.</summary>
+        public PlayerLightLevel LightLevel { get; private set; }
+        /// <summary>cLuxPlayerInDarkness.</summary>
+        public PlayerInDarkness InDarkness { get; private set; }
+        /// <summary>cLuxPlayerSanity (hit, losing sanity, insanity visuals, low sanity, regain).</summary>
+        public PlayerSanity SanityHelper { get; private set; }
+        /// <summary>cLuxPlayerCamDirEffects (view sway at very low sanity).</summary>
+        public PlayerCamDirEffects CamDirEffects { get; private set; }
+        /// <summary>cLuxPlayerInsanityCollapse.</summary>
+        public PlayerInsanityCollapse InsanityCollapseHelper { get; private set; }
 
         void Start()
         {
+            // cLuxPlayer::OnMapEnter / CreateWorldEntities of the helpers: each map scene has its own player.
+            InDarkness.CreateWorldEntities(transform);
+            LightLevel.OnMapEnter();
+            InDarkness.OnMapEnter();
             var start = FindStart(startArea);
             if (start != null) PlaceAtStart(start);
             else PlaceAt(transform.position, transform.eulerAngles.y * Mathf.Deg2Rad);
@@ -282,6 +368,14 @@ namespace RTXMnesia.Player
         }
 
         /// <summary>cLuxPlayer::PlaceAtStartNode: the player looks along the area's +Z (HPL2 and Unity alike).</summary>
+        /// <summary>Set the view (Unity angles: yaw from +Z towards +X, pitch down), as the ladder state turns the camera.</summary>
+        public void SetLook(float yaw, float pitch)
+        {
+            _yaw = yaw;
+            _pitch = pitch;
+            Body.Yaw = _yaw;
+        }
+
         public void PlaceAtStart(AmnesiaArea area)
         {
             Vector3 f = area.transform.forward;
@@ -339,6 +433,8 @@ namespace RTXMnesia.Player
                 if (keyboard.spaceKey.wasPressedThisFrame) Jump(true);
                 if (!keyboard.spaceKey.isPressed && PressingJump) Jump(false);
                 if (keyboard.leftCtrlKey.wasPressedThisFrame) Crouch(true);
+                if (keyboard.fKey.wasPressedThisFrame) DoAction(PlayerAction.Lantern, true);
+                if (keyboard.fKey.wasReleasedThisFrame) DoAction(PlayerAction.Lantern, false);
                 RotateHeld = keyboard.rKey.isPressed;
             }
 
@@ -410,8 +506,17 @@ namespace RTXMnesia.Player
             MoveState.Update(dt);
             States.Current.Update(dt);
             UpdateHeadPosAdd(dt);
+            // Helpers in cLuxPlayer's order (HudEffect, LightLevel, InDarkness, Lean, Death, Hands, Lantern, Sanity,
+            // LookAt, Flashback, Hurt, SpawnPS, CamDirEffects, InsanityCollapse).
+            LightLevel.Update(dt);
+            InDarkness.Update(dt);
             Lean.Update(dt);
+            Hands?.Update(dt);
+            Lantern.Update(dt);
+            SanityHelper.Update(dt);
             LookAt.Update(dt);
+            CamDirEffects.Update(dt);
+            InsanityCollapseHelper.Update(dt);
             PressedMove = false;
             collideCallbacks?.Invoke();
             UpdateCameraEffects(dt);
@@ -436,6 +541,7 @@ namespace RTXMnesia.Player
             if (_freeCameraActive || UiInputBlocked) return;
             float alpha = Time.fixedDeltaTime > 0f ? Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime) : 1f;
             UpdateCameraTransform(alpha);
+            Hands?.UpdateTransform(playerCamera != null ? playerCamera.transform : null);
         }
 
         /// <summary>Turn the view (radians; yaw turns right, pitch looks down), within the pitch limits.</summary>
@@ -523,8 +629,10 @@ namespace RTXMnesia.Player
             Vector2 rel = pixels * mouseSensitivity / (1.7f * Mathf.Max(1, Screen.height));
             Vector2 final = smoothMouse ? SmoothMouse(rel, frameTime) : rel;
             if (invertMouse) final.y = -final.y;
-            AddYaw(-final.x);
-            AddPitch(final.y);
+            // cLuxPlayerCamDirEffects::AddAndGetYawAdd / AddAndGetPitchAdd (view sway at very low sanity).
+            Vector2 look = CamDirEffects != null ? CamDirEffects.AddAndGetLookAdd(new Vector2(-final.x, final.y), frameTime * 60f) : new Vector2(-final.x, final.y);
+            AddYaw(look.x);
+            AddPitch(look.y);
         }
 
         Vector2 SmoothMouse(Vector2 rel, float frameTime)
@@ -677,7 +785,7 @@ namespace RTXMnesia.Player
             if (sanity < 0f)
             {
                 sanity = 0f;
-                InsanityCollapse?.Invoke();
+                StartInsanityCollapse();
             }
             if (x > 0f && showEffect) SanityGained?.Invoke();
         }
@@ -687,7 +795,13 @@ namespace RTXMnesia.Player
         {
             SanityHit?.Invoke();
             LowerSanity(amount, true);
-            // TODO step 6 (insanity): cLuxPlayerSanity::StartHit (zoom and sound).
+            SanityHelper?.StartHit();
+        }
+
+        void StartInsanityCollapse()
+        {
+            InsanityCollapseHelper?.Start();
+            InsanityCollapse?.Invoke();
         }
 
         public void LowerSanity(float amount, bool useEffect)
@@ -697,9 +811,9 @@ namespace RTXMnesia.Player
             if (sanity < 0f)
             {
                 sanity = 0f;
-                InsanityCollapse?.Invoke();
+                StartInsanityCollapse();
             }
-            // TODO step 6 (insanity): useEffect → cLuxPlayerSanity::SetSanityLost.
+            if (useEffect) SanityHelper?.SetSanityLost();
         }
 
         public void SetLampOil(float x) => lampOil = x;
@@ -749,7 +863,7 @@ namespace RTXMnesia.Player
             if (!active) UpdateCameraTransform(1f);
         }
 
-        static void LockCursor(bool locked)
+        public static void LockCursor(bool locked)
         {
             Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !locked;

@@ -46,6 +46,15 @@ public static class ConfigureHDRP
         if (ensure == null || ensure.Invoke(null, new object[] { true }) == null)
             throw new InvalidOperationException("HDRP global settings could not be initialized.");
 
+        // Light layers: the hand-held lantern lights the hands through a near-field copy of its lights (PlayerHands).
+        var serialized = new SerializedObject(pipeline);
+        var lightLayers = serialized.FindProperty("m_RenderPipelineSettings.supportLightLayers");
+        if (lightLayers != null)
+        {
+            lightLayers.boolValue = true;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         GraphicsSettings.defaultRenderPipeline = pipeline;
         int initialQuality = QualitySettings.GetQualityLevel();
         for (int i = 0; i < QualitySettings.names.Length; i++)

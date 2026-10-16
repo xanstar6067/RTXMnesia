@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace RTXMnesia.Player
 {
-    /// <summary>eLuxPlayerState (LuxTypes.h). HandObject and Ladder come with step 4.4.</summary>
+    /// <summary>eLuxPlayerState (LuxTypes.h). HandObject (melee / tinderbox hand objects) is not ported.</summary>
     public enum PlayerStateType { Normal, HandObject, UseItem, InteractGrab, InteractPush, InteractSlide, InteractSwingDoor, InteractLever, InteractWheel, Ladder }
 
     /// <summary>eLuxPlayerAction (input actions the states react to).</summary>
@@ -19,10 +19,20 @@ namespace RTXMnesia.Player
         /// <summary>The focus point, HPL2 space.</summary>
         public static Vector3 InteractPos;
         public static HplGame.Item InventoryItem;
+        /// <summary>The ladder area and the body position to attach at (cLuxPlayerStateVars::SetupLadder).</summary>
+        public static HplArea Ladder;
+        public static Vector3 LadderStartPos;
 
         public static void Reset()
         {
             InteractBody = null; InteractProp = null; InventoryItem = null; InteractPos = Vector3.zero;
+            Ladder = null; LadderStartPos = Vector3.zero;
+        }
+
+        public static void SetupLadder(HplArea ladder, Vector3 startPos)
+        {
+            Ladder = ladder;
+            LadderStartPos = startPos;
         }
 
         public static void SetupInteraction(HplPhysicsBody body, Vector3 hplInteractPos)
@@ -65,6 +75,8 @@ namespace RTXMnesia.Player
         public virtual void OnDestroyEntity(HplEntity entity) { }
         /// <summary>Debug line for the simulation log.</summary>
         public virtual string Describe() => Type.ToString();
+        /// <summary>iLuxPlayerState::AllowLantern (false only on a ladder).</summary>
+        public virtual bool AllowLantern => true;
     }
 
     /// <summary>cLuxPlayer::ChangeState and the state list.</summary>
@@ -87,6 +99,7 @@ namespace RTXMnesia.Player
             Add(new PlayerStateInteractSwingDoor(player));
             Add(new PlayerStateInteractLever(player));
             Add(new PlayerStateInteractWheel(player));
+            Add(new PlayerStateLadder(player));
             Current = _states[PlayerStateType.Normal];
         }
 

@@ -16,7 +16,14 @@ namespace RTXMnesia.Importer
     public class ModelImportRules : AssetPostprocessor
     {
         // Bump to reimport every model after changing these rules.
-        public override uint GetVersion() => 2;
+        public override uint GetVersion() => 3;
+
+        /// <summary>
+        /// The player's hands (models/player/hands) and their animation files: legacy clips, played with
+        /// cross fades like cMeshEntity::PlayFadeToName (see HandsConverter / PlayerHands).
+        /// </summary>
+        public static bool IsLegacyAnimated(string assetPath) =>
+            assetPath.Replace('\\', '/').Contains("/models/player/hands/", StringComparison.OrdinalIgnoreCase);
 
         static ResourceIndex _index;
         static ResourceIndex Index => _index ??= new ResourceIndex(AmnesiaPaths.SourceRoot);
@@ -47,7 +54,8 @@ namespace RTXMnesia.Importer
             importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
 
             bool animated = info.HasSkin || info.HasAnimation;
-            importer.animationType = animated ? ModelImporterAnimationType.Generic : ModelImporterAnimationType.None;
+            importer.animationType = !animated ? ModelImporterAnimationType.None
+                : IsLegacyAnimated(assetPath) ? ModelImporterAnimationType.Legacy : ModelImporterAnimationType.Generic;
             importer.importAnimation = info.HasAnimation;
 
             foreach (var pair in info.MaterialTextures)
@@ -92,6 +100,8 @@ namespace RTXMnesia.Importer
             string[] parts = name.Split(new[] { '_' }, StringSplitOptions.RemoveEmptyEntries);
             string shape = parts.Length > 1 ? parts[1] : "mesh";
             Bounds b = mesh.bounds;
+            // A char collider stops only the character (HplModelBuilder.IsCharColliderName).
+            if (name.StartsWith("_charcollider_")) node.layer = RTXMnesia.Dynamics.HplPhysicsWorld.NoCollideLayer;
 
             switch (shape)
             {

@@ -29,6 +29,13 @@ namespace RTXMnesia.Props
         float _breakMinEnergy, _breakImpulse, _lifeLength, _lifeLengthCount;
         string _breakEntity = "", _breakEntityAlignBody = "", _breakSound = "", _breakParticleSystem = "";
         string _containedItem = "";
+
+        /// <summary>The item the object drops when broken (ContainedItem; "" = none).</summary>
+        public string ContainedItem
+        {
+            get => _containedItem;
+            set => _containedItem = value ?? "";
+        }
         float _hitDamageAmount, _minHitDamageSpeed;
         int _hitDamageStrength;
 
@@ -288,7 +295,11 @@ namespace RTXMnesia.Props
             }
 
             if (_containedItem != "")
-                Map.CreateEntity(Name + "_item", _containedItem, center, Quaternion.identity, Vector3.one);
+            {
+                // cLuxProp_Item::SetSpawnContainerID: the map cache keeps the container "with an active item".
+                if (Map.CreateEntity(Name + "_item", _containedItem, center, Quaternion.identity, Vector3.one) is PropItem item)
+                    item.SpawnContainer = Name;
+            }
 
             PlaySoundAt(Name + "_BreakSound", _breakSound, center);
             if (_breakParticleSystem != "")

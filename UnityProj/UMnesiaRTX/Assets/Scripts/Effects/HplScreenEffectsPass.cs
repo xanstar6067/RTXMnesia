@@ -8,7 +8,8 @@ namespace RTXMnesia.Effects
 {
     /// <summary>
     /// Draws <see cref="HplEffects"/> after post-processing, in the order of HPL2's post effect composite
-    /// (LuxMapHandler.cpp priorities, higher first): image trail (10) → radial blur (9) → sepia (4), then the HUD
+    /// (LuxMapHandler.cpp / LuxPostEffects.cpp priorities, higher first): insanity (25) → image trail (10) →
+    /// radial blur (9) → sepia (4), then the HUD
     /// layers drawn over the 3D view (fade: × (1 − alpha), flashes: + color × alpha).
     /// HPL2 renders in gamma space, so the effects work on sRGB values (posteffect_*_frag.glsl) and the result is
     /// converted back to linear.
@@ -17,13 +18,13 @@ namespace RTXMnesia.Effects
     public class HplScreenEffectsPass : CustomPass
     {
         public const string ShaderName = "Hidden/RTXMnesia/HplScreenEffects";
-        const int CopyPass = 0, TrailPass = 1, CompositePass = 2;
+        const int CopyPass = 0, TrailPass = 1, CompositePass = 2, InsanityPass = 7;
 
         public Shader shader;
         [NonSerialized] public HplEffects effects;
 
         Material _material;
-        RTHandle _source, _trail;
+        RTHandle _source, _trail, _insanity;
         RTHandle _menuSharp, _menuBlur, _menuTemp;
         int _menuGeneration = -1, _menuWidth, _menuHeight;
         bool _clearTrail = true;
@@ -38,6 +39,10 @@ namespace RTXMnesia.Effects
         static readonly int AddId = Shader.PropertyToID("_HplAdd");
         static readonly int MenuSharpId = Shader.PropertyToID("_HplMenuSharp");
         static readonly int MenuBlendId = Shader.PropertyToID("_HplMenuBlend");
+        static readonly int AmpMap0Id = Shader.PropertyToID("_HplAmpMap0");
+        static readonly int AmpMap1Id = Shader.PropertyToID("_HplAmpMap1");
+        static readonly int ZoomMapId = Shader.PropertyToID("_HplZoomMap");
+        static readonly int InsanityId = Shader.PropertyToID("_HplInsanity");
 
         protected override void Setup(ScriptableRenderContext renderContext, CommandBuffer cmd)
         {
@@ -47,6 +52,7 @@ namespace RTXMnesia.Effects
             if (shader != null) _material = CoreUtils.CreateEngineMaterial(shader);
             _source = Alloc("HPL effects source");
             _trail = Alloc("HPL image trail");
+            _insanity = Alloc("HPL insanity");
         }
 
         static RTHandle Alloc(string name) =>
@@ -79,8 +85,11 @@ namespace RTXMnesia.Effects
             // cPostEffect_ImageTrail: turning it off resets it, the next frame starts from the current image.
             bool trailOn = trail > 0f;
             bool menuOn = effects.Map != null && effects.Map.IsMenuPaused;
+            var assets = effects.PostEffectAssets;
+            bool insanityOn = effects.Insanity.Active && assets != null && assets.insanityZoomMap != null &&
+                              assets.insanityAmpMaps.Length == HplEffects.InsanityEffect.AmpMapCount;
             if (!trailOn) _clearTrail = true;
-            if (!trailOn && blur <= 0f && sepia <= 0f && fade <= 0f && add.maxColorComponent <= 0f)
+            if (!insanityOn && !trailOn && blur <= 0f && sepia <= 0f && fade <= 0f && add.maxColorComponent <= 0f)
             {
                 if (menuOn) RenderMenu(ctx); else ReleaseMenu();
                 return;
@@ -93,6 +102,23 @@ namespace RTXMnesia.Effects
             CoreUtils.SetRenderTarget(cmd, _source, ClearFlag.None);
             CoreUtils.DrawFullScreen(cmd, _material, props, CopyPass);
             RTHandle input = _source;
+
+            if (insanityOn)
+            {
+                // cLuxPostEffect_Insanity::RenderEffect: the current and next amplitude map, blended by the fraction.
+                var insanity = effects.Insanity;
+                int amp0 = (int)insanity.AnimCount;
+                int amp1 = (int)(insanity.AnimCount + 1f);
+                if (amp1 >= HplEffects.InsanityEffect.AmpMapCount) amp1 = 0;
+                props.SetTexture(SourceId, _source);
+                props.SetTexture(AmpMap0Id, assets.insanityAmpMaps[amp0]);
+                props.SetTexture(AmpMap1Id, assets.insanityAmpMaps[amp1]);
+                props.SetTexture(ZoomMapId, assets.insanityZoomMap);
+                props.SetVector(InsanityId, new Vector4(insanity.T, insanity.AnimCount - Mathf.Floor(insanity.AnimCount), insanity.WaveAlpha, insanity.ZoomAlpha));
+                CoreUtils.SetRenderTarget(cmd, _insanity, ClearFlag.None);
+                CoreUtils.DrawFullScreen(cmd, _material, props, InsanityPass);
+                input = _insanity;
+            }
 
             // Frame time of the renderer: real time since the previous render of this pass (also right for
             // renders outside the player loop, where Time.deltaTime does not advance). Menu time is excluded
@@ -108,7 +134,7 @@ namespace RTXMnesia.Effects
                 float alpha = _clearTrail ? 1f : effects.Map != null && effects.Map.IsMenuPaused
                     ? 0f : CalculateTrailAlpha(trail, frameTime);
                 _clearTrail = false;
-                props.SetTexture(SourceId, _source);
+                props.SetTexture(SourceId, input);
                 props.SetFloat(TrailAlphaId, alpha);
                 CoreUtils.SetRenderTarget(cmd, _trail, ClearFlag.None);
                 CoreUtils.DrawFullScreen(cmd, _material, props, TrailPass);
@@ -178,6 +204,7 @@ namespace RTXMnesia.Effects
             CoreUtils.Destroy(_material);
             _source?.Release();
             _trail?.Release();
+            _insanity?.Release();
             ReleaseMenu();
         }
     }

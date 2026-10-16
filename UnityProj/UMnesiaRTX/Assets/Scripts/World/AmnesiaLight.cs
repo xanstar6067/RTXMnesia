@@ -5,11 +5,12 @@ using UnityEngine.Rendering;
 namespace RTXMnesia.World
 {
     /// <summary>
-    /// An HPL2 point or spot light. Keeps the original parameters, because level scripts work in HPL2 terms
+    /// An HPL2 point, spot or box light. Keeps the original parameters, because level scripts work in HPL2 terms
     /// (FadeLightTo(color, radius, time)), and drives the HDRP light from them via <see cref="HplLighting"/>.
+    /// A box light (cLightBox, <see cref="box"/>) has no HDRP light: <see cref="HplBoxLightPass"/> draws it.
     /// At runtime it does what iLight::UpdateLight does each step: color / radius fades and flickering.
     /// </summary>
-    [RequireComponent(typeof(Light))]
+    [ExecuteAlways]
     public class AmnesiaLight : MonoBehaviour
     {
         [Tooltip("HPL2 DiffuseColor, may exceed 1. Alpha = specular strength (HDRP has no per-light equivalent).")]
@@ -18,6 +19,9 @@ namespace RTXMnesia.World
         [Tooltip("1D falloff texture over (distance / radius)². Only informative: HDRP uses 1/d² with a range window.")]
         public string falloffMap;
         public string gobo;
+        public bool castShadows;
+        [Tooltip("Spot frustum (cLightSpot): vertical FOV in radians, aspect, near clip. 0 = from the HDRP light.")]
+        public float spotFov, spotAspect = 1f, spotNearClip = 0.1f;
 
         [Header("Flicker")]
         public bool flickerActive;
@@ -30,23 +34,88 @@ namespace RTXMnesia.World
         public Vector2 flickerOffFadeLength;
         public string flickerOnSound, flickerOffSound, flickerOnPS, flickerOffPS;
 
+        [Header("Box (cLightBox)")]
+        [Tooltip("Ambient light inside an axis-aligned box (HPL2 ignores the rotation): diffuse × color, no N·L.")]
+        public bool box;
+        public Vector3 boxSize = Vector3.one;
+        [Tooltip("BlendFunc 1: adds to the boxes before it; 0 (Replace): sets the color.")]
+        public bool boxBlendAdd;
+        public bool boxVisible = true;
+
         // Runtime state (iLight): current color / radius, fade and flicker.
         Color _color, _colorAdd, _destColor, _flickerOnColor;
         float _radius, _radiusAdd, _destRadius, _fadeTime, _flickerOnRadius;
         bool _flickering, _flickerOn;
         float _flickerTime, _flickerStateLength;
-        bool _runtime;
+        bool _runtime, _boxVisible;
 
         public Color CurrentColor => _runtime ? _color : diffuseColor;
         public float CurrentRadius => _runtime ? _radius : radius;
-        public bool Visible => TryGetComponent(out Light l) && l.enabled;
+        public bool Visible => box ? (_runtime ? _boxVisible : boxVisible) : TryGetComponent(out Light l) && l.enabled;
+
+        /// <summary>Enabled lights of all loaded scenes (the light level of the player, cLuxMapHelper::GetLightLevelAtPos).</summary>
+        public static readonly System.Collections.Generic.List<AmnesiaLight> All = new();
+
+        /// <summary>The player's darkness light (skipped by the light level).</summary>
+        [System.NonSerialized] public bool excludeFromLightLevel;
+
+        void OnEnable()
+        {
+            All.Add(this);
+            if (box) HplBoxLightPass.Register(this);
+        }
+
+        void OnDisable()
+        {
+            All.Remove(this);
+            HplBoxLightPass.Unregister(this);
+        }
+
+        /// <summary>
+        /// cLuxMapHelper::GetLightLevelAtPos for one light: 0 when the point is outside the light's volume
+        /// (GetLightsAtNode: box, sphere of the radius, spot frustum); a box gives the max of its color, point and spot
+        /// lights max color × (1 − distance / (radius + radiusAdd)). Shadow-casting spots need a line of sight.
+        /// </summary>
+        public float LightLevelAt(Vector3 position, float radiusAdd)
+        {
+            if (!Visible || !isActiveAndEnabled) return 0f;
+            Color c = CurrentColor;
+            float max = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+            if (box)
+            {
+                Vector3 d = position - transform.position, half = boxSize * 0.5f;
+                if (Mathf.Abs(d.x) > half.x || Mathf.Abs(d.y) > half.y || Mathf.Abs(d.z) > half.z) return 0f;
+                return max;
+            }
+            float r = CurrentRadius;
+            float dist = Vector3.Distance(transform.position, position);
+            if (TryGetComponent(out Light light) && light.type != LightType.Point)
+            {
+                if (!InSpotFrustum(position, light, r)) return 0f;
+                if (castShadows && !ScriptApi.HplCollision.CheckLineOfSight(transform.position, position)) return 0f;
+            }
+            else if (dist > r) return 0f;
+            float t = 1f - dist / (r + radiusAdd);
+            return t > 0f ? max * t : 0f;
+        }
+
+        /// <summary>cFrustum::CollidePoint of the spot (perspective along the light's forward, far plane = radius).</summary>
+        bool InSpotFrustum(Vector3 position, Light light, float far)
+        {
+            float fov = spotFov > 0f ? spotFov : light.spotAngle * Mathf.Deg2Rad;
+            float aspect = spotFov > 0f ? spotAspect : 1f;
+            Vector3 p = transform.InverseTransformPoint(position);
+            if (p.z < spotNearClip || p.z > far) return false;
+            float h = p.z * Mathf.Tan(fov * 0.5f);
+            return Mathf.Abs(p.y) <= h && Mathf.Abs(p.x) <= h * aspect;
+        }
 
         public void Apply() => Apply(diffuseColor, radius);
 
         /// <summary>Sets the HDRP light to show an HPL2 light of this color and radius.</summary>
         public void Apply(Color color, float lightRadius)
         {
-            var target = GetComponent<Light>();
+            if (!TryGetComponent(out Light target)) return;
             float max = Mathf.Max(color.r, color.g, color.b);
             if (max <= 0f || lightRadius <= 0f)
             {
@@ -58,12 +127,19 @@ namespace RTXMnesia.World
             target.lightUnit = LightUnit.Candela;
             target.intensity = HplLighting.Candela(lightRadius) * Mathf.GammaToLinearSpace(max);
             target.range = lightRadius;
+            onApplied?.Invoke(target);
         }
+
+        /// <summary>Adjusts the HDRP light after <see cref="Apply(Color, float)"/> (the player's darkness light).</summary>
+        [System.NonSerialized] public System.Action<Light> onApplied;
 
         /// <summary>Start of the map: current values from the map data, flicker as iLight::SetFlicker leaves it.</summary>
         public void InitRuntime()
         {
+            // Map lights also light the player's hands (their own rendering layer, see HplLighting.HandsRenderingLayer).
+            if (TryGetComponent(out Light light)) HplLighting.SetLightLayers(light, HplLighting.GetLightLayers(light) | HplLighting.HandsLayerMask);
             _runtime = true;
+            _boxVisible = boxVisible;
             _color = diffuseColor;
             _radius = radius;
             _fadeTime = 0f;
@@ -88,7 +164,8 @@ namespace RTXMnesia.World
 
         public void SetVisible(bool visible)
         {
-            if (TryGetComponent(out Light l)) l.enabled = visible;
+            if (box) _boxVisible = visible;
+            else if (TryGetComponent(out Light l)) l.enabled = visible;
         }
 
         public void SetFlickerActive(bool active) => _flickering = active;
@@ -110,6 +187,57 @@ namespace RTXMnesia.World
         }
 
         public void StopFading() => _fadeTime = 0f;
+
+        /// <summary>cEngineLight_SaveData (map cache) for a light of the map.</summary>
+        public sealed class SaveData
+        {
+            public bool visible, flickering, flickerFade;
+            public Color color, flickerOffColor;
+            public float radius, flickerOffRadius;
+            public Vector2 flickerOnLength, flickerOffLength, flickerOnFadeLength, flickerOffFadeLength;
+            public string flickerOnSound, flickerOffSound, flickerOnPS, flickerOffPS;
+        }
+
+        /// <summary>cEngineLight_SaveData::FromLight: a fade (not a flicker one) is taken at its destination.</summary>
+        public SaveData Save()
+        {
+            if (_runtime && _fadeTime > 0f && !_flickering)
+            {
+                _fadeTime = 0f;
+                SetColorAndRadius(_destColor, _destRadius);
+            }
+            return new SaveData
+            {
+                visible = Visible,
+                flickering = FlickerActive,
+                color = _runtime ? (_flickering ? _flickerOnColor : _color) : diffuseColor,
+                radius = _runtime ? (_flickering ? _flickerOnRadius : _radius) : radius,
+                flickerOffColor = flickerOffColor, flickerOffRadius = flickerOffRadius,
+                flickerOnLength = flickerOnLength, flickerOffLength = flickerOffLength,
+                flickerFade = flickerFade, flickerOnFadeLength = flickerOnFadeLength, flickerOffFadeLength = flickerOffFadeLength,
+                flickerOnSound = flickerOnSound, flickerOffSound = flickerOffSound, flickerOnPS = flickerOnPS, flickerOffPS = flickerOffPS,
+            };
+        }
+
+        /// <summary>cEngineLight_SaveData::ToLight.</summary>
+        public void Restore(SaveData d)
+        {
+            SetVisible(d.visible);
+            SetColor(d.color);
+            SetRadius(d.radius);
+            flickerOffColor = d.flickerOffColor;
+            flickerOffRadius = d.flickerOffRadius;
+            flickerOnLength = d.flickerOnLength;
+            flickerOffLength = d.flickerOffLength;
+            flickerFade = d.flickerFade;
+            flickerOnFadeLength = d.flickerOnFadeLength;
+            flickerOffFadeLength = d.flickerOffFadeLength;
+            flickerOnSound = d.flickerOnSound;
+            flickerOffSound = d.flickerOffSound;
+            flickerOnPS = d.flickerOnPS;
+            flickerOffPS = d.flickerOffPS;
+            SetFlickerActive(d.flickering);
+        }
 
         readonly System.Collections.Generic.List<(AmnesiaBillboard billboard, Color baseColor)> _billboards = new();
 

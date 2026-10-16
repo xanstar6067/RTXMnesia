@@ -36,7 +36,7 @@
 | `SetEntityPlayerInteractCallback` | 48 | 148 | ✓ | `void SetEntityPlayerInteractCallback(string &in asName, string &in asCallback, bool abRemoveOnInteraction)` |
 | `MovePlayerHeadPos` | 45 | 75 | ✓ | `void MovePlayerHeadPos(float afX, float afY, float afZ, float afSpeed, float afSlowDownDist)` |
 | `AddEnemyPatrolNode` | 44 | 175 | — | `void AddEnemyPatrolNode(string &in asEnemyName, string &in asNodeName, float afWaitTime, string &in asAnimation)` |
-| `GiveSanityDamage` | 43 | 100 | ~ | `void GiveSanityDamage(float afAmount, bool abUseEffect)` |
+| `GiveSanityDamage` | 43 | 100 | ✓ | `void GiveSanityDamage(float afAmount, bool abUseEffect)` |
 | `GiveItemFromFile` | 43 | 109 | ✓ | `void GiveItemFromFile(string& asName, string& asFileName)` |
 | `RemoveTimer` | 41 | 112 | ✓ | `void RemoveTimer(string &in asName)` |
 | `GetGlobalVarInt` | 40 | 87 | ✓ | `int GetGlobalVarInt(string &in asName)` |
@@ -66,7 +66,7 @@
 | `UnBlockHint` | 15 | 15 | ✓ | `void UnBlockHint(string &in asName)` |
 | `SetWheelStuckState` | 15 | 22 | ✓ | `void SetWheelStuckState(string &in asName, int alState, bool abEffects)` |
 | `SetMapDisplayNameEntry` | 15 | 33 | ✓ | `void SetMapDisplayNameEntry(string &in asNameEntry)` |
-| `SetLanternDisabled` | 15 | 22 | ~ | `void SetLanternDisabled(bool abX)` |
+| `SetLanternDisabled` | 15 | 22 | ✓ | `void SetLanternDisabled(bool abX)` |
 | `ScriptDebugOn` | 15 | 36 | ✓ | `bool ScriptDebugOn()` |
 | `SetRadialBlurStartDist` | 14 | 59 | ✓ | `void SetRadialBlurStartDist(float afStartDist)` |
 | `SetLocalVarString` | 14 | 19 | ✓ | `void SetLocalVarString(string &in asName, string &in asVal)` |
@@ -85,13 +85,13 @@
 | `RotatePropToSpeed` | 11 | 34 | ✓ | `void RotatePropToSpeed(string &in asName, float afAcc, float afGoalSpeed, float afAxisX, float afAxisY, float afAxisZ, bool abResetSpeed, string &in asOffsetArea)` |
 | `GetSwingDoorClosed` | 11 | 11 | ✓ | `bool GetSwingDoorClosed(string &in asName)` |
 | `ClearEnemyPatrolNodes` | 11 | 24 | — | `void ClearEnemyPatrolNodes(string &in asEnemyName)` |
-| `SetupLoadScreen` | 10 | 22 | ~ | `void SetupLoadScreen(string &in asTextCat, string &in asTextEntry, int alRandomNum, string &in asImageFile)` |
+| `SetupLoadScreen` | 10 | 22 | ✓ | `void SetupLoadScreen(string &in asTextCat, string &in asTextEntry, int alRandomNum, string &in asImageFile)` |
 | `FadePlayerAspectMulTo` | 10 | 17 | ✓ | `void FadePlayerAspectMulTo(float afX, float afSpeed)` |
 | `SetPlayerJumpDisabled` | 9 | 26 | ✓ | `void SetPlayerJumpDisabled(bool abX)` |
 | `SetNumberOfQuestsInMap` | 9 | 13 | ✓ | `void SetNumberOfQuestsInMap(int alNumberOfQuests)` |
 | `StartEffectFlash` | 8 | 18 | ✓ | `void StartEffectFlash(float afFadeIn, float afWhite, float afFadeOut)` |
 | `SetPropHealth` | 8 | 23 | ✓ | `void SetPropHealth(string &in asName, float afHealth)` |
-| `SetLanternActive` | 8 | 10 | ~ | `void SetLanternActive(bool abX, bool abUseEffects)` |
+| `SetLanternActive` | 8 | 10 | ✓ | `void SetLanternActive(bool abX, bool abUseEffects)` |
 | `RemoveEntityCollideCallback` | 8 | 25 | ✓ | `void RemoveEntityCollideCallback(string &in asParentName, string &in asChildName)` |
 | `AddLocalVarFloat` | 8 | 12 | ✓ | `void AddLocalVarFloat(string &in asName, float afVal)` |
 | `StringContains` | 7 | 13 | ✓ | `bool StringContains(string &in asString, string &in asSubString)` |
@@ -118,15 +118,15 @@
 | `SetInventoryDisabled` | 4 | 11 | ✓ | `void SetInventoryDisabled(bool abX)` |
 | `GetTimerTimeLeft` | 4 | 10 | ✓ | `float GetTimerTimeLeft(string &in asName)` |
 | `FadeGlobalSoundSpeed` | 4 | 10 | ✓ | `void FadeGlobalSoundSpeed(float afDestSpeed, float afTime)` |
-| `ClearSavedMaps` | 4 | 10 | — | `void ClearSavedMaps()` |
+| `ClearSavedMaps` | 4 | 10 | ✓ | `void ClearSavedMaps()` |
 | `StringSub` | 3 | 12 | ✓ | `string& StringSub(string &in asString, int alStart, int alCount)` |
 | `SetSkyBoxActive` | 3 | 3 | — | `void SetSkyBoxActive(bool abActive)` |
 | `SetPropEffectActive` | 3 | 6 | ✓ | `void SetPropEffectActive(string &in asName, bool abActive, bool abFadeAndPlaySounds)` |
 | `SetPlayerHealth` | 3 | 7 | ✓ | `void SetPlayerHealth(float afHealth)` |
-| `GetLanternActive` | 3 | 4 | ~ | `bool GetLanternActive()` |
+| `GetLanternActive` | 3 | 4 | ✓ | `bool GetLanternActive()` |
 | `GetGlobalVarString` | 3 | 3 | ✓ | `string& GetGlobalVarString(string &in asName)` |
 | `ShowPlayerCrossHairIcons` | 2 | 4 | ~ | `void ShowPlayerCrossHairIcons(bool abX)` |
-| `SetSanityDrainDisabled` | 2 | 7 | — | `void SetSanityDrainDisabled(bool abX)` |
+| `SetSanityDrainDisabled` | 2 | 7 | ✓ | `void SetSanityDrainDisabled(bool abX)` |
 | `SetPropStaticPhysics` | 2 | 12 | ✓ | `void SetPropStaticPhysics(string &in asName, bool abX)` |
 | `SetPlayerCrouching` | 2 | 14 | ✓ | `void SetPlayerCrouching(bool abCrouch)` |
 | `SetInsanitySetEnabled` | 2 | 6 | — | `void SetInsanitySetEnabled(string &in asSet, bool abX)` |
@@ -137,7 +137,7 @@
 | `InteractConnectPropWithRope` | 2 | 9 | — | `void InteractConnectPropWithRope(string &in asName, string& asLeverName, string& asPropName, bool abInteractOnly, float afSpeedMul,float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed)` |
 | `GetEntitiesCollide` | 2 | 2 | ✓ | `bool GetEntitiesCollide(string &in asEntityA, string &in asEntityB)` |
 | `CreateEntityAtArea` | 2 | 5 | ✓ | `void CreateEntityAtArea(string &in asEntityName, string &in asEntityFile, string &in asAreaName, bool abFullGameSave)` |
-| `ChangeMap` | 2 | 7 | — | `void ChangeMap(string &in asMapName, string &in asStartPos, string &in asStartSound, string &in asEndSound)` |
+| `ChangeMap` | 2 | 7 | ✓ | `void ChangeMap(string &in asMapName, string &in asStartPos, string &in asStartSound, string &in asEndSound)` |
 | `AddPlayerHealth` | 2 | 8 | ✓ | `void AddPlayerHealth(float afHealth)` |
 | `StartEffectEmotionFlash` | 1 | 8 | ~ | `void StartEffectEmotionFlash(string &in asTextCat, string &in asTextEntry, string &in asSound)` |
 | `SetWheelAngle` | 1 | 1 | ✓ | `void SetWheelAngle(string &in asName, float afAngle, bool abAutoMove)` |
@@ -208,6 +208,10 @@
 
 GiveItemFromFile читает определения `.ent` из генерируемого HplInventoryAssets. Подбор записок / дневников подключён к журналу и озвучке. RemoveItem по имени удаляет всю запись; использование расходника уменьшает стопку на одну единицу.
 
+## Смена карты и фонарь
+
+`ChangeMap` — ✓: переход как в `cLuxMapHandler::ChangeMap` / `CheckMapChange` (затемнение 1.5 с, OnLeave, сохранение карты, экран загрузки, затухание мировых звуков, загрузка сцены карты, восстановление сохранённой карты, OnStart при первом посещении и OnEnter, FadeIn 2 с); игрок, эффекты, музыка и глобальные громкость / скорость звука переходят в новую карту. Состояние посещённой карты — `HplSavedMaps` (порт `cLuxSavedGameMap`): локальные переменные, таймеры, use-item коллбэки, коллбэки столкновений игрока и сущностей, свет, звуки и системы частиц из скрипта, связи сущностей (коллбэки взгляда / взаимодействия / состояния, соединения), отключённые сущности, запертые двери и двери уровня, подобранные предметы, разбитые контейнеры, погашенные лампы, сущности FullGameSave (MoveObject, созданные скриптом) целиком. `ClearSavedMaps` — ✓. `FadeLightTo` / `SetLightVisible` работают и с box-светом (`cLightBox`, `HplBoxLightPass`). `SetupLoadScreen` — ✓: экран загрузки `cLuxLoadScreenHandler` с текстом `LoadingText` и картинкой. `SetLanternActive`, `SetLanternDisabled`, `GetLanternActive`, `SetLanternLitCallback` — ✓: порт `cLuxPlayerLantern` с моделью фонаря в руке (`cLuxPlayerHands`, `cLuxHandObject_LightSource`).
+
 ## Журнал
 
 `AddDiary` — ✓: добавляет следующую запись внутри серии; API добавления не открывают экран. `ReturnOpenJournal` вызывается из DiaryCallback, который получает номер с 1 внутри серии; false оставляет запись доступной через N без автооткрытия. Подбор записок с включённым открытием и дневников запускает чтение / озвучку. `CompleteQuest` скрывает выполненное задание из списка, но процент завершения ещё не реализован. Подробности и проверки — [journal.md](journal.md).
@@ -215,3 +219,7 @@ GiveItemFromFile читает определения `.ent` из генерир�
 ## Остальные функции без вызовов в скриптах карт (можно не портировать)
 
 `AddGlobalVarFloat`, `AddGlobalVarString`, `AddKeyPart`, `AddLocalVarString`, `AddPlayerSanity`, `AlertEnemyOfPlayerPresence`, `AttachPropToProp`, `AttachPropToStickyArea`, `ChangeManPigPose`, `FadeEnemyToSmoke`, `FadeInSound`, `ForceTeslaPigSighting`, `GetBodyMass`, `GetEnemyStateName`, `GetEntityPosX`, `GetEntityPosY`, `GetEntityPosZ`, `GetGlobalVarFloat`, `GetPlayerPosX`, `GetPlayerPosY`, `GetPlayerPosZ`, `GetPropHealth`, `GetPropIsInteractedWith`, `GetSwingDoorLocked`, `InsanityEventIsActive`, `MathAbs`, `MathAcos`, `MathAsin`, `MathAtan`, `MathAtan2`, `MathClamp`, `MathCos`, `MathMax`, `MathMin`, `MathPow`, `MathSin`, `MathSqrt`, `MathTan`, `MovePlayerForward`, `PlaceEntityAtEntity`, `ProgLog`, `ReplaceEntity`, `SetAllowStickyAreaAttachment`, `SetBodyMass`, `SetButtonSwitchedOn`, `SetEnemyIsHallucination`, `SetEnemySanityDecreaseActive`, `SetEntityPos`, `SetEntityVisible`, `SetGlobalVarFloat`, `SetInDarknessEffectsActive`, `SetLanternLitCallback`, `SetLevelDoorLockedSound`, `SetLevelDoorLockedText`, `SetMultiSliderCallback`, `SetMultiSliderStuckState`, `SetPlayerFallDamageDisabled`, `SetPlayerJumpForceMul`, `SetPlayerPermaDeathSound`, `SetPlayerPos`, `SetSkyBoxTexture`, `SetTeslaPigEasyEscapeDisabled`, `SetTeslaPigFadeDisabled`, `SetTeslaPigSoundDisabled`, `StartDemoEnd`, `StartInsanityEvent`, `StartPlayerSpawnPS`, `StartRandomInsanityEvent`, `StopCurrentInsanityEvent`, `StopPlayerSpawnPS`, `StringToBool`, `StringToFloat`, `StringToInt`, `TeleportEnemyToEntity`, `TeleportEnemyToNode`
+
+## Рассудок и темнота
+
+`GiveSanityDamage` — ✓: подсказка SanityHit, удар `cLuxPlayerSanity::StartHit` (звук, наезд камеры), потеря рассудка с эффектом (сердцебиение, утечка, эффект безумия), обморок ниже 0. `SetSanityDrainDisabled` — ✓: отключает потерю рассудка в темноте (`cLuxPlayerInDarkness`). `SetInDarknessEffectsActive` — ✓ (без вызовов в картах): `cLuxPlayerInDarkness::SetActive`. `SetInsanitySetEnabled`, `StartInsanityEvent`, `StartRandomInsanityEvent` — пока пропускаются (`cLuxInsanityHandler`).

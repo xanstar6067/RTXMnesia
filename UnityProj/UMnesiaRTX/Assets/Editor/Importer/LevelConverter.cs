@@ -99,6 +99,46 @@ namespace RTXMnesia.Importer
             return converter.ScenePath;
         }
 
+        /// <summary>
+        /// .ent files outside any map (the player's hands and hand objects): built like map entities at the origin
+        /// (model, lights, billboards, particles, sounds), saved as one prefab with its generated meshes next to it.
+        /// <paramref name="finish"/> adds what the game needs on top before the prefab is saved.
+        /// </summary>
+        public static GameObject BuildEntitiesPrefab(string prefabPath, IReadOnlyList<(string entAbsolute, string name)> entities,
+                                                     Action<GameObject, ImportLog> finish)
+        {
+            var converter = new LevelConverter(entities[0].entAbsolute);
+            return converter.RunStandalone(prefabPath, entities, finish);
+        }
+
+        GameObject RunStandalone(string prefabPath, IReadOnlyList<(string entAbsolute, string name)> entities, Action<GameObject, ImportLog> finish)
+        {
+            _staticFiles = Array.Empty<string>();
+            _decalFiles = Array.Empty<string>();
+            _entityFiles = entities.Select(e => e.entAbsolute).ToArray();
+            PrepareResources(null);
+            _gameConfig = ConfigConverter.Convert(ConfigConverter.GameConfig, _log);
+            _surfaces = SurfaceConverter.Convert(_log);
+
+            string generated = Path.ChangeExtension(prefabPath, null) + "_generated.asset";
+            Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(prefabPath)));
+            AssetDatabase.Refresh();
+            AssetDatabase.DeleteAsset(generated);
+            _container = new Mesh { name = Path.GetFileNameWithoutExtension(prefabPath) + " generated" };
+            AssetDatabase.CreateAsset(_container, generated);
+
+            var root = new GameObject(Path.GetFileNameWithoutExtension(prefabPath));
+            foreach (var (ent, name) in entities)
+                BuildEntity(ent, name, Vector3.zero, Vector3.zero, Vector3.one, -1, new List<HplVariable>(), root.transform);
+            finish?.Invoke(root, _log);
+            AssetDatabase.SaveAssets();
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            Object.DestroyImmediate(root);
+            _log.Info($"Prefab: {prefabPath}");
+            _log.Save($"Entities: {prefabPath}");
+            return prefab;
+        }
+
         void Run()
         {
             var doc = new XmlDocument();
@@ -171,6 +211,8 @@ namespace RTXMnesia.Importer
             AssetDatabase.SaveAssets();
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
+            // Map changes load the scenes by name from the build list.
+            if (!_menuBackground) MainMenuConverter.ConfigureBuildScenes();
 
             _log.Info("Built: " + string.Join(", ", _counts.OrderBy(p => p.Key).Select(p => $"{p.Key} {p.Value}")));
             _log.Info($"Scene: {ScenePath}");
@@ -275,9 +317,12 @@ namespace RTXMnesia.Importer
                 }
                 catch (Exception ex) { _log.Error($"{AmnesiaPaths.ToSourceRelative(ent)}: {ex.Message}"); }
             }
-            foreach (var plane in contents.Child("Primitives").Children()) AddRef(mats, plane.Str("Material"));
+            if (contents != null)
+            {
+                foreach (var plane in contents.Child("Primitives").Children()) AddRef(mats, plane.Str("Material"));
+                foreach (var e in contents.Child("Entities").Children()) AddWorldEntity(e);
+            }
             foreach (string decal in _decalFiles) if (decal != null) mats.Add(decal);
-            foreach (var e in contents.Child("Entities").Children()) AddWorldEntity(e);
 
             var missingModels = daes.Where(d => !ModelConverter.IsConverted(d)).ToList();
             if (missingModels.Count > 0) ModelConverter.ConvertModels(missingModels, $"Models for {_mapRelative}");
@@ -989,6 +1034,8 @@ namespace RTXMnesia.Importer
                 case "PointLight":
                 case "SpotLight":
                     return BuildLight(e, parent, namePrefix, positionScale);
+                case "BoxLight":
+                    return BuildBoxLight(e, parent, namePrefix, positionScale);
                 case "Billboard":
                     return BuildBillboard(e, parent, namePrefix, positionScale);
                 case "ParticleSystem":
@@ -1082,6 +1129,13 @@ namespace RTXMnesia.Importer
             data.radius = e.Float("Radius", 1f);
             data.falloffMap = e.Str("FalloffMap");
             data.gobo = gobo;
+            data.castShadows = shadows;
+            if (spot)
+            {
+                data.spotFov = e.Float("FOV", 1f);
+                data.spotAspect = e.Float("Aspect", 1f);
+                data.spotNearClip = e.Float("NearClipPlane", 0.1f);
+            }
             data.flickerActive = e.Bool("FlickerActive");
             data.flickerOffColor = e.Color("FlickerOffColor", Color.black);
             data.flickerOffRadius = e.Float("FlickerOffRadius");
@@ -1096,6 +1150,38 @@ namespace RTXMnesia.Importer
             data.flickerOffPS = e.Str("FlickerOffPS");
             data.Apply();
             FinishChild(e, go, spot ? "spot lights" : "point lights");
+            return go;
+        }
+
+        /// <summary>
+        /// cLightBox (cEntityLoader / MapLoader BoxLight): ambient light in a box drawn by HplBoxLightPass. HPL2 renders
+        /// it with scale(Size) + position only, so the rotation is dropped. Inactive boxes stay enabled and hidden,
+        /// so scripts can show them.
+        /// </summary>
+        GameObject BuildBoxLight(XmlElement e, Transform parent, string namePrefix, Vector3 positionScale)
+        {
+            var go = Child(e, parent, namePrefix, positionScale, Quaternion.identity);
+            var data = go.AddComponent<AmnesiaLight>();
+            data.box = true;
+            data.boxSize = Vector3.Scale(e.Vec3("Size", Vector3.one), positionScale);
+            data.boxBlendAdd = e.Int("BlendFunc") == 1;
+            data.boxVisible = e.Bool("Active", true);
+            data.diffuseColor = e.Color("DiffuseColor", Color.white);
+            data.radius = e.Float("Radius", 1f);
+            data.falloffMap = e.Str("FalloffMap");
+            data.flickerActive = e.Bool("FlickerActive");
+            data.flickerOffColor = e.Color("FlickerOffColor", Color.black);
+            data.flickerOffRadius = e.Float("FlickerOffRadius");
+            data.flickerOnLength = new Vector2(e.Float("FlickerOnMinLength"), e.Float("FlickerOnMaxLength"));
+            data.flickerOffLength = new Vector2(e.Float("FlickerOffMinLength"), e.Float("FlickerOffMaxLength"));
+            data.flickerFade = e.Bool("FlickerFade");
+            data.flickerOnFadeLength = new Vector2(e.Float("FlickerOnFadeMinLength"), e.Float("FlickerOnFadeMaxLength"));
+            data.flickerOffFadeLength = new Vector2(e.Float("FlickerOffFadeMinLength"), e.Float("FlickerOffFadeMaxLength"));
+            data.flickerOnSound = e.Str("FlickerOnSound");
+            data.flickerOffSound = e.Str("FlickerOffSound");
+            data.flickerOnPS = e.Str("FlickerOnPS");
+            data.flickerOffPS = e.Str("FlickerOffPS");
+            Count("box lights");
             return go;
         }
 
@@ -1391,6 +1477,8 @@ namespace RTXMnesia.Importer
             MenuConverter.Convert(_index, map.language, map.menuConfig, _log);
             InventoryConverter.Convert(_index, map.language, _log);
             JournalConverter.Convert(_index, map.language, _log);
+            LoadScreenConverter.Convert(_index, map.language, map.menuConfig, _log);
+            PostEffectsConverter.Convert(_log);
 
             var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
             sound.bank = SoundConverter.Convert(_log, map.language);

@@ -49,6 +49,32 @@ namespace RTXMnesia.Sound
 
         public void EnsureMusic() => Music ??= new HplMusicHandler(this);
 
+        /// <summary>
+        /// Map change: the music and the global volume / speed requests belong to the engine, not to the map
+        /// (cSoundHandler, cMusicHandler live for the whole game). The playing music moves to <paramref name="keeper"/>
+        /// while the scenes switch, then <see cref="AdoptGameSound"/> takes it in the next map.
+        /// </summary>
+        public HplMusicHandler DetachMusic(Transform keeper)
+        {
+            EnsureMusic();
+            var music = Music;
+            music.MoveTo(keeper);
+            Music = new HplMusicHandler(this);
+            return music;
+        }
+
+        public void AdoptGameSound(HplMusicHandler music, MultipleSettings globalVolume, MultipleSettings globalSpeed)
+        {
+            if (music != null)
+            {
+                Music?.StopAllNow();
+                music.MoveTo(transform);
+                Music = music;
+            }
+            GlobalVolume.CopyFrom(globalVolume);
+            GlobalSpeed.CopyFrom(globalSpeed);
+        }
+
         /// <summary>Inventory / Journal: engine sound clocks keep running while the map and physics are frozen.</summary>
         public void StepMenu(float timeStep)
         {
@@ -85,6 +111,12 @@ namespace RTXMnesia.Sound
             UpdateSoundEntities(timeStep);
             UpdateEntries(timeStep);
             Music.Update(timeStep);
+        }
+
+        /// <summary>Map change: the left map's entries go on fading (FadeOutAll) while the next scene loads.</summary>
+        public void StepWorldFade(float timeStep)
+        {
+            if (!MenuPaused) UpdateEntries(timeStep);
         }
 
         void UpdateSoundEntities(float timeStep)
@@ -387,6 +419,13 @@ namespace RTXMnesia.Sound
             }
 
             readonly List<Entry> _entries = new();
+
+            public void CopyFrom(MultipleSettings other)
+            {
+                _entries.Clear();
+                foreach (var e in other._entries)
+                    _entries.Add(e == null ? null : new Entry { Val = e.Val, Dest = e.Dest, Speed = e.Speed, Types = e.Types, DestroyAtDest = e.DestroyAtDest });
+            }
 
             public Entry GetEntry(int index, bool forceCreation)
             {

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering.HighDefinition;
 
 namespace RTXMnesia.Hpl
 {
@@ -22,6 +23,27 @@ namespace RTXMnesia.Hpl
 
         /// <summary>Fraction of the light radius where HDRP and HPL2 brightness are equal.</summary>
         public const float ReferenceDistance = 0.5f;
+
+        /// <summary>
+        /// Rendering layer of the player's hands and hand objects. HPL2's light falloff is almost flat inside the
+        /// radius, HDRP's is 1/d²: a hand-held light 10-20 cm from the hand would blow it out when matched at half
+        /// its radius. Hand-held lights skip this layer; a copy matched at the hand's distance lights only it.
+        /// Map lights light it too.
+        /// </summary>
+        public const int HandsRenderingLayer = 7;
+        public const uint HandsLayerMask = 1u << HandsRenderingLayer;
+        /// <summary>The rendering layers HDRP uses for light layers (the low 8; the others are shadow / decal layers).</summary>
+        public const uint LightLayersMask = 0xFFu;
+
+        /// <summary>The rendering layers an HDRP light lights (HDAdditionalLightData.lightlayersMask updates HDRP's light data).</summary>
+        public static uint GetLightLayers(Light light) =>
+            light.TryGetComponent(out HDAdditionalLightData data) ? (uint)data.lightlayersMask : (uint)light.renderingLayerMask;
+
+        public static void SetLightLayers(Light light, uint mask)
+        {
+            if (light.TryGetComponent(out HDAdditionalLightData data)) data.lightlayersMask = (UnityEngine.Rendering.HighDefinition.RenderingLayerMask)mask;
+            else light.renderingLayerMask = (int)mask;
+        }
 
         /// <summary>Radiance (nits) that ends up as screen value 1 under the level exposure.</summary>
         public static float UnitRadiance => 1.2f * Mathf.Pow(2f, ExposureEV100);

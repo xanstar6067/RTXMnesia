@@ -128,8 +128,9 @@ namespace RTXMnesia.ScriptApi
         {
             if (GetEntity(asAreaName, HplEntityType.Area) is not HplArea area) return;
             Transform t = area.GameObject.transform;
-            if (Map.CreateEntity(asEntityName, asEntityFile, t.position, t.rotation, Vector3.one) == null)
-                HplLog.Error($"Could not create entity '{asEntityName}' from file '{asEntityFile}'!");
+            var created = Map.CreateEntity(asEntityName, asEntityFile, t.position, t.rotation, Vector3.one);
+            if (created == null) HplLog.Error($"Could not create entity '{asEntityName}' from file '{asEntityFile}'!");
+            else created.FullGameSave |= abFullGameSave;
         }
 
         protected void ReplaceEntity(string asName, string asBodyName, string asNewEntityName, string asNewEntityFile, bool abFullGameSave)
@@ -137,7 +138,9 @@ namespace RTXMnesia.ScriptApi
             var entity = GetEntity(asName);
             if (entity == null || !BodyPose(entity, asBodyName, out var position, out var rotation)) return;
             Map.DestroyEntity(entity);
-            if (Map.CreateEntity(asNewEntityName, asNewEntityFile, position, rotation, Vector3.one) == null)
+            var created = Map.CreateEntity(asNewEntityName, asNewEntityFile, position, rotation, Vector3.one);
+            if (created != null) created.FullGameSave |= abFullGameSave;
+            if (created == null)
                 HplLog.Error($"Could not create entity '{asNewEntityName}' from file '{asNewEntityFile}'!");
         }
 

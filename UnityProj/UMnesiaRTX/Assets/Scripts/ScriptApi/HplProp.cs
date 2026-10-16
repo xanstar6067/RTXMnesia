@@ -143,11 +143,21 @@ namespace RTXMnesia.ScriptApi
                 ConnectedProps.Add(s);
             CallbackFunc = InstanceVar("CallbackFunc") ?? "";
             ConnectionStateChangeCallback = InstanceVar("ConnectionStateChangeCallback") ?? "";
+            FullGameSave = ForceFullGameSave || InstanceBool("FullGameSave", false);
             SetPlayerLookAtCallback(InstanceVar("PlayerLookAtCallback") ?? "", InstanceBool("PlayerLookAtCallbackAutoRemove", false));
             SetPlayerInteractCallback(InstanceVar("PlayerInteractCallback") ?? "", InstanceBool("PlayerInteractCallbackAutoRemove", false));
             SetStaticPhysics(InstanceBool("StaticPhysics", false));
             LoadInstanceVariables();
         }
+
+        /// <summary>iLuxPropLoader::mbForceFullGameSave (move objects are always saved whole).</summary>
+        protected virtual bool ForceFullGameSave => false;
+
+        /// <summary>
+        /// After the map cache restored this prop's fields (a full game save): bring the scene objects in line with
+        /// them (cLuxProp SetupSaveData). The base re-applies the effects and the mesh visibility.
+        /// </summary>
+        public virtual void AfterStateRestore() { }
 
         /// <summary>The game.cfg Player_Interaction key of the type's default focus distance.</summary>
         protected virtual string DefaultFocusDistanceKey => "Default_DefaultMaxFocusDist";
@@ -408,6 +418,7 @@ namespace RTXMnesia.ScriptApi
         protected bool HasFlickering { get; private set; }
 
         public float EffectsAlpha { get; private set; } = 1f;
+        public bool EffectsActive => _effectsActive;
 
         protected readonly List<AmnesiaLight> Lights = new();
         protected readonly List<(Color onColor, float onRadius, bool flickering)> LightData = new();

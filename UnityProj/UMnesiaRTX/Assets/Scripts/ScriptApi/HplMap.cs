@@ -55,7 +55,11 @@ namespace RTXMnesia.ScriptApi
         public Dynamics.HplPhysicsWorld PhysicsWorld { get; private set; }
         public Particles.HplParticleWorld ParticleWorld { get; private set; }
         public HplGameUi GameUi { get; private set; }
-        public bool IsMenuPaused => GameUi != null && GameUi.IsPaused;
+        public bool IsMenuPaused => (GameUi != null && GameUi.IsPaused) || HplLoadScreen.Active;
+        /// <summary>cLuxMapHandler map change: fading out to change map, or left (frozen while the next map loads).</summary>
+        public bool IsChangingMap => _mapChange.active || _leaving;
+        /// <summary>cLuxMap::GetName: the map file name without extension, lower case.</summary>
+        public string MapName => HplMapChange.FileToMapName(mapFile);
         public float GameTime { get; private set; }
         public Camera PlayerCamera => player != null ? player.playerCamera : backgroundCamera;
         public readonly HplCollideCallbacks PlayerCollideCallbacks = new();
@@ -64,7 +68,6 @@ namespace RTXMnesia.ScriptApi
         [NonSerialized] public int NumberOfQuests;
         [NonSerialized] public string LanternLitCallback = "";
         [NonSerialized] public (string name, string startPos, string callback, int count) CheckPointData;
-        [NonSerialized] public (string textCat, string textEntry, int randomNum, string image) LoadScreen;
 
         sealed class Timer
         {
@@ -83,6 +86,17 @@ namespace RTXMnesia.ScriptApi
         readonly List<Timer> _timers = new();
         readonly Dictionary<string, string> _vars = new(StringComparer.Ordinal);
         bool _updatingTimers, _built, _started;
+
+        // cLuxMapHandler::mMapChangeData
+        struct MapChangeData
+        {
+            public bool active;
+            public string mapFile, startPos, sound;
+        }
+
+        MapChangeData _mapChange;
+        bool _leaving;
+        HplMapChange.Arrival _arrival;
 
         Fog _fog;
         AmnesiaLevel _level;
@@ -143,6 +157,9 @@ namespace RTXMnesia.ScriptApi
             _level = GetComponent<AmnesiaLevel>();
             if (string.IsNullOrEmpty(mapFile) && _level != null) mapFile = _level.mapFile;
             if (!menuBackground && player == null) player = FindAnyObjectByType<AmnesiaPlayer>(FindObjectsInactive.Include);
+            // A map change loaded this scene: the player starts at the asked position (AmnesiaPlayer.Start).
+            if (!menuBackground && Application.isPlaying) _arrival = HplMapChange.Take(mapFile);
+            if (_arrival != null && player != null) player.startArea = _arrival.StartPos;
             if (effects == null && !TryGetComponent(out effects)) effects = gameObject.AddComponent<HplEffects>();
             if (hud == null && !TryGetComponent(out hud)) hud = gameObject.AddComponent<HplHud>();
             effects.Init(this);
@@ -244,6 +261,7 @@ namespace RTXMnesia.ScriptApi
             if (_started) return;
             _started = true;
             if (player != null && player.Body != null) PhysicsWorld.SetCharacterShapes(player.Body.Shapes);
+            player?.Hands?.SetWorld(sound, ParticleWorld);
             if (player != null && player.LookAt != null)
             {
                 player.LookAt.AtTarget += function => RunScript(function);
@@ -251,9 +269,59 @@ namespace RTXMnesia.ScriptApi
                 // cLuxPlayer::GiveSanityDamage: hint, then the hit effect (cLuxPlayerSanity, step 6).
                 player.SanityHit += () => hud.Hints.Add("SanityHit", hud.Translate("Hints", "SanityHit"), 0f);
             }
+            if (_arrival != null)
+            {
+                Arrive(_arrival);
+                return;
+            }
+            // New game / a map opened directly: cLuxMapHandler::SetCurrentMap (first time) + OnStart / OnEnter.
+            if (player != null) CheckPointData = ("_auto", player.startArea, "", 0);
             if (!runScript || Script == null) return;
             Script.Run(Script.OnStart, "OnStart");
             Script.Run(Script.OnEnter, "OnEnter");
+        }
+
+        /// <summary>
+        /// The new map part of cLuxMapHandler::CheckMapChange after loading: the engine state of the left map
+        /// (player, effects, music) goes on here, the player is placed (SetCurrentMap), the saved state of an
+        /// earlier visit is loaded, OnStart runs on the first visit and OnEnter always; then the load screen
+        /// keeps the map paused until its text was read (GameScreenLoadDone).
+        /// </summary>
+        void Arrive(HplMapChange.Arrival arrival)
+        {
+            sound.AdoptGameSound(arrival.Music, arrival.GlobalVolume, arrival.GlobalSpeed);
+            if (HplLoadScreen.Current != null) HplLoadScreen.Current.Music = null;
+            sound.Music.OnMapEnter();
+            if (arrival.Effects != null) effects.ApplyCarry(arrival.Effects);
+            if (player != null && arrival.Player != null) player.ApplyCarry(arrival.Player);
+            PlacePlayerAtStartPos(arrival.StartPos);
+            CheckPointData = ("_auto", arrival.StartPos, "", 0);
+
+            bool firstTime = !HplSavedMaps.MapExists(MapName);
+            HplSavedMaps.LoadMap(this);
+            if (runScript && Script != null)
+            {
+                if (firstTime) Script.Run(Script.OnStart, "OnStart");
+                Script.Run(Script.OnEnter, "OnEnter");
+            }
+            float loadTime = Time.realtimeSinceStartup - arrival.LoadStartTime;
+            if (HplLoadScreen.Current != null) HplLoadScreen.Current.LoadDone(this, arrival.EndSound, loadTime);
+            else sound.PlayGuiSoundData(arrival.EndSound, Sound.SoundEntryType.Gui);
+            Debug.Log($"[RTXMnesia] Entering map {MapName} ({(firstTime ? "first visit" : "saved state")}), loaded in {loadTime:0.00} s");
+        }
+
+        /// <summary>cLuxMap::PlacePlayerAtStartPos: an unknown position is an error, then the first start.</summary>
+        public void PlacePlayerAtStartPos(string name)
+        {
+            if (player == null) return;
+            if (name == null || !_playerStarts.TryGetValue(name, out var node))
+            {
+                HplLog.Error($"StartPos '{name}' does not exist!");
+                node = GetFirstPlayerStart();
+            }
+            if (node == null) return;
+            player.startArea = node.name;
+            player.PlaceAtStart(node);
         }
 
         /// <summary>One HPL2 logic step with an explicit physics simulation (edit mode tools, script simulation mode).</summary>
@@ -277,10 +345,15 @@ namespace RTXMnesia.ScriptApi
             // cLuxMapHandler::Update: the effect renderer's flash list is rebuilt by this update.
             effects.Renderer.ClearRenderLists();
 
-            // cLuxMap::Update
-            UpdateTimers(timeStep);
-            for (int i = 0; i < _entities.Count; i++)
-                if (_entities[i].Active) _entities[i].UpdateLogic(timeStep);
+            // cLuxMap::Update, only while no map change is active.
+            bool updateMap = CheckMapChange();
+            if (_leaving) return;
+            if (updateMap)
+            {
+                UpdateTimers(timeStep);
+                for (int i = 0; i < _entities.Count; i++)
+                    if (_entities[i].Active) _entities[i].UpdateLogic(timeStep);
+            }
 
             // cLuxPlayer::Update (its collide callbacks before the camera effects, the body moves later)
             if (player != null) player.StepLogic(timeStep, _checkPlayerCallbacks);
@@ -296,7 +369,7 @@ namespace RTXMnesia.ScriptApi
         /// <summary>After the simulation: joints and bodies, lights, the player's post update, destroyed entities.</summary>
         public void StepAfterSimulate(float timeStep)
         {
-            if (IsMenuPaused) return;
+            if (IsMenuPaused || _leaving) return;
             PhysicsWorld.AfterSimulate(timeStep);
             ParticleWorld.Update(timeStep);
             for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
@@ -534,10 +607,68 @@ namespace RTXMnesia.ScriptApi
             return prop;
         }
 
-        /// <summary>cLuxMapHandler::ChangeMap: map switching comes with the next maps (logged).</summary>
-        public void ChangeMap(string mapFile, string startPos)
+        /// <summary>cLuxMapHandler::ChangeMap: the start sound, a 1.5 s fade out with the player inactive, then CheckMapChange.</summary>
+        public void ChangeMap(string mapName, string startPos, string startSound, string endSound)
         {
-            HplLog.Warn($"ChangeMap('{mapFile}', '{startPos}'): skipped, needs map switching");
+            _mapChange = new MapChangeData
+            {
+                active = true,
+                mapFile = System.IO.Path.ChangeExtension(mapName ?? "", "map"),
+                startPos = startPos ?? "",
+                sound = endSound ?? "",
+            };
+            sound.PlayGuiSoundData(startSound, Sound.SoundEntryType.Gui);
+            effects.Fade.FadeOut(1.5f);
+            if (player != null) player.active = false;
+        }
+
+        /// <summary>
+        /// cLuxMapHandler::CheckMapChange, at the start of the map handler's update: once the fade out is done the
+        /// screen fades in again (2 s) and the player is active. Another map: OnLeave, the map is saved, its world
+        /// sounds fade out and the next map loads under the load screen (<see cref="HplMapChange"/>); this map stays
+        /// frozen. The same map: the player only moves to the start position. False while the map must not update.
+        /// </summary>
+        bool CheckMapChange()
+        {
+            if (_leaving) return false;
+            if (!_mapChange.active) return true;
+            if (effects.Fade.IsFading) return false;
+
+            _mapChange.active = false;
+            effects.Fade.FadeIn(2f);
+            if (player != null) player.active = true;
+
+            string newName = HplMapChange.FileToMapName(_mapChange.mapFile);
+            if (newName != MapName)
+            {
+                string scene = HplMapChange.FindScene(_mapChange.mapFile);
+                if (scene == null)
+                {
+                    // "Could not load map" in HPL2; here a setup error: the map is not imported / not in the build.
+                    Debug.LogError($"[RTXMnesia] Could not load map '{_mapChange.mapFile}': no scene in the build (import the map, then Import > Main menu and build scenes)");
+                    return true;
+                }
+                // OnLeave runs before saving (SetCurrentMap does not run the script).
+                if (runScript && Script != null) Script.Run(Script.OnLeave, "OnLeave");
+                HplSavedMaps.SaveMap(this);
+                sound.FadeOutAll(Sound.SoundEntryType.World, 0.5f, true);
+                _leaving = true;
+                HplMapChange.Begin(this, scene, newName, _mapChange.startPos, _mapChange.sound);
+                return false;
+            }
+            PlacePlayerAtStartPos(_mapChange.startPos);
+            sound.PlayGuiSoundData(_mapChange.sound, Sound.SoundEntryType.Gui);
+            return true;
+        }
+
+        /// <summary>The leaving part of CheckMapChange for <see cref="HplMapChange.Reenter"/> (tools).</summary>
+        internal void LeaveForReentry(string scene, string startPos)
+        {
+            if (runScript && Script != null) Script.Run(Script.OnLeave, "OnLeave");
+            HplSavedMaps.SaveMap(this);
+            sound.FadeOutAll(Sound.SoundEntryType.World, 0.5f, true);
+            _leaving = true;
+            HplMapChange.Begin(this, scene, MapName, startPos, "");
         }
 
         // ------------------------------------------------------------------ script calls
@@ -628,6 +759,61 @@ namespace RTXMnesia.ScriptApi
         }
 
         public int TimerCount => _timers.Count;
+
+        /// <summary>cLuxEventTimer list (map cache): name, function, time left.</summary>
+        public List<(string name, string function, float count)> ExportTimers()
+        {
+            var list = new List<(string, string, float)>();
+            foreach (var t in _timers) if (!t.destroyMe) list.Add((t.name, t.function, t.count));
+            return list;
+        }
+
+        public void ImportTimers(List<(string name, string function, float count)> list)
+        {
+            _timers.Clear();
+            foreach (var (name, function, count) in list) _timers.Add(new Timer { name = name, function = function, count = count });
+        }
+
+        // ------------------------------------------------------------------ map cache access
+
+        /// <summary>The local variables (cLuxMap::m_mapVars).</summary>
+        public Dictionary<string, string> Vars => _vars;
+
+        /// <summary>Lights of the map itself (not of an entity: those are saved with their entity).</summary>
+        public IEnumerable<AmnesiaLight> MapLights
+        {
+            get
+            {
+                foreach (var l in _lightList)
+                    if (l != null && l.GetComponentInParent<AmnesiaEntity>(true) == null) yield return l;
+            }
+        }
+
+        /// <summary>Sound entities placed in the map (not of an entity), by their scene object.</summary>
+        public IEnumerable<(string name, Sound.HplSoundEntity sound)> PlacedMapSounds
+        {
+            get
+            {
+                foreach (var pair in _placedSounds)
+                    if (pair.Key != null && pair.Key.GetComponentInParent<AmnesiaEntity>(true) == null) yield return (pair.Key.name, pair.Value);
+            }
+        }
+
+        /// <summary>Particle systems placed in the map (not of an entity), by their scene object.</summary>
+        public IEnumerable<(string name, Particles.HplParticleSystem ps)> PlacedMapParticleSystems
+        {
+            get
+            {
+                foreach (var pair in _placedParticles)
+                    if (pair.Key != null && pair.Key.GetComponentInParent<AmnesiaEntity>(true) == null) yield return (pair.Key.name, pair.Value);
+            }
+        }
+
+        public bool IsPlacedSound(Sound.HplSoundEntity sound) => _placedSounds.ContainsValue(sound);
+        public bool IsPlacedParticleSystem(Particles.HplParticleSystem ps) => _placedParticles.ContainsValue(ps);
+
+        /// <summary>cLuxMap::UpdateToBeDesotroyedEntities: entities destroyed while loading the cache go now.</summary>
+        public void DestroyPendingEntitiesNow() => DestroyPendingEntities();
 
         // ------------------------------------------------------------------ local variables
 

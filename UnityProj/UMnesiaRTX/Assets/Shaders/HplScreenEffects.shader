@@ -1,6 +1,7 @@
 // HPL2 screen effects for RTXMnesia.Effects.HplScreenEffectsPass (after post-processing).
-// Port of core/shaders/posteffect_image_trail_frag.glsl, posteffect_radial_blur_frag.glsl and
-// posteffect_color_conv_tex_frag.glsl plus the HUD fade / flash quads. Works on sRGB values like HPL2.
+// Port of core/shaders/posteffect_image_trail_frag.glsl, posteffect_radial_blur_frag.glsl,
+// posteffect_color_conv_tex_frag.glsl and shaders/posteffect_insanity_frag.glsl plus the HUD fade / flash quads.
+// Works on sRGB values like HPL2.
 Shader "Hidden/RTXMnesia/HplScreenEffects"
 {
     HLSLINCLUDE
@@ -18,6 +19,10 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     float _HplSepia;        // fade alpha of the color conversion
     float _HplFade;         // screen × (1 - fade)
     float4 _HplAdd;         // additive color of the flashes
+    TEXTURE2D(_HplAmpMap0);
+    TEXTURE2D(_HplAmpMap1);
+    TEXTURE2D(_HplZoomMap);
+    float4 _HplInsanity;    // x: wave time, y: amplitude map blend, z: wave alpha, w: zoom alpha
 
     float3 LoadSource(int2 p)
     {
@@ -94,6 +99,27 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
 
         return float4(SRGBToLinear(saturate(color)), 1.0);
     }
+    // posteffect_insanity_frag.glsl. HPL2 works in GL pixels (y up); the maps are read with the image's top row at
+    // the screen bottom like HPL2 (Unity textures have v = 0 at the bottom row, the pixel y here grows downwards).
+    float4 InsanityFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float2 size = _ScreenSize.xy;
+        float2 pos = v.positionCS.xy;
+        float2 uv = pos / size;
+        float ampT = _HplInsanity.y;
+        float3 amp = SAMPLE_TEXTURE2D_LOD(_HplAmpMap0, s_linear_clamp_sampler, uv, 0).xyz * (1.0 - ampT)
+                   + SAMPLE_TEXTURE2D_LOD(_HplAmpMap1, s_linear_clamp_sampler, uv, 0).xyz * ampT;
+        amp *= _HplInsanity.z * 0.04 * size.y;
+        float3 zoom = SAMPLE_TEXTURE2D_LOD(_HplZoomMap, s_linear_clamp_sampler, uv, 0).xyz;
+        float2 p = float2(pos.x, size.y - pos.y);
+        p += (zoom.xy - 0.5) * 2.0 * 0.6 * zoom.z * size.y * _HplInsanity.w;
+        float2 sinUv = (p / size.y) * 0.6;
+        p.x += sin(_HplInsanity.x + sinUv.y) * amp.x;
+        p.y += sin(_HplInsanity.x + sinUv.x * 1.83) * amp.y;
+        return float4(SampleSource(float2(p.x, size.y - p.y)), 1.0);
+    }
+
     // HPL mainmenu_screen_blur_frag.glsl: the original seven bilinear taps, in gamma space.
     float4 MenuBlur(Varyings v, float2 axis)
     {
@@ -192,6 +218,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment InventoryComposite
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Insanity"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment InsanityFrag
             ENDHLSL
         }
     }

@@ -25,6 +25,9 @@ namespace RTXMnesia.Props
 
         public PropMoveObject(AmnesiaEntity entity) : base(entity, HplEntityType.Prop) { }
 
+        /// <summary>cLuxPropLoader_MoveObject: move objects are always saved whole (mbForceFullGameSave).</summary>
+        protected override bool ForceFullGameSave => true;
+
         static int StringToAxis(string s)
         {
             switch ((s ?? "").ToLowerInvariant())

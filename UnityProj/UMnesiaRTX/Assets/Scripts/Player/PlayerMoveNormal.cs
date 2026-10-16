@@ -164,7 +164,8 @@ namespace RTXMnesia.Player
             if (pressed && !_jumping && Body.IsOnGround) Jump();
         }
 
-        void Jump()
+        /// <summary>cLuxMoveState_Normal::Jump (also the jump off a ladder, without the ground check).</summary>
+        public void Jump()
         {
             SetCrouch(false);
             _player.PlaySound(JumpSound);
@@ -174,6 +175,13 @@ namespace RTXMnesia.Player
             Body.AddForce(new Vector3(0f, startForce * _player.DefaultMass, 0f));
             _jumping = true;
             _jumpCount = 0f;
+        }
+
+        /// <summary>cLuxMoveState_Normal::OnMapEnter: a crouching player enters the new map crouching (no sound).</summary>
+        public void RestoreCrouch()
+        {
+            Crouching = true;
+            Body.SetActiveSize(1);
         }
 
         public void SetCrouch(bool active)

@@ -22,15 +22,28 @@ namespace RTXMnesia.Importer
         }
 
         // Fresh imports can receive new GUIDs; resolve them each time instead of committing resource metadata.
+        // The title screen first, then the first map and every other imported game map (map changes find them by name).
         public static void ConfigureBuildScenes()
         {
-            var scenes = new List<EditorBuildSettingsScene> {
-                new(HplGameUi.MainMenuScene, true), new(HplGameUi.FirstLevelScene, true),
-            };
+            var scenes = new List<EditorBuildSettingsScene>();
+            var added = new HashSet<string>();
+            void Add(string path, bool enabled)
+            {
+                if (added.Add(path)) scenes.Add(new EditorBuildSettingsScene(path, enabled));
+            }
+            if (File.Exists(AmnesiaPaths.ToAbsolute(HplGameUi.MainMenuScene))) Add(HplGameUi.MainMenuScene, true);
+            if (File.Exists(AmnesiaPaths.ToAbsolute(HplGameUi.FirstLevelScene))) Add(HplGameUi.FirstLevelScene, true);
+            string maps = AmnesiaPaths.ToAbsolute(LevelConverter.LevelsRoot + "/maps");
+            if (Directory.Exists(maps))
+            {
+                var files = Directory.GetFiles(maps, "*.unity", SearchOption.AllDirectories);
+                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+                foreach (string file in files) Add(Path.GetRelativePath(AmnesiaPaths.ProjectRoot, file).Replace('\\', '/'), true);
+            }
             foreach (var scene in EditorBuildSettings.scenes)
             {
-                if (scene.path == HplGameUi.MainMenuScene || scene.path == HplGameUi.FirstLevelScene) continue;
-                scenes.Add(new EditorBuildSettingsScene(scene.path, scene.path == "Assets/Scenes/SampleScene.unity" ? false : scene.enabled));
+                if (!File.Exists(AmnesiaPaths.ToAbsolute(scene.path))) continue;
+                Add(scene.path, scene.path == "Assets/Scenes/SampleScene.unity" ? false : scene.enabled);
             }
             // Unity 6 can route `scenes` through a local build profile. Persist the shared project list too,
             // so a fresh checkout / another build profile starts at the same title screen.

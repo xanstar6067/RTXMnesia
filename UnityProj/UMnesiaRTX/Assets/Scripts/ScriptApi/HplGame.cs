@@ -208,6 +208,10 @@ namespace RTXMnesia.ScriptApi
             CombineCallbacks.Clear();
             InventoryScript = null;
             Player.PlayerStateVars.Reset();
+            // cLuxMapHandler::Reset, cLuxLoadScreenHandler::Reset
+            HplSavedMaps.Reset();
+            HplMapChange.ClearPending();
+            Ui.HplLoadScreen.ResetText();
         }
 
         /// <summary>cLuxGlobalDataHandler::GetVar: created empty on first use.</summary>

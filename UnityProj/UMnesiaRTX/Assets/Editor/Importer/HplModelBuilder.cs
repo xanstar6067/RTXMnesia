@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using RTXMnesia.Dynamics;
 using RTXMnesia.Player;
 using RTXMnesia.World;
 using UnityEditor;
@@ -17,7 +18,8 @@ namespace RTXMnesia.Importer
     /// transform, the sub mesh (vertices with the node's own scale baked in) on the node holding the geometry, and
     /// static-object collision:
     /// - "_collider_&lt;box|sphere|capsule|cylinder&gt;" nodes → primitive colliders (children of the root, at the node's
-    ///   world transform + bounds centre); "_charcollider_…" the same, for characters only;
+    ///   world transform + bounds centre); "_charcollider_…" the same, for characters only (HPL2: SetCollide(false):
+    ///   no contacts with bodies, rays skip them; here on <see cref="HplPhysicsWorld.NoCollideLayer"/>);
     /// - "_collider_mesh…" / "_charcollider_mesh…" → invisible mesh colliders;
     /// - other sub meshes get a mesh collider unless the model has a "_collider…" mesh or a normal primitive collider
     ///   belongs to the sub mesh (group = parent node name, or the first sub mesh).
@@ -27,7 +29,7 @@ namespace RTXMnesia.Importer
     public static class HplModelBuilder
     {
         /// <summary>Bump when the output changes: prefabs of older versions are rebuilt.</summary>
-        public const int Version = 4;
+        public const int Version = 5;
 
         static readonly Matrix4x4 Mirror = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
 
@@ -146,7 +148,9 @@ namespace RTXMnesia.Importer
                 string name = filter.gameObject.name;
                 bool colliderMesh = HplCollada.IsColliderName(name);
                 bool create = colliderMesh || (!hasColliderMesh && !primitiveGroups.Contains(name));
-                if (create) filter.gameObject.AddComponent<MeshCollider>().sharedMesh = filter.sharedMesh;
+                if (!create) continue;
+                filter.gameObject.AddComponent<MeshCollider>().sharedMesh = filter.sharedMesh;
+                if (IsCharColliderName(name)) filter.gameObject.layer = HplPhysicsWorld.NoCollideLayer;
             }
 
             // Save meshes and prefab.
@@ -161,6 +165,9 @@ namespace RTXMnesia.Importer
             Object.DestroyImmediate(root);
             return prefab;
         }
+
+        /// <summary>WorldLoaderHplMap: a char collider body has SetCollide(false), only the character is stopped by it.</summary>
+        public static bool IsCharColliderName(string name) => name.StartsWith("_charcollider", StringComparison.OrdinalIgnoreCase);
 
         static bool IsPrimitiveCollider(string name)
         {
@@ -222,6 +229,7 @@ namespace RTXMnesia.Importer
             var go = new GameObject(node.Name);
             go.transform.SetParent(root, false);
             SetLocalMatrix(go.transform, ToUnity(offset), null, null);
+            if (IsCharColliderName(node.Name)) go.layer = HplPhysicsWorld.NoCollideLayer;
             switch (type)
             {
                 case "box":
