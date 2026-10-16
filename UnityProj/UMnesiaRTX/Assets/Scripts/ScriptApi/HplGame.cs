@@ -179,13 +179,7 @@ namespace RTXMnesia.ScriptApi
             }
             removeProp = true;
             if (consumed) return null;
-            int capacity = map.menuConfig != null ? map.menuConfig.GetInt("Inventory", "SlotsRows", 3) * map.menuConfig.GetInt("Inventory", "SlotsColumns", 6) : 18;
-            if (Items.Count >= capacity)
-            {
-                hud.Messages.SetMessage(hud.Translate("Inventory", "TooManyItemsOfSort"), 0f);
-                removeProp = false;
-                return null;
-            }
+            // No slot limit, as in cLuxInventory::AddItem: items past the grid are kept but not shown.
             Items.Add(item);
             return item;
         }

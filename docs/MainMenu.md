@@ -44,6 +44,6 @@ Unity 6 может направлять свойство scenes в локаль�
 
 ## Проверки
 
-`RTXMnesia.EditorDev.MainMenuPreview.RunBatch` (без -quit / -nographics, сам закрывает редактор) импортирует меню, запускает прежние 27 PauseTests, 48 InventoryTests, 34 JournalTests и 14 MainMenuTests. Затем Play-прогон проверяет 14 условий настоящего цикла: старт меню → настройки / отмена → новая игра со вступлением → отмена выхода → возврат в меню → повторная новая игра с чистым состоянием.
+`RTXMnesia.EditorDev.MainMenuPreview.RunBatch` (без -quit / -nographics, сам закрывает редактор) импортирует меню, запускает прежние 27 PauseTests, 50 InventoryTests, 36 JournalTests и 14 MainMenuTests. Затем Play-прогон проверяет 14 условий настоящего цикла: старт меню → настройки / отмена → новая игра со вступлением → отмена выхода → возврат в меню → повторная новая игра с чистым состоянием.
 
 Отчёты — Logs/MainMenuCheck/Tests.txt, PlayTests.txt; снимки — MainMenu.png, MainMenuOptions.png, NewGameConfirmation.png, ReturnToMenuConfirmation.png, ReturnedMainMenu.png. Мир рендерится GPU, UI собирается из реальных CanvasRenderer / атласов через HudSnapshot.DrawCanvas. Тестовое содержимое и сцены не сохраняются. Отдельный исполняемый билд этим прогоном не создаётся.

@@ -117,7 +117,7 @@ namespace RTXMnesia.Ui
             return Mathf.Clamp01((VirtualPoint(position).x - slider.rect.x) / slider.rect.width);
         }
 
-        public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer, MenuControl confirmation = MenuControl.ConfirmQuit, string error = "")
+        public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer, MenuControl confirmation = MenuControl.ConfirmQuit)
         {
             _loadFade.color = Color.clear; _loadingText.Clear();
             _menuText.Clear();
@@ -128,7 +128,7 @@ namespace RTXMnesia.Ui
             _selected = selected;
             _opacity = opacity;
             _shade.color = new Color(0, 0, 0, _titleScreen ? 0 : 0.5f * opacity);
-            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options && error == "";
+            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options;
             if (_logo.enabled)
             {
                 float width = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
@@ -138,8 +138,7 @@ namespace RTXMnesia.Ui
                 Place(_logo.rectTransform, new Rect(pos.x * width - (width - 800) * 0.5f, pos.y * 600, height * _logo.texture.width / _logo.texture.height, height));
                 _logo.color = new Color(1, 1, 1, opacity);
             }
-            if (error != "") Error(error);
-            else if (confirmQuit) Confirmation(confirmation);
+            if (confirmQuit) Confirmation(confirmation);
             else if (options) Options(tab, settings);
             else Main();
             for (int i = _pieceIndex; i < _pieces.Count; i++) _pieces[i].enabled = false;
@@ -195,13 +194,6 @@ namespace RTXMnesia.Ui
             for (int i = 0; i < rows.Count; i++) Draw(_guiText, rows[i], new Vector2(400, 235 + i * 22), size, Color.white, HplFontAlign.Center);
             Button(new Rect(260, 365, 120, 28), T("MainMenu", "Yes", "Да"), action);
             Button(new Rect(420, 365, 120, 28), T("MainMenu", "No", "Нет"), MenuControl.Cancel);
-        }
-
-        void Error(string message)
-        {
-            Window(new Rect(165, 225, 470, 170));
-            Draw(_guiText, message, new Vector2(400, 260), Vector2.one * 18, Color.white, HplFontAlign.Center);
-            Button(new Rect(330, 340, 140, 28), T("MainMenu", "OK", "OK"), MenuControl.Cancel);
         }
 
         void Options(int tab, HplUserSettings settings)

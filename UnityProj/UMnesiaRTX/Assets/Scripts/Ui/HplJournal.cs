@@ -207,11 +207,15 @@ namespace RTXMnesia.Ui
         {
             if (_map.GameUi == null || _map.GameUi.IsClosing) return;
             if (IsNarrated && PageIndex + 1 < Pages.Count) SetPage(PageIndex + 1);
-            else if (instant || ForceInstantExit || State == JournalState.Main)
+            else if (instant || ForceInstantExit)
             {
-                StopVoice(); Sound("journal_close");
-                if (ForceInstantExit) _map.hud.Hints.Add("RecentlyReadText", _map.hud.Translate("Hints", "RecentlyReadText"), -1);
-                _map.GameUi.CloseJournal();
+                // cLuxJournal::ExitPressed: every direct exit (J / M / N / Tab or a finished read) gives the hint.
+                StopVoice(); _map.GameUi.CloseJournal(); Sound("journal_close");
+                _map.hud.Hints.Add("RecentlyReadText", _map.hud.Translate("Hints", "RecentlyReadText"), -1);
+            }
+            else if (State == JournalState.Main)
+            {
+                StopVoice(); _map.GameUi.CloseJournal(); Sound("journal_close");
             }
             else ChangeState(State == JournalState.OpenNote ? JournalState.Notes : IsReading ? JournalState.Diaries : JournalState.Main);
         }

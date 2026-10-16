@@ -97,6 +97,9 @@ namespace RTXMnesia.EditorDev
                 Check(!ui.OpenInventory() && !ui.IsPaused, "Inventory opened during script input lock");
                 player.active = true; script.Disabled(true);
                 Check(!ui.OpenInventory(), "SetInventoryDisabled ignored"); script.Disabled(false);
+                map.effects.SetPlayerIsPaused(true);
+                Check(!ui.OpenInventory() && !ui.OpenJournal() && !ui.IsPaused, "Player menus opened while an effect pauses the player (emotion flash)");
+                map.effects.SetPlayerIsPaused(false);
                 map.effects.PlayVoice.AddVoice("inventory_test", "", "test voice", false, Vector3.zero, 0, 0);
                 map.effects.PlayVoice.Update(0);
                 var voice = (SoundEntry)typeof(HplEffects.PlayVoiceEffect).GetField("_voiceEntry", PrivateInstance).GetValue(map.effects.PlayVoice);
@@ -154,6 +157,9 @@ namespace RTXMnesia.EditorDev
                 Check(inventory.Combine(part1, part2) && HplGame.Items.Count == 2 && inventory.MessageActive, "Incomplete drill combined");
                 inventory.DismissMessage(); Add("hand_drill_part03"); HplGame.SetGlobalVar("DrillParts", "3"); player.sanity = 60;
                 Check(inventory.Combine(part2, part1) && HplGame.Items.Count == 1 && HplGame.GetItem("handdrill") != null && player.sanity == 70, "Drill recipe / canonical callback order failed");
+                HplGame.Items.Clear();
+                for (int i = 0; i < inventory.Capacity + 2; i++) Add("overflow" + i);
+                Check(HplGame.Items.Count == inventory.Capacity + 2, "Items past the grid were refused (cLuxInventory::AddItem has no slot limit)");
                 HplGame.Items.Clear();
                 var hand1 = Add("hand1"); var hand2 = Add("hand2");
                 Check(inventory.Combine(hand2, hand1) && HplGame.GetItem("key") != null && !HplGame.CombineCallbacks.Exists(c => c.name == "makekey"), "One-shot combination failed");

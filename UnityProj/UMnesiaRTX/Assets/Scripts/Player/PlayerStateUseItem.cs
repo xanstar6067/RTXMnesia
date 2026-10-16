@@ -11,8 +11,25 @@ namespace RTXMnesia.Player
         protected override string FocusItemName => Item?.name;
         float MinDistance => Player.gameConfig != null ? Player.gameConfig.GetFloat("Player_Interaction", "MinUseItemDistance", 0) : 0;
         bool InRange => Player.EntityInFocus != null && Player.FocusDistance < Mathf.Max(Player.EntityInFocus.MaxFocusDistance, MinDistance);
-        public bool Highlight => InRange && (Player.EntityInFocus is HplProp && Player.EntityInFocus is not Props.PropItem ||
-            HplMap.Current?.Script?.HasUseItemCallback(Item?.name, Player.EntityInFocus.Name) == true);
+
+        /// <summary>
+        /// cLuxPlayerState_UseItem::OnDrawCrossHair: the icon glows over any prop but an item, and over other entities
+        /// only with a use-item callback (props need none). Distance check uses ≤ like the draw code.
+        /// </summary>
+        public bool Highlight
+        {
+            get
+            {
+                var entity = Player.EntityInFocus;
+                if (entity == null || Player.FocusDistance > Mathf.Max(entity.MaxFocusDistance, MinDistance)) return false;
+                if (entity is HplProp) return entity is not Props.PropItem;
+                return HplMap.Current?.Script?.HasUseItemCallback(Item?.name, entity.Name) == true;
+            }
+        }
+
+        /// <summary>mFlashOscill: the glow's brightness (0..1 at 1.5 per second), drawn additively three times.</summary>
+        public float FlashValue => _flashOscill.val;
+        Ui.HplHud.LinearOscillation _flashOscill = new(0f, 1f, 0f, 1.5f, 1.5f);
 
         public PlayerStateUseItem(AmnesiaPlayer player) : base(player, PlayerStateType.UseItem) { }
         public override void OnEnterState(PlayerStateType previous)
@@ -31,6 +48,7 @@ namespace RTXMnesia.Player
         {
             if (Item == null || !HplGame.Items.Contains(Item)) { Player.States.ChangeState(PlayerStateType.Normal); return; }
             base.Update(timeStep);
+            _flashOscill.Update(timeStep);
         }
         public override FocusCrosshair? GetCrosshair() => null;
         public override bool OnDoAction(PlayerAction action, bool pressed)

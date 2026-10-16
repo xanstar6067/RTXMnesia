@@ -106,6 +106,14 @@ namespace RTXMnesia.EditorDev
                 journal.ExitPressed(false); Check(journal.State == JournalState.Notes && !ui.IsClosing, "Reader back must return to notes");
                 journal.ExitPressed(false); Check(journal.State == JournalState.Main, "List back must return to journal main"); ui.Resume();
 
+                // cLuxJournal::ExitPressed: the RecentlyReadText hint on every direct exit, none when backing out of the main page.
+                map.hud.Hints.Update(100); map.hud.Hints.Remove("RecentlyReadText");
+                ui.OpenJournal(); journal.ExitPressed(false); FinishClose(ui);
+                Check(!HplGame.HintsGiven.Contains("RecentlyReadText"), "Backing out of the journal main page gave the recent text hint");
+                ui.OpenJournal(); journal.ChangeState(JournalState.Notes); journal.ExitPressed(true); FinishClose(ui);
+                Check(HplGame.HintsGiven.Contains("RecentlyReadText") && !ui.IsPaused, "Direct journal exit (J / M / N / Tab) did not give the recent text hint");
+                map.hud.Hints.Update(100);
+
                 HplGame.Quests.Clear(); HplGame.AddQuest("active", "00Trail"); HplGame.AddQuest("done", "00Trail"); HplGame.DisableQuest("done");
                 ui.OpenJournal(JournalState.QuestLog);
                 Check(journal.VisibleEntries.Count == 1 && journal.VisibleEntries[0].rows.Count > 0 && journal.ForceInstantExit, "Quest log did not filter completed entries / open directly"); ui.Resume();

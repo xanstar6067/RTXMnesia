@@ -93,6 +93,7 @@ namespace RTXMnesia.Importer
                 var existing = AssetDatabase.LoadAssetAtPath<HplFont>(assetPath);
                 if (existing != null)
                 {
+                    font.name = Path.GetFileNameWithoutExtension(assetPath); // CopySerialized copies m_Name too
                     EditorUtility.CopySerialized(font, existing);
                     UnityEngine.Object.DestroyImmediate(font);
                     font = existing;

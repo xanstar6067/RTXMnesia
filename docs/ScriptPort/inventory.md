@@ -32,7 +32,7 @@
 |---|---|---|
 | Перетаскивание и двойной клик | `src/AmnesiaTheDarkDescent/amnesia/src/game/LuxInventory.cpp:296` | `HplInventory` |
 | Слоты следуют порядку списка, удаление сдвигает оставшиеся | `LuxInventory.cpp:285`, `:1156` | `HplGame.Items` |
-| Переходы, голоса, окружение и музыка | `LuxInventory.cpp:756`, `:841` | `HplGameUi`, `HplSoundHandler`, `HplEffects.PlayVoice` |
+| Переходы, голоса, окружение и музыка | `LuxInventory.cpp:756`, `:841` | `HplGameUi.EnterScreen`, `HplReadingScreens`, `HplSoundHandler`, `HplEffects.PlayVoice` |
 | Отдельная сепия снимка игры | `LuxInventory.cpp:1561` | `HplScreenEffects.shader`, InventoryComposite |
 | Рамки и статусы | `LuxInventory.cpp:1957`, `:1996`, `:2452` | `HplInventoryView`, размеры из menu.cfg |
 | Действия типов предметов | `src/AmnesiaTheDarkDescent/amnesia/src/game/LuxItemType.cpp:90`, `:301`, `:336`, `:368` | `HplInventory.Use` |

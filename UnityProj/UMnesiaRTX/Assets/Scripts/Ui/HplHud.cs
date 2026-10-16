@@ -49,6 +49,7 @@ namespace RTXMnesia.Ui
         Canvas _canvas;
         HplGuiText _gameText, _hintText, _focusText;
         RawImage _questIcon, _questGlow, _crosshair;
+        readonly RawImage[] _crosshairGlow = new RawImage[3];
         Vector2 _voiceFontSize = new(18f, 18f);
         float _voiceRowWidth = 600f;
         bool _initialized;
@@ -258,13 +259,22 @@ namespace RTXMnesia.Ui
             // The fade is drawn in HPL2's HUD set above the crosshair and focus text (z 3.2 vs 1): it darkens them.
             float fade = _map != null && _map.effects != null ? Mathf.Clamp01(_map.effects.Fade.Alpha) : 0f;
             _crosshair.enabled = texture != null && fade < 1f;
+            // cLuxPlayerState_UseItem::OnDrawCrossHair: the item icon plus three additive copies at the flash value.
+            float glow = texture != null && player.States.Current is Player.PlayerStateUseItem usingItem && usingItem.Highlight
+                ? usingItem.FlashValue * (1f - fade) : 0f;
+            foreach (var copy in _crosshairGlow) copy.enabled = glow > 0f;
             if (texture != null)
             {
+                var rect = new Rect((800f - texture.width) * 0.5f, (600f - texture.height) * 0.5f, texture.width, texture.height);
                 _crosshair.texture = texture;
                 _crosshair.color = new Color(1f - fade, 1f - fade, 1f - fade, 1f);
-                if (player.States.Current is Player.PlayerStateUseItem useItem && useItem.Highlight)
-                    _crosshair.color = new Color(1f - fade, 1f - fade, 1f - fade, 0.75f + 0.25f * Mathf.Sin(Time.time * 3));
-                Place(_crosshair.rectTransform, new Rect((800f - texture.width) * 0.5f, (600f - texture.height) * 0.5f, texture.width, texture.height));
+                Place(_crosshair.rectTransform, rect);
+                foreach (var copy in _crosshairGlow)
+                {
+                    copy.texture = texture;
+                    copy.color = new Color(glow, glow, glow, 1f);
+                    Place(copy.rectTransform, rect);
+                }
             }
 
             string focus = "";
@@ -314,6 +324,8 @@ namespace RTXMnesia.Ui
 
             // cLuxPlayer::DrawHud: the crosshair image centered at its size, focus text rows from y = 450.
             _crosshair = CreateImage(screen, "Crosshair", new Rect(384f, 284f, 32f, 32f), null);
+            for (int i = 0; i < _crosshairGlow.Length; i++)
+                _crosshairGlow[i] = CreateImage(screen, "Use item glow", new Rect(384f, 284f, 32f, 32f), AdditiveUiMaterial());
 
             // Text layers in the HUD set's depth order: focus text (z 1), messages / voices / emotion text (4), hints (20).
             _focusText = CreateText(screen, "Focus text", focusFont);

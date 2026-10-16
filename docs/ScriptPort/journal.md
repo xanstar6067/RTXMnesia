@@ -11,13 +11,13 @@
 | `LuxJournal.cpp:680` AddNote | HplGame.AddJournalEntry | Note_<имя>_Name / Text, варианты бумаги _large / _icon |
 | `LuxJournal.cpp:724` AddDiary | HplGame.AddJournalEntry | Серии дневников, номер с 1 внутри каждой серии |
 | `LuxJournal.cpp:752`, `:773` | HplGame.Quests, HplJournal.BuildLists | Активные задания в обратном порядке; выполненные хранятся, но не рисуются |
-| `LuxJournal.cpp:491`, `:558` | HplGameUi.OpenJournal / Resume | Мир заморожен, окружение и музыка продолжаются, World → 0.5, реплики мира приостановлены |
+| `LuxJournal.cpp:491`, `:558` | HplReadingScreens.OpenJournal, HplGameUi.EnterScreen / Resume | Мир заморожен, окружение и музыка продолжаются, World → 0.5, реплики мира приостановлены |
 | `LuxJournal.cpp:421`, `:617` | HplJournal.Tick / ExitPressed | Появление 0.5 с, уход 1/3 с, возврат по разделам; narrated сначала переключает сегмент |
 | `LuxJournal.cpp:843`, `:877`, `:924` | OpenEntry, OpenRecentText | Обычное / озвученное чтение; N открывает последний текст без повторной озвучки |
 | `LuxJournal.cpp:1136`, `:1178`, `:1269` | BuildPages, SetPage | 18 строк, [new_page], голосовые сегменты [voice …], смена реплики и автопереход по окончании |
 | `LuxJournal.cpp:1426`–`:1799` | HplJournalView | Главное оглавление, списки, задания, бумага, заголовок, текст, стрелки и возврат |
 | `LuxItemType.cpp:150`, `:196` | HplGame.AddItem | Автооткрытие записки по amount, дневника с озвучкой; одноразовый выбор ReturnOpenJournal из callback |
-| `LuxInputHandler.cpp:1001`, `:1354` | HplGameUi.Update | J / M / N, Esc по иерархии, клавиши экранов закрывают напрямую |
+| `LuxInputHandler.cpp:1001`, `:1354` | HplGameUi.RouteKeys, HplReadingScreens.Update | J / M / N, Esc по иерархии, клавиши экранов закрывают напрямую |
 | `LuxScriptHandler.cpp:1712`–`:1730` | HplScript.Journal | AddNote / AddDiary добавляют данные, ReturnOpenJournal управляет автооткрытием дневника |
 
 ## Данные и ресурсы
@@ -39,6 +39,6 @@
 
 ## Проверки
 
-RTXMnesia.EditorDev.JournalTests.Run: 34 проверки серий, API и callback, автооткрытия, страниц, озвучки, active-заданий, последнего текста, запретов вступления, перехода из инвентаря, аудио, реальной геометрии текста и очистки паузы. Отчёт: Logs/JournalCheck/Tests.txt.
+RTXMnesia.EditorDev.JournalTests.Run: 36 проверок серий, API и callback, автооткрытия, страниц, озвучки, active-заданий, последнего текста, запретов вступления, перехода из инвентаря, аудио, реальной геометрии текста и очистки паузы. Отчёт: Logs/JournalCheck/Tests.txt.
 
-Общий MenuPreview.RunBatch дополнительно повторяет 48 InventoryTests и 27 PauseTests, сохраняет JournalMain / JournalNotes / JournalDiaries / JournalQuestLog / JournalNote / JournalNotePage2 / JournalNarrated в Logs/MenuCheck. Мир — GPU, UI — реальные CanvasRenderer и атласы через HudSnapshot.DrawCanvas. Сцена и тестовое содержимое не сохраняются.
+Общий MenuPreview.RunBatch дополнительно повторяет 50 InventoryTests и 27 PauseTests, сохраняет JournalMain / JournalNotes / JournalDiaries / JournalQuestLog / JournalNote / JournalNotePage2 / JournalNarrated в Logs/MenuCheck. Мир — GPU, UI — реальные CanvasRenderer и атласы через HudSnapshot.DrawCanvas. Сцена и тестовое содержимое не сохраняются.
