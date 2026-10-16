@@ -53,6 +53,8 @@ namespace RTXMnesia.Player
             public float mass;
         }
 
+        public override bool AllowBuoyancy(HplPhysicsBody body) => !ReferenceEquals(body.UserData, CurrentProp);
+
         readonly HplPid _forcePid = new(400f, 0f, 40f, 20);
         readonly HplPid _speedTorquePid = new(40f, 0f, 0.4f, 20);
         readonly List<BodyProperties> _bodyProperties = new();

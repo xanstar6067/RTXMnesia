@@ -289,6 +289,17 @@ namespace RTXMnesia.Dynamics
 
         public void DisableAfterSimulation() => _disableAfterSimulation = true;
 
+        // ------------------------------------------------------------------ buoyancy
+
+        /// <summary>iPhysicsBody::SetBuoyancyActive and the buoyancy data (cPhysicsBody_Buoyancy) set by a liquid area.</summary>
+        public bool BuoyancyActive { get; set; }
+        /// <summary>The height of the surface plane (normal up).</summary>
+        public float BuoyancySurfaceY { get; set; }
+        public float BuoyancyDensity { get; set; } = 1f;
+        // Stored as in HPL2; Newton's clamps make the damping independent of them (HplBuoyancy).
+        public float BuoyancyLinearViscosity { get; set; } = 1f;
+        public float BuoyancyAngularViscosity { get; set; } = 1f;
+
         // ------------------------------------------------------------------ simulation
 
         /// <summary>The Newton force callback and iPhysicsBody::UpdateBeforeSimulate.</summary>
@@ -305,7 +316,10 @@ namespace RTXMnesia.Dynamics
             if (!Active) return;
             if (!Rigidbody.isKinematic)
             {
-                // cPhysicsBodyNewton::OnUpdateCallback compares the length with the squared max speed and scales by
+                // cPhysicsBodyNewton::OnUpdateCallback: buoyancy (BuoyancyDensityMul of the .ent body > 0).
+                if (BuoyancyActive && Data.buoyancyDensityMul > 0f)
+                    HplBuoyancy.Apply(this, BuoyancySurfaceY, BuoyancyDensity * Data.buoyancyDensityMul);
+                // It compares the length with the squared max speed and scales by
                 // its square root; kept.
                 if (Data.maxLinearSpeed > 0f)
                 {

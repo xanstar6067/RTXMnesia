@@ -127,6 +127,7 @@ namespace RTXMnesia.ScriptApi
             ParticleWorld?.DestroyAll();
             Sound.HplSoundEntity.Started -= OnSoundEntityStarted;
             foreach (var enemy in _enemies) enemy.DestroyQueryShape();
+            Dynamics.HplBuoyancy.ClearCache();
         }
 
         void Start() => Begin();
@@ -210,7 +211,7 @@ namespace RTXMnesia.ScriptApi
                     case "PosNode":
                         break;
                     default:
-                        AddEntity(new HplArea(area, gameConfig));
+                        AddEntity(new HplArea(area, gameConfig, surfaces));
                         break;
                 }
             }
@@ -228,10 +229,13 @@ namespace RTXMnesia.ScriptApi
             foreach (var entity in GetComponentsInChildren<AmnesiaEntity>(true))
             {
                 if (IsTemplate(entity.transform)) continue;
-                if (entity.entityType == "Enemy_Grunt")
+                if (entity.entityType == "Enemy_Grunt" || entity.entityType == "Enemy_WaterLurker")
                 {
-                    // iLuxEnemyLoader (LuxBase.cpp: Enemy_Grunt). The water lurker and man pig come later.
-                    var enemy = new RTXMnesia.Enemies.EnemyGrunt(entity);
+                    // iLuxEnemyLoader (LuxBase.cpp: Enemy_Grunt, Enemy_WaterLurker). The man pig (Enemy_ManPig) has
+                    // no entity in The Dark Descent's data.
+                    RTXMnesia.Enemies.HplEnemy enemy = entity.entityType == "Enemy_Grunt"
+                        ? new RTXMnesia.Enemies.EnemyGrunt(entity)
+                        : new RTXMnesia.Enemies.EnemyWaterLurker(entity);
                     enemy.Load(this);
                     AddEntity(enemy);
                     _enemies.Add(enemy);

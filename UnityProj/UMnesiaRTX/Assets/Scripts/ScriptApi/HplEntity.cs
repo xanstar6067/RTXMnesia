@@ -458,7 +458,10 @@ namespace RTXMnesia.ScriptApi
         readonly Collider[] _flashbackPlayerShape;
         float _flashbackCheckCollisionCount;
 
-        public HplArea(AmnesiaArea area, Hpl.HplConfig gameConfig) : base(area.gameObject, area.hplId)
+        /// <summary>The liquid of a Liquid area (cLuxArea_Liquid), else null.</summary>
+        public HplLiquidArea Liquid { get; }
+
+        public HplArea(AmnesiaArea area, Hpl.HplConfig gameConfig, Hpl.HplSurfaces surfaces = null) : base(area.gameObject, area.hplId)
         {
             Component = area;
             var colliders = area.GetComponents<Collider>();
@@ -493,6 +496,7 @@ namespace RTXMnesia.ScriptApi
                 LadderMaxY = area.transform.position.y + area.size.y / 2f;
                 LadderMinY = area.transform.position.y - area.size.y / 2f;
             }
+            else if (AreaType == "Liquid") Liquid = new HplLiquidArea(this, area, surfaces);
         }
 
         public string LadderMaterial { get; } = "metal";
@@ -503,9 +507,14 @@ namespace RTXMnesia.ScriptApi
         public override int BodyCount => 1;
         public override IReadOnlyList<Collider> GetBodyColliders(int index) => Bodies[0].Colliders;
 
-        /// <summary>cLuxArea_Flashback::OnUpdate: only proper game steps; check the current player shape every 0.1 s.</summary>
+        /// <summary>cLuxArea_Liquid::OnUpdate, or cLuxArea_Flashback::OnUpdate: only proper game steps; check the current player shape every 0.1 s.</summary>
         protected override void OnUpdate(float timeStep)
         {
+            if (Liquid != null)
+            {
+                Liquid.Update(Map, timeStep);
+                return;
+            }
             if (AreaType != "Flashback" || timeStep < Time.fixedDeltaTime * 0.8f) return;
             _flashbackCheckCollisionCount -= timeStep;
             if (_flashbackCheckCollisionCount > 0f) return;

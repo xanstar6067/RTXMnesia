@@ -100,7 +100,15 @@ namespace RTXMnesia.Player
         public bool PressingJump { get; private set; }
         public Vector3 CameraRight => playerCamera != null ? playerCamera.transform.right : Body.Right;
         public float MoveSpeedMul => scriptMoveSpeedMul * eventMoveSpeedMul * interactionMoveSpeedMul * (Hurt != null ? Hurt.MoveSpeedMul : 1f) *
-                                     (InsanityCollapseHelper != null ? InsanityCollapseHelper.SpeedMul : 1f);
+                                     (InsanityCollapseHelper != null ? InsanityCollapseHelper.SpeedMul : 1f) * (IsInWater ? WaterSpeedMul : 1f);
+
+        // ------------------------------------------------------------------ water (cLuxArea_Liquid)
+
+        /// <summary>Set by a liquid area while the body is in it (left set when the body leaves the area's bounds, as in HPL2).</summary>
+        public bool IsInWater { get; set; }
+        public float WaterSpeedMul { get; set; } = 1f;
+        /// <summary>The step type of the liquid's material (step sounds while in water).</summary>
+        public string WaterStepSound { get; set; } = "";
         public float RunSpeedMul => scriptRunSpeedMul * eventRunSpeedMul;
 
         // ------------------------------------------------------------------ interaction (step 4.3)
@@ -404,6 +412,8 @@ namespace RTXMnesia.Player
 
         public void PlaceAtStart(AmnesiaArea area)
         {
+            // cLuxPlayer::PlaceAtStartNode: reset, or the player splashes on the ground.
+            IsInWater = false;
             Vector3 f = area.transform.forward;
             PlaceAt(area.transform.position + new Vector3(0f, 0.05f, 0f), Mathf.Atan2(f.x, f.z));
         }
@@ -989,7 +999,7 @@ namespace RTXMnesia.Player
 
         /// <summary>
         /// cLuxMoveState_Normal::FootSound: step_&lt;walk|run|sneak&gt;_&lt;step type&gt; of the material under the
-        /// feet (the body the gravity collided with; "rock" without one); enemies hear it. Water steps: step 6.
+        /// feet (the body the gravity collided with; "rock" without one) or of the water the player is in; enemies hear it.
         /// </summary>
         public void OnFootSound(FootSound type, string moveType)
         {
@@ -997,7 +1007,8 @@ namespace RTXMnesia.Player
             if (sound == null) return;
             string step = "rock";
             var ground = Body != null ? Body.GroundCollider : null;
-            if (ground != null && surfaces != null)
+            if (IsInWater) step = WaterStepSound;
+            else if (ground != null && surfaces != null)
             {
                 var body = HplPhysics.BodyOf(ground);
                 var pm = ground.sharedMaterial;

@@ -39,6 +39,14 @@ namespace RTXMnesia.Hpl
             public int rollAxisFlags;
             public List<Effect> impacts = new(), hits = new();
             public PhysicsMaterial physicsMaterial;
+
+            /// <summary>cSurfaceData::GetImpactDataFromSpeed: the first impact (fastest first) the speed reaches, or null.</summary>
+            public Effect GetImpactDataFromSpeed(float speed)
+            {
+                foreach (var impact in impacts)
+                    if (impact.minSpeed <= speed) return impact;
+                return null;
+            }
         }
 
         public List<Surface> surfaces = new();

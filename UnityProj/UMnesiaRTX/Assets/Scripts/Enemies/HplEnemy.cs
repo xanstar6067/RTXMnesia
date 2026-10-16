@@ -131,7 +131,7 @@ namespace RTXMnesia.Enemies
         float _hallucinationEndDist = 3f;
         public float Health { get; protected set; } = 100f;
         public bool CausesSanityDecrease { get; set; } = true;
-        bool _causesSanityDecreaseAsDefault = true;
+        protected bool CausesSanityDecreaseAsDefault = true;
 
         public EnemyState CurrentState { get; private set; } = EnemyState.LastEnum;
         protected EnemyState NextState = EnemyState.Idle;
@@ -144,7 +144,7 @@ namespace RTXMnesia.Enemies
         int _playerInLosCount;
         protected bool CanSeePlayerFlag;
         public bool CanSeePlayer => CanSeePlayerFlag;
-        public bool PlayerDetected { get; private set; }
+        public bool PlayerDetected { get; protected set; }
         protected bool PlayerInRangeFlag;
         public bool PlayerInRange => PlayerInRangeFlag;
 
@@ -181,6 +181,12 @@ namespace RTXMnesia.Enemies
         float _groundOffset;
         internal int CurrentPose; // eLuxEnemyPoseType: 0 biped
 
+        // Water (set by a liquid area, cLuxArea_Liquid::DoBuoyancyOnCharBody): step splashes of the mover.
+        public bool IsInWater { get; set; }
+        public float WaterSurfaceY { get; set; }
+        public HplSurfaces.Surface WaterSurface { get; set; }
+        internal float WaterStepSpeedWalk, WaterStepSpeedRun, WaterStepSpeedMisc;
+
         /// <summary>The yaw of the body in HPL2 space (cCharacterBody::GetYaw).</summary>
         float _hplYaw;
 
@@ -193,7 +199,7 @@ namespace RTXMnesia.Enemies
 
         public string Var(string name, string fallback = "") => Component.GetVariable(name) ?? fallback;
         string EntVar(string name, string fallback = "") => HplVariable.Find(Component.variables, name) ?? fallback;
-        string InstVar(string name) => HplVariable.Find(Component.instanceVariables, name);
+        protected string InstVar(string name) => HplVariable.Find(Component.instanceVariables, name);
         protected float VarFloat(string name, float fallback = 0f) { string s = EntVar(name, null); return s == null ? fallback : HplMath.Atof(s); }
         protected int VarInt(string name, int fallback = 0) { string s = EntVar(name, null); return s == null ? fallback : HplMath.Atoi(s); }
         protected bool VarBool(string name, bool fallback = false) { string s = EntVar(name, null); return s == null ? fallback : s == "true"; }
@@ -303,6 +309,10 @@ namespace RTXMnesia.Enemies
             _hitPS[2] = VarString("HitPS_Club"); _hitSound[2] = VarString("HitSound_Club");
             _hitPS[3] = VarString("HitPS_Dud"); _hitSound[3] = VarString("HitSound_Dud");
 
+            WaterStepSpeedWalk = VarFloat("WaterStepSpeedWalk");
+            WaterStepSpeedRun = VarFloat("WaterStepSpeedRun");
+            WaterStepSpeedMisc = VarFloat("WaterStepSpeedMisc");
+
             NormalAttackDistance = VarFloat("NormalAttackDistance");
             LoadAttackDamage("Normal", NormalAttackDamage);
             LoadAttackDamage("BreakDoor", BreakDoorAttackDamage);
@@ -408,6 +418,9 @@ namespace RTXMnesia.Enemies
         protected virtual void OnSetActiveEnemySpecific(bool active) { }
         protected virtual void OnResetProperties() { }
         protected virtual void OnDisableTriggers() { }
+
+        /// <summary>iLuxEnemy::InRangeOfFood: no type but the water lurker is drawn by food (cLuxProp_Object food attraction).</summary>
+        public virtual bool InRangeOfFood(HplPhysicsBody foodBody) => false;
 
         /// <summary>
         /// The type's state machine (kLuxBeginStateMachine ... in the original): true when the state (or the global
@@ -684,7 +697,7 @@ namespace RTXMnesia.Enemies
         {
             SetPositionAtStartPos();
             ChangeState(EnemyState.Idle);
-            CausesSanityDecrease = _causesSanityDecreaseAsDefault;
+            CausesSanityDecrease = CausesSanityDecreaseAsDefault;
             Disabled = false;
             _lookForPlayerCount = 0f;
             CanSeePlayerFlag = false;
@@ -1212,6 +1225,44 @@ namespace RTXMnesia.Enemies
         }
 
         protected bool PlayerInFov() => InFov(Player.Body.Position);
+
+        protected Vector3 GetPlayerFeetPos() => Player.Body.FeetPosition;
+
+        /// <summary>iLuxEnemy::Dist2D: from the feet, in xz.</summary>
+        protected float Dist2D(Vector3 pos)
+        {
+            Vector3 a = Body.FeetPosition;
+            a.y = pos.y = 0f;
+            return Vector3.Distance(a, pos);
+        }
+
+        /// <summary>iLuxEnemy::AbsHeightDistToPlayer: the height difference of the feet (100000 when the player is dead).</summary>
+        protected float AbsHeightDistToPlayer() => Player == null || Player.IsDead ? 100000f : Mathf.Abs(Body.FeetPosition.y - Player.Body.FeetPosition.y);
+
+        /// <summary>
+        /// iLuxEnemy::GetClosestFood: the food object (IsFood) closest to the body center within the distance whose first
+        /// body's lowest point is within the height of the feet.
+        /// </summary>
+        protected PropObject GetClosestFood(float maxDist, float maxHeightDist)
+        {
+            PropObject output = null;
+            float shortest = -1f;
+            foreach (var entity in Map.Entities)
+            {
+                if (entity is not PropObject food || !food.IsFood || food.PhysicsBodies.Count == 0) continue;
+                var body = food.PhysicsBodies[0];
+                if (!body.TryGetBounds(out Bounds bounds)) continue;
+                if (Mathf.Abs(bounds.min.y - Body.FeetPosition.y) > maxHeightDist) continue;
+                float distSqr = (Body.Position - body.Position).sqrMagnitude;
+                if (distSqr > maxDist * maxDist) continue;
+                if (shortest < 0f || distSqr < shortest)
+                {
+                    shortest = distSqr;
+                    output = food;
+                }
+            }
+            return output;
+        }
 
         protected float DistToPlayer() => Player == null || Player.IsDead ? 100000f : Vector3.Distance(Body.FeetPosition, Player.Body.FeetPosition);
 

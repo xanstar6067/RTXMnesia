@@ -39,6 +39,10 @@ namespace RTXMnesia.Props
         float _hitDamageAmount, _minHitDamageSpeed;
         int _hitDamageStrength;
 
+        /// <summary>IsFood: draws the water lurker (UpdateFoodEnemyAttraction).</summary>
+        public bool IsFood { get; private set; }
+        float _foodAttractCount;
+
         int _stuckState;
         readonly List<(float min, float max, float lockedRange)> _jointData = new();
 
@@ -48,6 +52,7 @@ namespace RTXMnesia.Props
         {
             ObjType = GetObjectType(SubType);
             _lifeLength = VarFloat("LifeLength", 0f);
+            IsFood = VarBool("IsFood", false);
 
             _breakActive = VarBool("BreakActive", false);
             _breakDestroyJoints = VarBool("BreakDestroyJoints", false);
@@ -190,11 +195,35 @@ namespace RTXMnesia.Props
 
         protected override void UpdatePropSpecific(float timeStep)
         {
+            UpdateFoodEnemyAttraction(timeStep);
             if (_lifeLength > 0f)
             {
                 _lifeLengthCount += timeStep;
                 // Mesh coverage fade over the last second: dissolve materials come later.
                 if (_lifeLengthCount >= _lifeLength) Break();
+            }
+        }
+
+        /// <summary>
+        /// cLuxProp_Object::UpdateFoodEnemyAttraction: every 2 s, each active living enemy in range of the first body
+        /// (only the water lurker has a range) gets FoodInRange with the body's position.
+        /// </summary>
+        void UpdateFoodEnemyAttraction(float timeStep)
+        {
+            if (!IsFood) return;
+            if (_foodAttractCount > 0f)
+            {
+                _foodAttractCount -= timeStep;
+                return;
+            }
+            _foodAttractCount = 2f;
+            if (PhysicsBodies.Count == 0) return;
+            var body = PhysicsBodies[0];
+            foreach (var enemy in Map.Enemies)
+            {
+                if (!enemy.Active || enemy.Health <= 0f) continue;
+                if (!enemy.InRangeOfFood(body)) continue;
+                enemy.SendMessage(Enemies.EnemyMessage.FoodInRange, 0f, false, body.Position);
             }
         }
 

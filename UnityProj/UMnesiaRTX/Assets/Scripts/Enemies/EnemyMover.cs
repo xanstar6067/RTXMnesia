@@ -10,8 +10,8 @@ namespace RTXMnesia.Enemies
     /// <summary>
     /// cLuxEnemyMover (LuxEnemyMover.cpp): turning toward a goal angle (speed ∝ angle, capped), moving forward, the
     /// stuck counter (real speed below 30% of the wanted one or moving sideways), braking in sharp turns and the move
-    /// animations by speed (idle / walk / run / backward, walk ↔ run synced). Angles in HPL2 space.
-    /// Not ported: water step effects (6.4).
+    /// animations by speed (idle / walk / run / backward, walk ↔ run synced), splashes of steps in water. Angles in
+    /// HPL2 space.
     /// </summary>
     public sealed class EnemyMover
     {
@@ -40,6 +40,49 @@ namespace RTXMnesia.Enemies
             UpdateStuckCounter(timeStep);
             UpdateTurning(timeStep);
             UpdateMoveAnimation();
+            UpdateStepEffects();
+        }
+
+        /// <summary>
+        /// cLuxEnemyMover::UpdateStepEffects: in water, a Step event of the current animation that passed this step
+        /// splashes at the body on the surface. The speed picked by the move state (walk and run both take
+        /// WaterStepSpeedWalk) is not used: the impact is always the one of speed 3.
+        /// </summary>
+        void UpdateStepEffects()
+        {
+            if (!_enemy.IsInWater || _enemy.WaterSurface == null) return;
+            var anim = _enemy.CurrentAnimation;
+            if (anim == null) return;
+
+            bool step = false;
+            foreach (var e in anim.Events)
+            {
+                if (e.type != "Step") continue;
+                if (e.time >= anim.PreviousTimePosition && e.time < anim.TimePosition)
+                {
+                    step = true;
+                    break;
+                }
+            }
+            if (!step) return;
+
+            var impact = _enemy.WaterSurface.GetImpactDataFromSpeed(3f);
+            if (impact == null) return;
+            Vector3 pos = _body.Position;
+            pos.y = _enemy.WaterSurfaceY + 0.01f;
+            var map = _enemy.Map;
+            if (!string.IsNullOrEmpty(impact.psName) && map.ParticleWorld != null)
+            {
+                var system = map.ParticleWorld.Create("Splash", impact.psName);
+                if (system != null) system.LocalMatrix = Matrix4x4.Translate(pos);
+            }
+            if (!string.IsNullOrEmpty(impact.soundName) && map.sound != null)
+            {
+                var sound = map.sound.CreateSoundEntity("Splash", impact.soundName, true);
+                if (sound == null) return;
+                sound.IsSaved = false;
+                sound.Position = pos;
+            }
         }
 
         public void MoveToPos(Vector3 feetPos)

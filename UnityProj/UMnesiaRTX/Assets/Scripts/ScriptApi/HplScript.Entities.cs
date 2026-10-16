@@ -511,13 +511,13 @@ namespace RTXMnesia.ScriptApi
 
         // ------------------------------------------------------------------ enemies
 
-        /// <summary>The ported enemies among GetEntities (the water lurker and man pig are not ported yet).</summary>
+        /// <summary>The ported enemies among GetEntities (the man pig of A Machine for Pigs is not in this game).</summary>
         IEnumerable<Enemies.HplEnemy> GetEnemies(string name, string function)
         {
             foreach (var e in GetEntities(name, HplEntityType.Enemy))
             {
                 if (e is Enemies.HplEnemy enemy) yield return enemy;
-                else NotPorted(function, "the water lurker and man pig (6.4)");
+                else NotPorted(function, "the man pig (not in The Dark Descent)");
             }
         }
 

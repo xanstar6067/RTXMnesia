@@ -77,6 +77,8 @@ namespace RTXMnesia.Player
         public virtual string Describe() => Type.ToString();
         /// <summary>iLuxPlayerState::AllowLantern (false only on a ladder).</summary>
         public virtual bool AllowLantern => true;
+        /// <summary>iLuxPlayerState::AllowBuoyancy (false for the prop in the player's hands).</summary>
+        public virtual bool AllowBuoyancy(Dynamics.HplPhysicsBody body) => true;
     }
 
     /// <summary>cLuxPlayer::ChangeState and the state list.</summary>
