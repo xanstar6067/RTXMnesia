@@ -23,6 +23,9 @@ MonoBehaviour:
   m_OverrideGlobalSceneList: 1
   m_Scenes:
   - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/main_menu/main/menu_bg.unity
+    m_guid: 8588a6db52e01ff4ca3c6bbf755d2184
+  - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity
     m_guid: 8afe18766aa87ad4b9febdc2713da2fc
   m_HasScriptingDefines: 0
