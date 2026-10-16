@@ -18,6 +18,9 @@ EditorBuildSettings:
     path: Assets/AmnesiaImported/Levels/maps/main/ch01/02_entrance_hall.unity
     guid: 274715e51a693ce49a0a41c9e2056ce8
   - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch01/03_archives.unity
+    guid: 67c4ebc02462e8b4fa3d6894dfb735de
+  - enabled: 1
     path: Assets/AmnesiaImported/Levels/maps/main/ch01/04_wine_cellar_lab.unity
     guid: ee0959ae5f995364eae3f0d8ec4841a5
   - enabled: 1
