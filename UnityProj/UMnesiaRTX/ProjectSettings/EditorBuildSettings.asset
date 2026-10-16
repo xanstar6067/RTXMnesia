@@ -56,5 +56,23 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/AmnesiaImported/Levels/maps/main/ch02/20_sewer.unity
     guid: f7336c0165dd26d429820606a561a124
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch03/25_cell_tunnels.unity
+    guid: c6de700c3658fa247b3b4a06c0d09006
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch03/26_torture_nave_redux.unity
+    guid: b3a4448ddd90a4041abc15e3102ca26f
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch03/26_zimmerman_vision.unity
+    guid: 807be70c7e799a44a91d6bb74bfe7861
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch03/27_torture_chancel_redux.unity
+    guid: 662f62fa656f4fe4da02fb6e9b84db69
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch03/28_inner_sanctum.unity
+    guid: 1c5c1c6da3d3c8f4ea81baa774b0e24a
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch03/29_orb_chamber.unity
+    guid: 2cac022f09141cb4cad3c223b0aa1fcb
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
