@@ -81,6 +81,24 @@ namespace RTXMnesia.EditorDev
                 var floating = map.PhysicsWorld.Bodies.FirstOrDefault(b => b.BuoyancyActive);
                 Check(floating != null, $"a body in the water has buoyancy ({floating?.Name})");
 
+                // The broad phase: Newton's AABBs are padded by 1/8 m, so a body just above the area is still iterated
+                // (its flag clears); farther it is not (the flag stays, as in HPL2).
+                bool haveBounds = HplCollision.TryGetBounds(liquidArea.GetBodyColliders(0), out Bounds area);
+                haveBounds &= floating.TryGetBounds(out Bounds fb);
+                Check(haveBounds,
+                      "liquid area and body bounds");
+                Vector3 floatPos = floating.Position;
+                foreach (var (gap, expected) in new[] { (0.1f, false), (0.4f, true) })
+                {
+                    floating.SetPose(floatPos + new Vector3(0f, area.max.y + gap - fb.min.y, 0f), floating.Rotation);
+                    Physics.SyncTransforms();
+                    floating.BuoyancyActive = true;
+                    liquid.Update(map, Time.fixedDeltaTime);
+                    Check(floating.BuoyancyActive == expected,
+                          $"a body {gap:0.0} m above the area: buoyancy {(expected ? "left on (outside the padded broad phase)" : "cleared (inside the padded broad phase)")}");
+                }
+                floating.SetPose(floatPos, floating.Rotation);
+
                 // ---------------------------------------------------------- the lurker
                 var lurker = map.GetEntityByName(Lurker) as EnemyWaterLurker;
                 Check(lurker != null && !lurker.Active, "waterlurker_1 is a ported, inactive water lurker");
@@ -110,7 +128,6 @@ namespace RTXMnesia.EditorDev
                 t = 0f;
                 while (t < 4f && lurker.CurrentState != EnemyState.GoHome) { Step(map, 1f / 60f); t += 1f / 60f; }
                 Check(lurker.CurrentState == EnemyState.GoHome && !lurker.CausesSanityDecrease, $"the player left the water: GoHome, no sanity loss ({lurker.CurrentStateName})");
-
                 // ---------------------------------------------------------- food
                 (map, player) = Open();
                 lurker = (EnemyWaterLurker)map.GetEntityByName(Lurker);

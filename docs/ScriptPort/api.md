@@ -132,7 +132,7 @@
 | `SetInsanitySetEnabled` | 2 | 6 | — | `void SetInsanitySetEnabled(string &in asSet, bool abX)` |
 | `SetEntityCustomFocusCrossHair` | 2 | 5 | ✓ | `void SetEntityCustomFocusCrossHair(string &in asName, string &in asCrossHair)` |
 | `SetEntityCallbackFunc` | 2 | 2 | ~ | `void SetEntityCallbackFunc(string &in asName, string &in asCallback)` |
-| `SetEnemyDisabled` | 2 | 3 | ~ | `void SetEnemyDisabled(string &in asName, bool abDisabled)` |
+| `SetEnemyDisabled` | 2 | 3 | ✓ | `void SetEnemyDisabled(string &in asName, bool abDisabled)` |
 | `SetDeathHint` | 2 | 2 | ✓ | `void SetDeathHint(string &in asTextCategory, string &in asTextEntry)` |
 | `InteractConnectPropWithRope` | 2 | 9 | — | `void InteractConnectPropWithRope(string &in asName, string& asLeverName, string& asPropName, bool abInteractOnly, float afSpeedMul,float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed)` |
 | `GetEntitiesCollide` | 2 | 2 | ✓ | `bool GetEntitiesCollide(string &in asEntityA, string &in asEntityB)` |
@@ -230,4 +230,4 @@ GiveItemFromFile читает определения `.ent` из генерир�
 
 ## Враги
 
-`AddEnemyPatrolNode`, `ClearEnemyPatrolNodes`, `SetEnemyDisabled`, `SetEnemyDisableTriggers`, `ShowEnemyPlayerPosition` — ✓ для Grunt (`EnemyGrunt`, см. CLAUDE.md «Враги»): узел ищется по имени в контейнере узлов врага (нет контейнера / узла — ошибка движка, как в HPL2); `ShowEnemyPlayerPosition` всегда переводит в охоту (условие оригинала с `||` всегда истинно). Без вызовов в картах, но тоже перенесены: `AlertEnemyOfPlayerPresence`, `SetEnemyIsHallucination`, `FadeEnemyToSmoke` (без растворения модели), `SetEnemySanityDecreaseActive`, `TeleportEnemyToNode`, `TeleportEnemyToEntity`, `GetEnemyStateName`, `SetEntityPos` для врага (ступни тела). Для водяного монстра и man pig эти функции — `NotPorted` (`needs the water lurker and man pig (6.4)`); функции man pig (`ChangeManPigPose`, `SetTeslaPig*`, `ForceTeslaPigSighting`) — к ним же.
+`AddEnemyPatrolNode`, `ClearEnemyPatrolNodes`, `SetEnemyDisabled`, `SetEnemyDisableTriggers`, `ShowEnemyPlayerPosition` — ✓ для Grunt (`EnemyGrunt`) и водяного монстра (`EnemyWaterLurker`, 6.4), см. CLAUDE.md «Враги»: узел ищется по имени в контейнере узлов врага (нет контейнера / узла — ошибка движка, как в HPL2); `ShowEnemyPlayerPosition` всегда переводит в охоту (условие оригинала с `||` всегда истинно). Без вызовов в картах, но тоже перенесены: `AlertEnemyOfPlayerPresence`, `SetEnemyIsHallucination`, `FadeEnemyToSmoke` (без растворения модели), `SetEnemySanityDecreaseActive`, `TeleportEnemyToNode`, `TeleportEnemyToEntity`, `GetEnemyStateName`, `SetEntityPos` для врага (ступни тела). Man pig (`Enemy_ManPig`) — враг A Machine for Pigs, в данных The Dark Descent его сущности нет: функции на нём — `NotPorted` (`needs the man pig (not in The Dark Descent)`), функции man pig (`ChangeManPigPose`, `SetTeslaPig*`, `ForceTeslaPigSighting`) не переносятся.

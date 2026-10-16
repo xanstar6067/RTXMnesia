@@ -11,9 +11,13 @@ namespace RTXMnesia.ScriptApi
     /// the bodies whose bounds touch the area's bounds are tested against its box. Bodies with mass that enter get
     /// buoyancy (surface at the top of the box, density, viscosities) and a splash; waves near the camera move their
     /// surface; a body in the player's hands floats not. The player in it is slowed and steps with the liquid's step
-    /// type (a splash on entering); an enemy in it knows the surface for its step splashes. A body or character that
-    /// leaves the area's bounds is no longer iterated, so its flags stay set (as in HPL2: the player start resets the
-    /// player's).
+    /// type (a splash on entering); an enemy in it knows the surface for its step splashes.
+    ///
+    /// The bodies come from Newton's broad phase (GetBodiesInBV → NewtonWorldForEachBodyInAABBDo), which compares the
+    /// area's exact bounds with the bodies' Newton AABBs, padded by DG_MAX_COLLISION_PADDING (1/8 m) on every side;
+    /// the exact bounds test comes after. So a body leaving the area is still iterated for 12.5 cm and its flags are
+    /// cleared; only a jump of more than that in one step (a teleport) leaves them set (the player start resets the
+    /// player's, as cLuxPlayer::PlaceAtStartNode does).
     /// </summary>
     public sealed class HplLiquidArea
     {
@@ -24,6 +28,8 @@ namespace RTXMnesia.ScriptApi
         readonly float _waveAmp, _waveFreq, _playerSpeedMul, _maxWaveDistanceSqr;
         readonly float _surfaceY;
         float _timeCount;
+        const float NewtonAabbPadding = 1f / 8f;
+        static readonly Vector3 Padding = Vector3.one * (2f * NewtonAabbPadding);
         readonly Collider[] _shape = new Collider[1];
         readonly List<Collider> _bodyShapes = new();
 
@@ -63,17 +69,21 @@ namespace RTXMnesia.ScriptApi
             if (!HplCollision.TryGetBounds(areaShapes, out Bounds areaBounds)) return;
             _timeCount += timeStep;
 
-            // Rigid bodies (GetBodiesInBV: the bodies whose bounds overlap the area's).
+            // Rigid bodies (GetBodiesInBV: the padded AABBs that overlap the area's bounds), then the exact bounds and shapes.
             var bodies = map.PhysicsWorld.Bodies;
             for (int i = 0; i < bodies.Count; i++)
             {
                 var body = bodies[i];
                 if (!body.Collide || !body.Active) continue;
                 if (body.IsStatic) continue;
-                if (!body.TryGetBounds(out Bounds bounds) || !bounds.Intersects(areaBounds)) continue;
-                _bodyShapes.Clear();
-                _bodyShapes.AddRange(body.Colliders);
-                bool inside = HplCollision.BodiesCollide(_bodyShapes, areaShapes);
+                if (!body.TryGetBounds(out Bounds bounds) || !Padded(bounds).Intersects(areaBounds)) continue;
+                bool inside = bounds.Intersects(areaBounds);
+                if (inside)
+                {
+                    _bodyShapes.Clear();
+                    _bodyShapes.AddRange(body.Colliders);
+                    inside = HplCollision.BodiesCollide(_bodyShapes, areaShapes);
+                }
                 DoBuoyancyOnBody(map, body, inside);
             }
 
@@ -82,10 +92,8 @@ namespace RTXMnesia.ScriptApi
             if (player != null && player.Body != null && player.Body.isActiveAndEnabled && player.Body.Shapes.Count > 0)
             {
                 var body = player.Body;
-                if (new Bounds(body.Position, body.Size).Intersects(areaBounds))
+                if (CharacterInside(body, areaBounds, areaShapes, out bool inside))
                 {
-                    _shape[0] = body.Shapes[body.ActiveSize];
-                    bool inside = HplCollision.BodiesCollide(_shape, areaShapes);
                     if (inside)
                     {
                         if (!player.IsInWater)
@@ -103,9 +111,8 @@ namespace RTXMnesia.ScriptApi
             {
                 var body = enemy.Body;
                 if (body == null || !body.isActiveAndEnabled || body.Shapes.Count == 0) continue;
-                if (!new Bounds(body.Position, body.Size).Intersects(areaBounds)) continue;
-                _shape[0] = body.Shapes[body.ActiveSize];
-                if (HplCollision.BodiesCollide(_shape, areaShapes))
+                if (!CharacterInside(body, areaBounds, areaShapes, out bool inside)) continue;
+                if (inside)
                 {
                     if (!enemy.IsInWater)
                     {
@@ -116,6 +123,26 @@ namespace RTXMnesia.ScriptApi
                 }
                 else enemy.IsInWater = false;
             }
+        }
+
+        static Bounds Padded(Bounds b)
+        {
+            b.size += Padding;
+            return b;
+        }
+
+        /// <summary>A character body (its current upright cylinder): false when not in the broad phase result.</summary>
+        bool CharacterInside(Player.HplCharacterBody body, Bounds areaBounds, IReadOnlyList<Collider> areaShapes, out bool inside)
+        {
+            inside = false;
+            var bounds = new Bounds(body.Position, body.Size);
+            if (!Padded(bounds).Intersects(areaBounds)) return false;
+            if (bounds.Intersects(areaBounds))
+            {
+                _shape[0] = body.Shapes[body.ActiveSize];
+                inside = HplCollision.BodiesCollide(_shape, areaShapes);
+            }
+            return true;
         }
 
         void DoBuoyancyOnBody(HplMap map, HplPhysicsBody body, bool inside)
