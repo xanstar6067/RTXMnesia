@@ -33,6 +33,20 @@ namespace RTXMnesia.Importer
             skin.Load(skinPath);
             string guiFont = ((XmlElement)skin.SelectSingleNode("/GuiSkin/Fonts/Font[@type='Default']"))?.GetAttribute("file");
             assets.guiFont = FontConverter.Convert(guiFont ?? "menu_gui_default.fnt", language, index, log);
+            string logoFile = null;
+            foreach (string folder in language.resourceDirs)
+            {
+                string candidate = Path.Combine(AmnesiaPaths.SourceRoot, folder, "graphics/main_menu/menu_logo.tga");
+                if (File.Exists(candidate)) { logoFile = candidate; break; }
+            }
+            logoFile ??= index.Find("graphics/main_menu/menu_logo.tga");
+            if (logoFile != null)
+            {
+                string logoPath = TextureConverter.Convert(logoFile, TextureRole.Gui, null, false, out bool written);
+                if (written) AssetDatabase.ImportAsset(logoPath, ImportAssetOptions.ForceSynchronousImport);
+                assets.titleLogo = AssetDatabase.LoadAssetAtPath<Texture2D>(logoPath);
+            }
+            else log.Error("Main menu logo missing");
             assets.pieces.Clear();
             foreach (XmlElement piece in skin.SelectNodes("/GuiSkin/GfxElements/Gfx"))
             {

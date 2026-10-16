@@ -1,6 +1,8 @@
 using RTXMnesia.ScriptApi;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace RTXMnesia.Ui
 {
@@ -12,6 +14,13 @@ namespace RTXMnesia.Ui
     [DefaultExecutionOrder(-100)]
     public sealed class HplGameUi : MonoBehaviour
     {
+        public const string MainMenuScene = "Assets/AmnesiaImported/Levels/main_menu/main/menu_bg.unity";
+        public const string FirstLevelScene = "Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity";
+        public bool IsTitleScreen { get; private set; }
+        public bool IsTransitioning { get; private set; }
+        public MenuControl PendingConfirmation { get; private set; } = MenuControl.ConfirmQuit;
+        public string LoadError { get; private set; } = "";
+        public HplPauseMenu Menu => _menu;
         public bool IsPaused { get; private set; }
         public bool ConfirmingQuit { get; private set; }
         public bool ShowingOptions { get; private set; }
@@ -40,28 +49,38 @@ namespace RTXMnesia.Ui
         bool _closing;
         MenuControl? _dragSlider;
 
-        public void Init(HplMap map)
+        public void Init(HplMap map, bool titleScreen = false)
         {
             if (_map != null) return;
             _map = map;
+            IsTitleScreen = titleScreen;
             Settings = HplUserSettings.Load(map);
             if (Application.isPlaying) Settings.Apply(map);
-            _menu = new HplPauseMenu(map, transform);
-            Inventory = new HplInventory(map);
-            Journal = new HplJournal(map);
+            _menu = new HplPauseMenu(map, transform, titleScreen);
+            if (!titleScreen)
+            {
+                Inventory = new HplInventory(map);
+                Journal = new HplJournal(map);
+            }
+            else
+            {
+                IsPaused = true; MenuOpacity = 0.01f;
+                Cursor.lockState = CursorLockMode.None; Cursor.visible = !_menu.HasCursor;
+                ShowPauseMenu();
+            }
         }
 
         void Update()
         {
-            if (_map == null || _menu == null || _map.player == null || !_map.player.readDevices) return;
+            if (_map == null || _menu == null || IsTransitioning || (!IsTitleScreen && (_map.player == null || !_map.player.readDevices))) return;
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
             {
                 if (!IsPaused) Pause();
                 else if (JournalOpen) Journal.ExitPressed(false);
                 else if (InventoryOpen && Inventory.MessageActive) Inventory.DismissMessage();
-                else if (ConfirmingQuit || ShowingOptions) ShowPauseMenu();
-                else _closing = true;
+                else if (ConfirmingQuit || ShowingOptions || LoadError != "") ShowPauseMenu();
+                else if (!IsTitleScreen) _closing = true;
                 return;
             }
             if (keyboard != null && (keyboard.jKey.wasPressedThisFrame || keyboard.mKey.wasPressedThisFrame || keyboard.nKey.wasPressedThisFrame))
@@ -137,7 +156,7 @@ namespace RTXMnesia.Ui
                 Activate(_selected);
         }
 
-        public void Pause() => EnterScreen(false);
+        public void Pause() { if (!IsTitleScreen) EnterScreen(false); }
 
         bool CanOpenPlayerMenu() => _map?.player != null && _map.player.active && !_map.player.IsDead &&
             _map.Script?.InventoryDisabled != true && _map.player.States?.CurrentType != Player.PlayerStateType.Ladder;
@@ -295,12 +314,13 @@ namespace RTXMnesia.Ui
         public void Resume()
         {
             if (!IsPaused) return;
+            if (IsTitleScreen) { IsPaused = false; _menu?.SetVisible(false); return; }
             if (ReadingUiOpen)
             {
                 _map.effects?.PlayVoice.SetInventoryPaused(false);
                 _map.sound?.SetInventoryActive(false);
-                Inventory.Close();
-                Journal.Close();
+                Inventory?.Close();
+                Journal?.Close();
             }
             _pausedDuration += Time.realtimeSinceStartupAsDouble - _pauseStartedAt;
             IsPaused = false;
@@ -327,6 +347,7 @@ namespace RTXMnesia.Ui
 
         void ShowPauseMenu()
         {
+            LoadError = "";
             ConfirmingQuit = false;
             ShowingOptions = false;
             DraftSettings = null;
@@ -337,7 +358,7 @@ namespace RTXMnesia.Ui
         }
 
         void Refresh() => _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? Settings,
-            _selected, MenuOpacity, Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
+            _selected, MenuOpacity, Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero, PendingConfirmation, LoadError);
 
         public void OpenOptions(int tab = -1)
         {
@@ -372,9 +393,17 @@ namespace RTXMnesia.Ui
                 case MenuControl.Resume: _closing = true; break;
                 case MenuControl.Options: OpenOptions(); break;
                 case MenuControl.Quit:
+                    PendingConfirmation = MenuControl.ConfirmQuit;
                     ConfirmingQuit = true;
                     _selected = 1;
                     break;
+                case MenuControl.NewGame:
+                case MenuControl.ReturnTitle:
+                    PendingConfirmation = control == MenuControl.NewGame ? MenuControl.ConfirmNewGame : MenuControl.ConfirmReturnTitle;
+                    ConfirmingQuit = true; _selected = 1;
+                    break;
+                case MenuControl.ConfirmNewGame: BeginSceneLoad(FirstLevelScene, true); break;
+                case MenuControl.ConfirmReturnTitle: BeginSceneLoad(MainMenuScene, false); break;
                 case MenuControl.Cancel: ShowPauseMenu(); break;
                 case MenuControl.Apply:
                     Settings = DraftSettings.Copy();
@@ -405,11 +434,76 @@ namespace RTXMnesia.Ui
 #endif
                     break;
             }
-            Refresh();
+            if (!IsTransitioning) Refresh();
+        }
+
+        /// <summary>Routes a visible control through the same path as a mouse / keyboard action (also for checks).</summary>
+        public bool Choose(MenuControl control)
+        {
+            if (IsTransitioning || _menu == null) return false;
+            for (int i = 0; i < _menu.ButtonCount; i++)
+                if (_menu.ControlAt(i) == control) { Activate(i); return true; }
+            return false;
+        }
+
+        void BeginSceneLoad(string path, bool newGame)
+        {
+            if (IsTransitioning) return;
+            if (!Application.CanStreamedLevelBeLoaded(path))
+            {
+                Debug.LogError("[RTXMnesia] Scene unavailable in build: " + path);
+                LoadError = newGame ? "Не удалось запустить игру." : "Не удалось открыть главное меню.";
+                ConfirmingQuit = false;
+                return;
+            }
+            IsTransitioning = true;
+            StartCoroutine(LoadScene(path, newGame));
+        }
+
+        IEnumerator LoadScene(string path, bool newGame)
+        {
+            float fadeTime = _map.menuConfig != null ? _map.menuConfig.GetFloat("Main", newGame ? "MainFadeOutTimeSlow" : "MainFadeOutTimeFast", newGame ? 3 : 0.3f) : newGame ? 3 : 0.3f;
+            var camera = _map.PlayerCamera;
+            float fov = camera != null ? camera.fieldOfView : 70;
+            float zoom = _map.menuConfig != null ? _map.menuConfig.GetFloat("Main", "BGCamera_ZoomedFOV", 40) : 40;
+            if (newGame && IsTitleScreen) _map.sound?.PlayGui(_map.menuConfig.GetString("Main", "ZoomSound", "ui_zoom.ogg"), false, 1);
+            for (float elapsed = 0; elapsed < fadeTime; elapsed += Time.unscaledDeltaTime)
+            {
+                float alpha = Mathf.Clamp01(elapsed / Mathf.Max(0.001f, fadeTime));
+                if (newGame && IsTitleScreen && camera != null) camera.fieldOfView = Mathf.Lerp(fov, zoom, alpha);
+                _menu.RefreshLoading(alpha);
+                yield return null;
+            }
+            _menu.RefreshLoading(1);
+            Cursor.visible = false;
+            _map.sound?.SetMenuPaused(true);
+            // Both destinations replace this world. Keep it frozen while loading, and release time only
+            // immediately before activation so the new scene's Awake / Start run with a valid clock.
+            _map.enabled = false;
+            Time.timeScale = 0;
+            AsyncOperation operation = null;
+            try { operation = SceneManager.LoadSceneAsync(path, LoadSceneMode.Single); }
+            catch (System.Exception exception) { Debug.LogException(exception); }
+            if (operation == null)
+            {
+                _map.enabled = true; _map.sound?.SetMenuPaused(!IsTitleScreen);
+                Time.timeScale = IsTitleScreen ? 1 : 0;
+                IsTransitioning = false; ConfirmingQuit = false;
+                LoadError = "Не удалось открыть экран."; Refresh(); yield break;
+            }
+            operation.allowSceneActivation = false;
+            while (operation.progress < 0.9f) yield return null;
+            HplGame.Reset();
+            _previousTimeScale = 1;
+            Time.timeScale = 1;
+            operation.allowSceneActivation = true;
+            // This component is destroyed when the destination activates; all old sound sources are released
+            // by HplSoundHandler.OnDestroy. Preferences in PlayerPrefs are independent of the game reset.
         }
 
         void OnApplicationFocus(bool focused)
         {
+            if (IsTitleScreen) { _map?.sound?.SetMenuPaused(!focused); return; }
             if (ReadingUiOpen)
             {
                 // The inventory stays open, but an unfocused application must not keep playing its ambience.

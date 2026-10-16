@@ -12,7 +12,7 @@ namespace RTXMnesia.Ui
         GameTab, GraphicsTab, SoundTab, InputTab,
         Subtitles, Hints, Crosshair, Fullscreen, VSync, VolumeLess, VolumeMore,
         SensitivityLess, SensitivityMore, InvertMouse, SmoothMouse,
-        VolumeSlider, SensitivitySlider,
+        VolumeSlider, SensitivitySlider, NewGame, ReturnTitle, ConfirmNewGame, ConfirmReturnTitle,
     }
 
     /// <summary>In-game cLuxMainMenu: menu.cfg layout and gui_main_menu.skin on the same Canvas system as the HUD.</summary>
@@ -22,8 +22,9 @@ namespace RTXMnesia.Ui
         readonly HplMenuAssets _assets;
         readonly GameObject _root;
         readonly RectTransform _screen;
-        readonly HplGuiText _menuText, _guiText;
-        readonly RawImage _shade, _cursor;
+        readonly HplGuiText _menuText, _guiText, _loadingText;
+        readonly RawImage _shade, _cursor, _logo, _loadFade;
+        readonly bool _titleScreen;
         readonly List<RawImage> _pieces = new();
         readonly List<(Rect rect, MenuControl control)> _buttons = new();
         readonly List<(Rect rect, MenuControl control)> _sliders = new();
@@ -32,10 +33,12 @@ namespace RTXMnesia.Ui
         static readonly Color Highlight = new(232f / 255f, 201f / 255f, 28f / 255f, 1f);
         public int ButtonCount => _buttons.Count;
         public bool HasCursor => _cursor.texture != Texture2D.whiteTexture;
+        public Canvas Canvas => _root.GetComponent<Canvas>();
         public MenuControl ControlAt(int index) => _buttons[index].control;
 
-        public HplPauseMenu(HplMap map, Transform parent)
+        public HplPauseMenu(HplMap map, Transform parent, bool titleScreen = false)
         {
+            _titleScreen = titleScreen;
             _map = map;
             _assets = Resources.Load<HplMenuAssets>(HplMenuAssets.ResourceName);
             _root = new GameObject("HPL game menu", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
@@ -56,12 +59,23 @@ namespace RTXMnesia.Ui
             _screen.SetParent(_root.transform, false);
             _screen.anchorMin = _screen.anchorMax = _screen.pivot = Vector2.one * 0.5f;
             _screen.sizeDelta = new Vector2(800, 600);
+            _logo = Image(_screen, "Original title logo");
+            _logo.texture = _assets != null ? _assets.titleLogo : null;
+            _logo.enabled = _titleScreen && _logo.texture != null;
             _menuText = Text("Menu font", _assets != null ? _assets.menuFont : map.hud.defaultFont);
             _guiText = Text("GUI font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
             _cursor = Image(_screen, "Original menu cursor");
             var pointer = _assets != null ? _assets.Find("PointerNormal").texture : null;
             _cursor.texture = pointer != null ? pointer : Texture2D.whiteTexture;
             _cursor.enabled = pointer != null;
+            _loadFade = Image(_root.transform, "Scene transition fade");
+            _loadFade.rectTransform.anchorMin = Vector2.zero; _loadFade.rectTransform.anchorMax = Vector2.one;
+            _loadFade.rectTransform.offsetMin = _loadFade.rectTransform.offsetMax = Vector2.zero;
+            _loadFade.color = Color.clear;
+            _loadingText = Text("Loading text", _assets != null ? _assets.guiFont : map.hud.defaultFont);
+            _loadingText.transform.SetParent(_root.transform, false);
+            _loadingText.rectTransform.anchorMin = _loadingText.rectTransform.anchorMax = _loadingText.rectTransform.pivot = Vector2.one * 0.5f;
+            _loadingText.rectTransform.anchoredPosition = Vector2.zero; _loadingText.rectTransform.sizeDelta = new Vector2(800, 600);
             if (_assets == null) Debug.LogWarning("[RTXMnesia] Menu resources missing: run Import > Menu resources.");
             _root.SetActive(false);
         }
@@ -80,7 +94,7 @@ namespace RTXMnesia.Ui
         public void SetVisible(bool visible) => _root.SetActive(visible);
         Vector2 VirtualPoint(Vector2 position)
         {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(_screen, position, null, out var p);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(_screen, position, Canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : Canvas.worldCamera, out var p);
             return new Vector2(p.x + 400, 300 - p.y);
         }
         public int HitTest(Vector2 position)
@@ -103,8 +117,9 @@ namespace RTXMnesia.Ui
             return Mathf.Clamp01((VirtualPoint(position).x - slider.rect.x) / slider.rect.width);
         }
 
-        public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer)
+        public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer, MenuControl confirmation = MenuControl.ConfirmQuit, string error = "")
         {
+            _loadFade.color = Color.clear; _loadingText.Clear();
             _menuText.Clear();
             _guiText.Clear();
             _buttons.Clear();
@@ -112,30 +127,54 @@ namespace RTXMnesia.Ui
             _pieceIndex = 0;
             _selected = selected;
             _opacity = opacity;
-            _shade.color = new Color(0, 0, 0, 0.5f * opacity);
-            if (confirmQuit) Confirmation();
+            _shade.color = new Color(0, 0, 0, _titleScreen ? 0 : 0.5f * opacity);
+            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options && error == "";
+            if (_logo.enabled)
+            {
+                float width = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
+                Vector2 pos = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", "MainMenuLogoStartRelativePos", new Vector2(0.0525f, 0.22f)) : new Vector2(0.0525f, 0.22f);
+                Vector2 size = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", "MainMenuLogoRelativeSize", Vector2.one * 0.47f) : Vector2.one * 0.47f;
+                float height = size.y * 600;
+                Place(_logo.rectTransform, new Rect(pos.x * width - (width - 800) * 0.5f, pos.y * 600, height * _logo.texture.width / _logo.texture.height, height));
+                _logo.color = new Color(1, 1, 1, opacity);
+            }
+            if (error != "") Error(error);
+            else if (confirmQuit) Confirmation(confirmation);
             else if (options) Options(tab, settings);
             else Main();
             for (int i = _pieceIndex; i < _pieces.Count; i++) _pieces[i].enabled = false;
             if (HasCursor)
             {
+                _cursor.enabled = true;
                 var p = VirtualPoint(pointer);
                 Place(_cursor.rectTransform, new Rect(p.x, p.y, _cursor.texture.width, _cursor.texture.height));
                 _cursor.transform.SetAsLastSibling();
             }
         }
 
+        public void RefreshLoading(float alpha)
+        {
+            _loadFade.color = new Color(0, 0, 0, Mathf.Clamp01(alpha));
+            _cursor.enabled = false;
+            _loadingText.Clear();
+            if (alpha >= 0.99f) _loadingText.DrawFont(T("LoadingScreen", "Loading", "Загрузка…"), new Vector2(400, 550), Vector2.one * 18, Color.white, HplFontAlign.Center);
+        }
+
         void Main()
         {
             Vector2 size = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", "TopMenuFontRelativeSize", Vector2.one * 0.05f) : Vector2.one * 0.05f;
             size = Vector2.Scale(size, new Vector2(800, 600));
-            Vector2 pos = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", "TopMenuStartRelativePosInGame", Vector2.one * 0.5f) : Vector2.one * 0.5f;
+            Vector2 pos = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", _titleScreen ? "TopMenuStartRelativePos" : "TopMenuStartRelativePosInGame", _titleScreen ? new Vector2(0.8f, 0.325f) : Vector2.one * 0.5f) : Vector2.one * 0.5f;
             pos = Vector2.Scale(pos, new Vector2(800, 600));
-            string[] labels = { T("MainMenu", "Back To Game", "Вернуться в игру"), T("MainMenu", "Options", "Настройки"), T("MainMenu", "Exit", "Выход") };
-            var controls = new[] { MenuControl.Resume, MenuControl.Options, MenuControl.Quit };
+            string[] labels = _titleScreen
+                ? new[] { T("MainMenu", "Start Game", "Новая игра"), T("MainMenu", "Options", "Настройки"), T("MainMenu", "Exit", "Выход") }
+                : new[] { T("MainMenu", "Back To Game", "Вернуться в игру"), T("MainMenu", "Options", "Настройки"), T("MainMenu", "ExitToMainMenu", "В главное меню"), T("MainMenu", "Exit", "Выход") };
+            var controls = _titleScreen ? new[] { MenuControl.NewGame, MenuControl.Options, MenuControl.Quit }
+                : new[] { MenuControl.Resume, MenuControl.Options, MenuControl.ReturnTitle, MenuControl.Quit };
             float maxWidth = 0;
             foreach (var label in labels) maxWidth = Mathf.Max(maxWidth, _menuText.font != null ? _menuText.font.GetLength(size, label) : 0);
             float virtualWidth = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
+            if (_titleScreen) pos.x = pos.x / 800 * virtualWidth - (virtualWidth - 800) * 0.5f;
             size *= Mathf.Clamp(maxWidth > 0 ? virtualWidth * 0.35f / maxWidth : 1, 0.7f, 1);
             for (int i = 0; i < labels.Length; i++)
             {
@@ -145,15 +184,24 @@ namespace RTXMnesia.Ui
             }
         }
 
-        void Confirmation()
+        void Confirmation(MenuControl action)
+        {
+            Window(new Rect(165, 205, 470, 215));
+            var size = Vector2.one * 18;
+            var question = action == MenuControl.ConfirmNewGame ? T("MainMenu", "Start a new game?", "Начать новую игру?")
+                : action == MenuControl.ConfirmReturnTitle ? T("MainMenu", "Sure you want to exit to main menu?", "Выйти в главное меню?")
+                : T("MainMenu", "Sure you want to quit?", "Выйти из игры?");
+            var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(410, size, question) : new List<string> { question };
+            for (int i = 0; i < rows.Count; i++) Draw(_guiText, rows[i], new Vector2(400, 235 + i * 22), size, Color.white, HplFontAlign.Center);
+            Button(new Rect(260, 365, 120, 28), T("MainMenu", "Yes", "Да"), action);
+            Button(new Rect(420, 365, 120, 28), T("MainMenu", "No", "Нет"), MenuControl.Cancel);
+        }
+
+        void Error(string message)
         {
             Window(new Rect(165, 225, 470, 170));
-            var size = Vector2.one * 18;
-            var question = T("MainMenu", "Sure you want to quit?", "Выйти из игры?");
-            var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(410, size, question) : new List<string> { question };
-            for (int i = 0; i < rows.Count; i++) Draw(_guiText, rows[i], new Vector2(400, 255 + i * 22), size, Color.white, HplFontAlign.Center);
-            Button(new Rect(260, 340, 120, 28), T("MainMenu", "Yes", "Да"), MenuControl.ConfirmQuit);
-            Button(new Rect(420, 340, 120, 28), T("MainMenu", "No", "Нет"), MenuControl.Cancel);
+            Draw(_guiText, message, new Vector2(400, 260), Vector2.one * 18, Color.white, HplFontAlign.Center);
+            Button(new Rect(330, 340, 140, 28), T("MainMenu", "OK", "OK"), MenuControl.Cancel);
         }
 
         void Options(int tab, HplUserSettings settings)

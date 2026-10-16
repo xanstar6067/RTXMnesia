@@ -47,6 +47,7 @@ namespace RTXMnesia.Importer
         readonly string _mapAbsolute;
         readonly string _mapRelative;
         readonly string _mapName;
+        readonly bool _menuBackground;
         readonly string _levelFolder;
         readonly ImportLog _log = new();
         readonly ResourceIndex _index = new(AmnesiaPaths.SourceRoot);
@@ -72,8 +73,9 @@ namespace RTXMnesia.Importer
         string GeneratedPath => _levelFolder + "/" + _mapName + "_generated.asset";
         string VolumePath => _levelFolder + "/" + _mapName + "_volume.asset";
 
-        LevelConverter(string mapAbsolute)
+        LevelConverter(string mapAbsolute, bool menuBackground = false)
         {
+            _menuBackground = menuBackground;
             _mapAbsolute = Path.GetFullPath(mapAbsolute);
             _mapRelative = AmnesiaPaths.ToSourceRelative(_mapAbsolute);
             _mapName = Path.GetFileNameWithoutExtension(_mapAbsolute);
@@ -86,6 +88,13 @@ namespace RTXMnesia.Importer
         public static string Convert(string mapAbsolute)
         {
             var converter = new LevelConverter(mapAbsolute);
+            converter.Run();
+            return converter.ScenePath;
+        }
+
+        public static string ConvertMenuBackground(string mapAbsolute)
+        {
+            var converter = new LevelConverter(mapAbsolute, true);
             converter.Run();
             return converter.ScenePath;
         }
@@ -1284,7 +1293,24 @@ namespace RTXMnesia.Importer
             volume.isGlobal = true;
             volume.sharedProfile = profile;
 
-            BuildPlayer();
+            if (_menuBackground) BuildMenuCamera(root); else BuildPlayer();
+        }
+
+        void BuildMenuCamera(Transform root)
+        {
+            var start = _playerStarts.FirstOrDefault(t => t.name == "CameraPos");
+            if (start == null) throw new InvalidDataException("Main menu background has no CameraPos");
+            var go = new GameObject("MenuCamera") { tag = "MainCamera" };
+            go.transform.SetParent(root, false);
+            // HPL cameras look along local -Z; PlayerStart's +Z is only for gameplay spawning.
+            go.transform.SetPositionAndRotation(start.position, start.rotation * Quaternion.Euler(0, 180, 0));
+            var config = ConfigConverter.Convert(ConfigConverter.MenuConfig, _log);
+            var camera = go.AddComponent<Camera>(); camera.fieldOfView = config.GetFloat("Main", "BGCamera_FOV", 70);
+            camera.nearClipPlane = 0.05f; camera.farClipPlane = 500;
+            var data = go.AddComponent<HDAdditionalCameraData>();
+            data.antialiasing = HDAdditionalCameraData.AntialiasingMode.TemporalAntialiasing;
+            data.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color; data.backgroundColorHDR = Color.black;
+            go.AddComponent<AudioListener>();
         }
 
         // The player at the first player start; in edit mode its camera shows the start view at eye height.
@@ -1333,6 +1359,8 @@ namespace RTXMnesia.Importer
         {
             var map = root.AddComponent<HplMap>();
             map.mapFile = _mapRelative;
+            map.menuBackground = _menuBackground;
+            if (_menuBackground) map.backgroundCamera = root.GetComponentInChildren<Camera>();
             map.gameConfig = _gameConfig;
             map.menuConfig = ConfigConverter.Convert(ConfigConverter.MenuConfig, _log);
             map.keysConfig = ConfigConverter.Convert(ConfigConverter.KeysConfig, _log);
@@ -1369,6 +1397,12 @@ namespace RTXMnesia.Importer
             map.sound = sound;
             map.particles = ParticleConverter.Convert(_log);
 
+            if (_menuBackground)
+            {
+                root.AddComponent<HplMainMenu>();
+                _log.Info("Main menu background: camera, world, particles and audio; no gameplay player / script");
+                return;
+            }
             var script = HplScript.FindScriptType(_mapRelative);
             if (script != null) _log.Info($"Level script: {script.FullName}");
             else _log.Warn($"No level script port for {_mapRelative} yet (the level runs without its events)");

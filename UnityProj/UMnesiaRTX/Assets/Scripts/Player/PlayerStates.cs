@@ -20,6 +20,11 @@ namespace RTXMnesia.Player
         public static Vector3 InteractPos;
         public static HplGame.Item InventoryItem;
 
+        public static void Reset()
+        {
+            InteractBody = null; InteractProp = null; InventoryItem = null; InteractPos = Vector3.zero;
+        }
+
         public static void SetupInteraction(HplPhysicsBody body, Vector3 hplInteractPos)
         {
             InteractBody = body;

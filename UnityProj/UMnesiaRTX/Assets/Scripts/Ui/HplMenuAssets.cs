@@ -15,6 +15,7 @@ namespace RTXMnesia.Ui
             public Color color;
         }
         public HplFont menuFont, guiFont;
+        public Texture2D titleLogo;
         public List<Piece> pieces = new();
 
         public Piece Find(string type) => pieces.Find(p => p.type == type);

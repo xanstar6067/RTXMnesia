@@ -213,7 +213,7 @@ namespace RTXMnesia.ScriptApi
             Coins = 0;
             CombineCallbacks.Clear();
             InventoryScript = null;
-            Player.PlayerStateVars.InventoryItem = null;
+            Player.PlayerStateVars.Reset();
         }
 
         /// <summary>cLuxGlobalDataHandler::GetVar: created empty on first use.</summary>

@@ -30,6 +30,9 @@ namespace RTXMnesia.ScriptApi
         [Tooltip("config/default_user_keys.cfg: key names in messages and hints ($ButJournal).")]
         public HplConfig keysConfig;
         public HplLanguage language;
+        [Tooltip("Decorative main-menu world: no player, level script or in-game pause UI.")]
+        public bool menuBackground;
+        public Camera backgroundCamera;
         public AmnesiaPlayer player;
         public HplEffects effects;
         public HplHud hud;
@@ -54,7 +57,7 @@ namespace RTXMnesia.ScriptApi
         public HplGameUi GameUi { get; private set; }
         public bool IsMenuPaused => GameUi != null && GameUi.IsPaused;
         public float GameTime { get; private set; }
-        public Camera PlayerCamera => player != null ? player.playerCamera : null;
+        public Camera PlayerCamera => player != null ? player.playerCamera : backgroundCamera;
         public readonly HplCollideCallbacks PlayerCollideCallbacks = new();
 
         [NonSerialized] public string DisplayNameEntry = "";
@@ -139,7 +142,7 @@ namespace RTXMnesia.ScriptApi
             Current = this;
             _level = GetComponent<AmnesiaLevel>();
             if (string.IsNullOrEmpty(mapFile) && _level != null) mapFile = _level.mapFile;
-            if (player == null) player = FindAnyObjectByType<AmnesiaPlayer>(FindObjectsInactive.Include);
+            if (!menuBackground && player == null) player = FindAnyObjectByType<AmnesiaPlayer>(FindObjectsInactive.Include);
             if (effects == null && !TryGetComponent(out effects)) effects = gameObject.AddComponent<HplEffects>();
             if (hud == null && !TryGetComponent(out hud)) hud = gameObject.AddComponent<HplHud>();
             effects.Init(this);
@@ -206,19 +209,19 @@ namespace RTXMnesia.ScriptApi
 
             InitFog();
 
-            var scriptType = HplScript.FindScriptType(mapFile);
+            var scriptType = menuBackground ? null : HplScript.FindScriptType(mapFile);
             if (scriptType != null)
             {
                 Script = (HplScript)Activator.CreateInstance(scriptType);
                 Script.Map = this;
             }
-            else
+            else if (!menuBackground)
             {
                 HplLog.Warn($"No level script for '{mapFile}' (class with [HplMapScript(\"{mapFile}\")])");
             }
 
             // Runtime-only: existing imported levels get the UI without regenerating game content.
-            if (Application.isPlaying)
+            if (Application.isPlaying && !menuBackground)
             {
                 GameUi = gameObject.AddComponent<HplGameUi>();
                 GameUi.Init(this);

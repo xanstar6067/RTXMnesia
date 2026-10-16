@@ -6,7 +6,10 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/SampleScene.unity
-    guid: 99c9720ab356a0642a771bea13969a05
+    path: Assets/AmnesiaImported/Levels/main_menu/main/menu_bg.unity
+    guid: 8588a6db52e01ff4ca3c6bbf755d2184
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity
+    guid: 8afe18766aa87ad4b9febdc2713da2fc
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
