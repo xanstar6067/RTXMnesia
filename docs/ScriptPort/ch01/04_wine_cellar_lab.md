@@ -156,3 +156,113 @@ call EntityCallLamp torch_static01_16 OnIgnite; watch 10 2; shot events
 | Лампа | увеличение фонового света через `AmbLight` |
 
 Результат: **20 warnings, 0 errors** — те же 18, плюс дублирование коллбэка и `react_creath`. Вызовов `ChangeMap` не было.
+
+### Полное приготовление кислоты
+
+Тот же базовый запуск с `-seed 1`, логом `Logs/Sim_04_wine_cellar_lab_acid.log` и следующей строкой `-script` (без `-scriptDebug`):
+
+```text
+start PlayerStartArea_5;
+call GiveItemFromFile lantern lantern.ent; call SetLanternActive true true;
+call InteractAcidMachine ValveIgnite; call GetLocalVarInt ValvesNrOn;
+call GiveItemFromFile chemical_container_1 chemical_container.ent;
+call GiveItemFromFile Chemical_1 flask01_aqua_regia.ent;
+call GiveItemFromFile Chemical_2 flask01_calamine.ent;
+call GiveItemFromFile Chemical_3 flask01_cuprite.ent;
+call GiveItemFromFile Chemical_4 flask01_orpiment.ent;
+call ItemJarOnMachine chemical_container_1 AreaPlaceJar; watch 1 1;
+call AddChemical Chemical_1 acid_machine_1; watch 1 1;
+call AddChemical Chemical_2 acid_machine_1; watch 1 1;
+call AddChemical Chemical_3 acid_machine_1; watch 1 1;
+call AddChemical Chemical_4 acid_machine_1; watch 10 2;
+call InteractAcidMachine02 Valve_1; watch 1 1;
+call InteractAcidMachine ValveIgnite; watch 1 1;
+call SetWheelStuckState ValveIgnite 1 true; watch 2 1;
+call SetWheelStuckState Valve_1 1 true; watch 2 1;
+call SetWheelStuckState Valve_2 1 true; watch 10 2;
+call SetWheelStuckState Valve_3 1 true; watch 2 1;
+call SetWheelStuckState Valve_4 1 true; watch 10 2;
+body chemical_container_2;
+call GetLocalVarInt ChemicalsInMachine;
+call GetLocalVarInt StairsWentDownTheDrain; call GetLocalVarInt DoBigFeet;
+aim chemical_container_2; shot acid;
+call PickFinalAcid chemical_container_2 OnPickup; watch 10 2;
+call GetGlobalVarString chemical_container_2
+```
+
+Вентили переводились через существующий API `SetWheelStuckState`, который отправляет реальные события соединений; `InteractTurnValve` и `InteractTurnOnAcidMachine` здесь вызывались движком. Подтверждены:
+
+- стартовый `ValvesNrOn` = −4 и последовательность −3, −2, −1, 0;
+- удаление четырёх химикатов, смена пустых/полных колб и света, `ChemicalsInMachine` = 4;
+- обвал на третьем химикате, `StairsWentDownTheDrain` = 1;
+- завершение задания поиска, сообщение о зажигании и разблокировка главного вентиля;
+- четыре горелки, пар, кипение, отключение машины после четвёртого вентиля;
+- тяжёлые шаги над лабораторией после второго вентиля, `DoBigFeet` = 1;
+- `chemical_container_2` активна, музыка `04_puzzle_acid.ogg`, получение глобальной переменной `chemical_container_2` после коллбэка подбора, отложенный гром.
+
+Результат: **19 warnings, 0 errors** — стартовые 18 и исходное `Part4PSteam`. Снимок `Logs/Player_04_wine_cellar_lab_00_acid.png` просмотрен: на столе полная ёмкость, колбы с химикатами и остановленная машина.
+
+### Слив без ёмкости и доски
+
+Ещё один запуск использовал `-scriptDebug`: предметы химикатов и огнива выдал сам исходный отладочный блок `OnStart`. Лог: `Logs/Sim_04_wine_cellar_lab_branches.log`; строка `-script`:
+
+```text
+start PlayerStartArea_5; call SetLanternActive true true;
+call InteractAcidMachine ValveIgnite;
+call AddChemical Chemical_1 acid_machine_1; watch 1 1;
+call AddChemical Chemical_2 acid_machine_1; watch 1 1;
+call AddChemical Chemical_3 acid_machine_1; watch 1 1;
+call AddChemical Chemical_4 acid_machine_1; watch 10 2;
+call InteractAcidMachine ValveIgnite;
+call SetWheelStuckState ValveIgnite 1 true; watch 1 1;
+call SetWheelStuckState Valve_1 1 true; watch 1 1;
+call SetWheelStuckState Valve_2 1 true; watch 8 2;
+call SetWheelStuckState Valve_3 1 true; watch 1 1;
+call SetWheelStuckState Valve_4 1 true; watch 5 1;
+call GetLocalVarInt chemical_container_static_1; body chemical_container_2;
+call CollideStickLift StickLift_1 PlatformDynStickLift_1_Body_1; watch 10 2;
+body PlatformStickLift_1;
+call CollideStickLiftExtra PlatformDynStickLift_2 StickLift_2_Extra 1; watch 10 2;
+body PlatformStickLift_2; call GetLocalVarString StickOneTime; shot no_jar_platforms
+```
+
+Без установки ёмкости её локальная переменная остаётся 0, `chemical_container_2` не активируется, появляется русское сообщение о недостающей посуде, главный вентиль разблокирован для повторной попытки. Прямые коллбэки досок отключили динамические сущности и активировали обе статические платформы; `StickOneTime` в конце равен `StickLift_2`. Это проверка скрипта коллбэка, не проверка отсутствующей механики Sticky.
+
+Результат: **21 warnings, 0 errors** — стартовые 18, `Part4PSteam`, два исходных имени с двойным префиксом `Platform`. Все имена проверены по XML карты.
+
+### Регрессия
+
+Запуски с GPU, без `-quit` и без `-nographics`, оба завершились с кодом 0:
+
+```powershell
+& $unityExe -batchmode -projectPath $unityProject -executeMethod RTXMnesia.EditorDev.MapChangePreview.RunBatch -logFile "$unityProject/Logs/Regression_04_wine_cellar_lab_MapChange.log"
+& $unityExe -batchmode -projectPath $unityProject -executeMethod RTXMnesia.EditorDev.MainMenuPreview.RunBatch -logFile "$unityProject/Logs/Regression_04_wine_cellar_lab_MainMenu.log"
+```
+
+```text
+PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
+PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
+PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
+PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+```
+
+Unity автоматически пересохранил `ProjectSettings/TimeManager.asset`. Во время работы внешний коммит `745febd` включил это пересохранение вместе с новым портом и первой частью журнала. После выполнения команды возврата из задания файл дополнительно возвращён к содержимому на момент начала задачи (`e105a8c`); обратное изменение формата сериализации осталось в рабочей копии. Фиксированный шаг — по-прежнему 1/60. История коммита не менялась, другие настройки проекта не изменились.
+
+## Изменённые файлы и итоговый git status
+
+Файлы, созданные в этой задаче (порт, метаданные и первая часть журнала уже включены внешним коммитом `745febd`):
+
+- `UnityProj/UMnesiaRTX/Assets/Scripts/Levels/Ch01/WineCellarLab.cs`;
+- `UnityProj/UMnesiaRTX/Assets/Scripts/Levels/Ch01/WineCellarLab.cs.meta` (создан Unity);
+- `docs/ScriptPort/ch01/04_wine_cellar_lab.md`.
+
+В `CLAUDE.md` и `AGENTS.md` только добавлена карта `04_wine_cellar_lab` в строку этапа 5; файлы побайтно одинаковы. В рабочей копии также дополнен этот журнал и восстановлен исходный формат `TimeManager.asset`. Список сборки и профиль Windows уже содержали сцену и не изменились. Агент не выполнял коммиты и push; внешний коммит сохранён. Работа ограничена картой 04.
+
+```text
+ M AGENTS.md
+ M CLAUDE.md
+ M UnityProj/UMnesiaRTX/ProjectSettings/TimeManager.asset
+ M docs/ScriptPort/ch01/04_wine_cellar_lab.md
+```
