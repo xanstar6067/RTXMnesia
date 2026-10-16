@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using RTXMnesia.Hpl;
 using UnityEngine;
 
@@ -5,11 +6,12 @@ namespace RTXMnesia.ScriptApi
 {
     // Entities, lights, props, collide callbacks, physics and enemies (LuxScriptHandler.cpp).
     // Props are RTXMnesia.Props types over the rigid bodies of RTXMnesia.Dynamics (steps 4.2, 4.3). Not yet: attached
-    // props, sticky areas, multi sliders, buttons, interact connections (ropes / move objects), enemies (step 6).
+    // props, sticky areas, multi sliders, buttons, interact connections (ropes / move objects), NPCs, the water lurker and
+    // man pig (step 6).
     public abstract partial class HplScript
     {
         const string NeedsConnections = "interact connections";
-        const string NeedsEnemies = "enemies (step 6)";
+        const string NeedsEnemies = "NPCs and the man pig (step 6)";
 
         // ------------------------------------------------------------------ lights
 
@@ -69,12 +71,17 @@ namespace RTXMnesia.ScriptApi
 
         protected bool GetEntityExists(string asName) => Map.GetEntityByName(asName) != null;
 
-        /// <summary>Moves the first body (enemies: their feet, step 6).</summary>
+        /// <summary>Moves the first body (enemies: their feet).</summary>
         protected void SetEntityPos(string asName, float afX, float afY, float afZ)
         {
             Vector3 position = HplSpace.Position(new Vector3(afX, afY, afZ));
             foreach (var e in GetEntities(asName))
             {
+                if (e is Enemies.HplEnemy enemy)
+                {
+                    enemy.Body.SetFeetPosition(position);
+                    continue;
+                }
                 if (e.Bodies.Count == 0) continue;
                 var body = e.Bodies[0];
                 if (body.Physics != null) body.Physics.SetPose(position, body.Physics.Rotation);
@@ -502,24 +509,141 @@ namespace RTXMnesia.ScriptApi
                                   string asSound, float afSoundStartSpeed, float afSoundStopSpeed, bool abAutoMove, float afAutoMoveAcc,
                                   float afAutoMoveMaxSpeed) { } // commented out in the original handler
 
-        // ------------------------------------------------------------------ enemies (step 6)
+        // ------------------------------------------------------------------ enemies
 
-        protected void SetEnemyDisabled(string asName, bool abDisabled) => NotPorted(nameof(SetEnemyDisabled), NeedsEnemies);
-        protected void SetEnemyIsHallucination(string asName, bool abX) => NotPorted(nameof(SetEnemyIsHallucination), NeedsEnemies);
-        protected void FadeEnemyToSmoke(string asName, bool abPlaySound) => NotPorted(nameof(FadeEnemyToSmoke), NeedsEnemies);
-        protected void ShowEnemyPlayerPosition(string asName) => NotPorted(nameof(ShowEnemyPlayerPosition), NeedsEnemies);
-        protected void AlertEnemyOfPlayerPresence(string asName) => NotPorted(nameof(AlertEnemyOfPlayerPresence), NeedsEnemies);
-        protected void SetEnemyDisableTriggers(string asName, bool abX) => NotPorted(nameof(SetEnemyDisableTriggers), NeedsEnemies);
-        protected void AddEnemyPatrolNode(string asEnemyName, string asNodeName, float afWaitTime, string asAnimation) => NotPorted(nameof(AddEnemyPatrolNode), NeedsEnemies);
-        protected void ClearEnemyPatrolNodes(string asEnemyName) => NotPorted(nameof(ClearEnemyPatrolNodes), NeedsEnemies);
-        protected void SetEnemySanityDecreaseActive(string asName, bool abX) => NotPorted(nameof(SetEnemySanityDecreaseActive), NeedsEnemies);
-        protected void TeleportEnemyToNode(string asEnemyName, string asNodeName, bool abChangeY) => NotPorted(nameof(TeleportEnemyToNode), NeedsEnemies);
-        protected void TeleportEnemyToEntity(string asEnemyName, string asTargetEntity, string asTargetBody, bool abChangeY) => NotPorted(nameof(TeleportEnemyToEntity), NeedsEnemies);
+        /// <summary>The ported enemies among GetEntities (the water lurker and man pig are not ported yet).</summary>
+        IEnumerable<Enemies.HplEnemy> GetEnemies(string name, string function)
+        {
+            foreach (var e in GetEntities(name, HplEntityType.Enemy))
+            {
+                if (e is Enemies.HplEnemy enemy) yield return enemy;
+                else NotPorted(function, "the water lurker and man pig (6.4)");
+            }
+        }
+
+        protected void SetEnemyDisabled(string asName, bool abDisabled)
+        {
+            foreach (var e in GetEnemies(asName, nameof(SetEnemyDisabled))) e.SetDisabled(abDisabled);
+        }
+
+        protected void SetEnemyIsHallucination(string asName, bool abX)
+        {
+            foreach (var e in GetEnemies(asName, nameof(SetEnemyIsHallucination))) e.SetHallucination(abX);
+        }
+
+        protected void FadeEnemyToSmoke(string asName, bool abPlaySound)
+        {
+            foreach (var e in GetEnemies(asName, nameof(FadeEnemyToSmoke))) e.FadeToSmoke(abPlaySound);
+        }
+
+        /// <summary>The state test of the original is always true (|| instead of &amp;&amp;): every enemy goes hunting.</summary>
+        protected void ShowEnemyPlayerPosition(string asName)
+        {
+            foreach (var e in GetEnemies(asName, nameof(ShowEnemyPlayerPosition)))
+            {
+                e.ShowPlayerPosition();
+                var state = e.CurrentState;
+                if (state != Enemies.EnemyState.Hunt || state != Enemies.EnemyState.AttackMeleeLong ||
+                    state != Enemies.EnemyState.AttackMeleeShort || state != Enemies.EnemyState.BreakDoor)
+                    e.ChangeState(Enemies.EnemyState.Hunt);
+            }
+        }
+
+        protected void AlertEnemyOfPlayerPresence(string asName)
+        {
+            foreach (var e in GetEnemies(asName, nameof(AlertEnemyOfPlayerPresence)))
+            {
+                e.ShowPlayerPosition();
+                var state = e.CurrentState;
+                if (state != Enemies.EnemyState.Hunt && state != Enemies.EnemyState.AttackMeleeLong &&
+                    state != Enemies.EnemyState.AttackMeleeShort && state != Enemies.EnemyState.BreakDoor)
+                    e.ChangeState(Enemies.EnemyState.Search);
+            }
+        }
+
+        protected void SetEnemyDisableTriggers(string asName, bool abX)
+        {
+            foreach (var e in GetEnemies(asName, nameof(SetEnemyDisableTriggers))) e.SetDisableTriggers(abX);
+        }
+
+        protected void AddEnemyPatrolNode(string asEnemyName, string asNodeName, float afWaitTime, string asAnimation)
+        {
+            foreach (var e in GetEnemies(asEnemyName, nameof(AddEnemyPatrolNode)))
+            {
+                var container = e.Pathfinder.NodeContainer;
+                if (container == null)
+                {
+                    HplLog.Error($"There is no node container in enemy '{e.Name}'! (probably no nodes in map!)");
+                    continue;
+                }
+                var node = container.GetNodeFromName(asNodeName);
+                if (node == null)
+                {
+                    HplLog.Error($"Could not find node '{asNodeName}' for enemy '{e.Name}'");
+                    continue;
+                }
+                e.AddPatrolNode(node, afWaitTime, asAnimation);
+            }
+        }
+
+        protected void ClearEnemyPatrolNodes(string asEnemyName)
+        {
+            foreach (var e in GetEnemies(asEnemyName, nameof(ClearEnemyPatrolNodes))) e.ClearPatrolNodes();
+        }
+
+        protected void SetEnemySanityDecreaseActive(string asName, bool abX)
+        {
+            foreach (var e in GetEnemies(asName, nameof(SetEnemySanityDecreaseActive))) e.SetSanityDecreaseActive(abX);
+        }
+
+        protected void TeleportEnemyToNode(string asEnemyName, string asNodeName, bool abChangeY)
+        {
+            foreach (var e in GetEnemies(asEnemyName, nameof(TeleportEnemyToNode)))
+            {
+                var node = e.Pathfinder.NodeContainer?.GetNodeFromName(asNodeName);
+                if (node == null)
+                {
+                    HplLog.Error($"Could not find node '{asNodeName}' for enemy '{e.Name}'");
+                    continue;
+                }
+                Vector3 pos = node.Position;
+                if (!abChangeY) pos.y = e.Body.FeetPosition.y;
+                e.Body.SetFeetPosition(pos);
+            }
+        }
+
+        protected void TeleportEnemyToEntity(string asEnemyName, string asTargetEntity, string asTargetBody, bool abChangeY)
+        {
+            foreach (var e in GetEnemies(asEnemyName, nameof(TeleportEnemyToEntity)))
+            {
+                var target = GetEntity(asTargetEntity);
+                if (target == null)
+                {
+                    HplLog.Error($"Could not find entity '{asTargetEntity}' for enemy '{e.Name}' to be teleported to.");
+                    continue;
+                }
+                Vector3 pos;
+                if (target is Enemies.HplEnemy targetEnemy) pos = targetEnemy.Body.FeetPosition;
+                else
+                {
+                    var body = target.Bodies.Find(b => b.Name == target.Name + "_" + asTargetBody) ?? (target.Bodies.Count > 0 ? target.Bodies[0] : null);
+                    if (body == null) return;
+                    pos = body.Transform.position;
+                }
+                if (!abChangeY) pos.y = e.Body.FeetPosition.y;
+                e.Body.SetFeetPosition(pos);
+            }
+        }
         protected void ChangeManPigPose(string asName, string asPoseType) => NotPorted(nameof(ChangeManPigPose), NeedsEnemies);
         protected void SetTeslaPigFadeDisabled(string asName, bool abX) => NotPorted(nameof(SetTeslaPigFadeDisabled), NeedsEnemies);
         protected void SetTeslaPigSoundDisabled(string asName, bool abX) => NotPorted(nameof(SetTeslaPigSoundDisabled), NeedsEnemies);
         protected void SetTeslaPigEasyEscapeDisabled(string asName, bool abX) => NotPorted(nameof(SetTeslaPigEasyEscapeDisabled), NeedsEnemies);
         protected void ForceTeslaPigSighting(string asName) => NotPorted(nameof(ForceTeslaPigSighting), NeedsEnemies);
-        protected string GetEnemyStateName(string asName) => "";
+        protected string GetEnemyStateName(string asName)
+        {
+            if (GetEntity(asName, HplEntityType.Enemy) is Enemies.HplEnemy enemy) return enemy.CurrentStateName;
+            HplLog.Error($"Can't find enemy '{asName}'!");
+            return "";
+        }
     }
 }

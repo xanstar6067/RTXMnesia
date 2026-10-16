@@ -56,7 +56,8 @@ namespace RTXMnesia.Player
                 return;
             }
 
-            // not ported: BroadcastEnemyMessage(Reset); enemies are not implemented yet.
+            // Disable enemies
+            ScriptApi.HplMap.Current?.BroadcastEnemyMessage(Enemies.EnemyMessage.Reset, false, Vector3.zero, 0f);
             _flashDelay = 0.5f;
             _player.sound?.PlayGuiSoundData("flashback_flash", SoundEntryType.Gui);
             // not ported: AddCompletionAmount; completion percentages are not implemented yet.

@@ -35,7 +35,7 @@
 | `SetMessage` | 50 | 216 | ✓ | `void SetMessage(string &in asTextCategory, string &in asTextEntry, float afTime)` |
 | `SetEntityPlayerInteractCallback` | 48 | 148 | ✓ | `void SetEntityPlayerInteractCallback(string &in asName, string &in asCallback, bool abRemoveOnInteraction)` |
 | `MovePlayerHeadPos` | 45 | 75 | ✓ | `void MovePlayerHeadPos(float afX, float afY, float afZ, float afSpeed, float afSlowDownDist)` |
-| `AddEnemyPatrolNode` | 44 | 175 | — | `void AddEnemyPatrolNode(string &in asEnemyName, string &in asNodeName, float afWaitTime, string &in asAnimation)` |
+| `AddEnemyPatrolNode` | 44 | 175 | ✓ | `void AddEnemyPatrolNode(string &in asEnemyName, string &in asNodeName, float afWaitTime, string &in asAnimation)` |
 | `GiveSanityDamage` | 43 | 100 | ✓ | `void GiveSanityDamage(float afAmount, bool abUseEffect)` |
 | `GiveItemFromFile` | 43 | 109 | ✓ | `void GiveItemFromFile(string& asName, string& asFileName)` |
 | `RemoveTimer` | 41 | 112 | ✓ | `void RemoveTimer(string &in asName)` |
@@ -84,7 +84,7 @@
 | `SetPlayerCrouchDisabled` | 11 | 25 | ✓ | `void SetPlayerCrouchDisabled(bool abX)` |
 | `RotatePropToSpeed` | 11 | 34 | ✓ | `void RotatePropToSpeed(string &in asName, float afAcc, float afGoalSpeed, float afAxisX, float afAxisY, float afAxisZ, bool abResetSpeed, string &in asOffsetArea)` |
 | `GetSwingDoorClosed` | 11 | 11 | ✓ | `bool GetSwingDoorClosed(string &in asName)` |
-| `ClearEnemyPatrolNodes` | 11 | 24 | — | `void ClearEnemyPatrolNodes(string &in asEnemyName)` |
+| `ClearEnemyPatrolNodes` | 11 | 24 | ✓ | `void ClearEnemyPatrolNodes(string &in asEnemyName)` |
 | `SetupLoadScreen` | 10 | 22 | ✓ | `void SetupLoadScreen(string &in asTextCat, string &in asTextEntry, int alRandomNum, string &in asImageFile)` |
 | `FadePlayerAspectMulTo` | 10 | 17 | ✓ | `void FadePlayerAspectMulTo(float afX, float afSpeed)` |
 | `SetPlayerJumpDisabled` | 9 | 26 | ✓ | `void SetPlayerJumpDisabled(bool abX)` |
@@ -132,7 +132,7 @@
 | `SetInsanitySetEnabled` | 2 | 6 | — | `void SetInsanitySetEnabled(string &in asSet, bool abX)` |
 | `SetEntityCustomFocusCrossHair` | 2 | 5 | ✓ | `void SetEntityCustomFocusCrossHair(string &in asName, string &in asCrossHair)` |
 | `SetEntityCallbackFunc` | 2 | 2 | ~ | `void SetEntityCallbackFunc(string &in asName, string &in asCallback)` |
-| `SetEnemyDisabled` | 2 | 3 | — | `void SetEnemyDisabled(string &in asName, bool abDisabled)` |
+| `SetEnemyDisabled` | 2 | 3 | ~ | `void SetEnemyDisabled(string &in asName, bool abDisabled)` |
 | `SetDeathHint` | 2 | 2 | ✓ | `void SetDeathHint(string &in asTextCategory, string &in asTextEntry)` |
 | `InteractConnectPropWithRope` | 2 | 9 | — | `void InteractConnectPropWithRope(string &in asName, string& asLeverName, string& asPropName, bool abInteractOnly, float afSpeedMul,float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed)` |
 | `GetEntitiesCollide` | 2 | 2 | ✓ | `bool GetEntitiesCollide(string &in asEntityA, string &in asEntityB)` |
@@ -165,7 +165,7 @@
 | `GetPlayerSanity` | 10 | ✓ | `float GetPlayerSanity()` |
 | `RemoveAttachedPropFromProp` | 8 | — | `void RemoveAttachedPropFromProp(string& asPropName, string& asAttachName)` |
 | `AddAttachedPropToProp` | 8 | — | `void AddAttachedPropToProp(string& asPropName, string& asAttachName, string& asAttachFile, float fPosX, float fPosY, float fPosZ, float fRotX, float fRotY, float fRot)` |
-| `SetEnemyDisableTriggers` | 6 | — | `void SetEnemyDisableTriggers(string &in asName, bool abX)` |
+| `SetEnemyDisableTriggers` | 6 | ✓ | `void SetEnemyDisableTriggers(string &in asName, bool abX)` |
 | `PlayPropAnimation` | 6 | — | `void PlayPropAnimation(string &in asProp, string &in asAnimation, float afFadeTime, bool abLoop, string &in asCallback)` |
 | `GetPlayerSpeed` | 6 | ✓ | `float GetPlayerSpeed()` |
 | `UnlockAchievement` | 5 | — | `void UnlockAchievement(string &in asName)` |
@@ -175,7 +175,7 @@
 | `ChangePlayerStateToNormal` | 5 | — | `void ChangePlayerStateToNormal()` |
 | `AddPlayerBodyForce` | 5 | ✓ | `void AddPlayerBodyForce(float afX, float afY, float afZ, bool abUseLocalCoords)` |
 | `StartCredits` | 4 | — | `void StartCredits(string &in asMusic, bool abLoopMusic, string &in asTextCat, string &in asTextEntry, int alEndNum)` |
-| `ShowEnemyPlayerPosition` | 4 | — | `void ShowEnemyPlayerPosition(string &in asName)` |
+| `ShowEnemyPlayerPosition` | 4 | ✓ | `void ShowEnemyPlayerPosition(string &in asName)` |
 | `RemoveUseItemCallback` | 4 | ✓ | `void RemoveUseItemCallback(string &in asName)` |
 | `QuestIsAdded` | 4 | ✓ | `bool QuestIsAdded(string &in asName)` |
 | `GetPlayerYSpeed` | 4 | ✓ | `float GetPlayerYSpeed()` |
@@ -227,3 +227,7 @@ GiveItemFromFile читает определения `.ent` из генерир�
 ## Урон и смерть
 
 `GivePlayerDamage` — ✓: тип по строке без учёта регистра (`claws`, `slash`, иначе BloodSplat), сила 1; брызги, красная вспышка HUD, поворот головы, не смертельный удар оставляет 10, ниже 0 — смерть (`cLuxPlayer::GiveDamage`). `CheckPoint` — ✓: `cLuxMap::SetCheckPoint` (только новое имя, запоминает зацикленную музыку высшего приоритета) + подсказка смерти; после смерти `LoadCheckPoint` ставит игрока на стартовую точку и вызывает коллбэк `(имя, счётчик)`. `SetDeathHint`, `DisableDeathStartSound` — ✓ (`cLuxPlayerDeath`). `SetPlayerHealth` / `AddPlayerHealth` при здоровье ≤ 0 начинают смерть.
+
+## Враги
+
+`AddEnemyPatrolNode`, `ClearEnemyPatrolNodes`, `SetEnemyDisabled`, `SetEnemyDisableTriggers`, `ShowEnemyPlayerPosition` — ✓ для Grunt (`EnemyGrunt`, см. CLAUDE.md «Враги»): узел ищется по имени в контейнере узлов врага (нет контейнера / узла — ошибка движка, как в HPL2); `ShowEnemyPlayerPosition` всегда переводит в охоту (условие оригинала с `||` всегда истинно). Без вызовов в картах, но тоже перенесены: `AlertEnemyOfPlayerPresence`, `SetEnemyIsHallucination`, `FadeEnemyToSmoke` (без растворения модели), `SetEnemySanityDecreaseActive`, `TeleportEnemyToNode`, `TeleportEnemyToEntity`, `GetEnemyStateName`, `SetEntityPos` для врага (ступни тела). Для водяного монстра и man pig эти функции — `NotPorted` (`needs the water lurker and man pig (6.4)`); функции man pig (`ChangeManPigPose`, `SetTeslaPig*`, `ForceTeslaPigSighting`) — к ним же.

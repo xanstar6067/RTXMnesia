@@ -81,6 +81,10 @@ namespace RTXMnesia.ScriptApi
         }
 
         readonly List<HplEntity> _entities = new();
+        readonly List<RTXMnesia.Enemies.HplEnemy> _enemies = new();
+        // cWorld temp AI nodes (PathNode areas: name, id, HPL2 position) and the node containers by name.
+        readonly List<(string name, int id, Vector3 hplPos)> _pathNodes = new();
+        readonly Dictionary<string, RTXMnesia.Enemies.AINodeContainer> _nodeContainers = new(StringComparer.Ordinal);
         readonly Dictionary<string, HplEntity> _entitiesByName = new(StringComparer.Ordinal);
         readonly Dictionary<string, AmnesiaArea> _playerStarts = new(StringComparer.Ordinal);
         readonly List<AmnesiaArea> _playerStartList = new();
@@ -118,7 +122,12 @@ namespace RTXMnesia.ScriptApi
             if (Current == this) Current = null;
         }
 
-        void OnDestroy() => ParticleWorld?.DestroyAll();
+        void OnDestroy()
+        {
+            ParticleWorld?.DestroyAll();
+            Sound.HplSoundEntity.Started -= OnSoundEntityStarted;
+            foreach (var enemy in _enemies) enemy.DestroyQueryShape();
+        }
 
         void Start() => Begin();
 
@@ -195,6 +204,9 @@ namespace RTXMnesia.ScriptApi
                         _playerStartList.Add(area);
                         break;
                     case "PathNode":
+                        // cLuxAreaNodeLoader_PathNode: cWorld::AddAINode(name, id, "Default", position + 5 cm up).
+                        _pathNodes.Add((area.name, area.hplId, HplSpace.Position(area.transform.position + new Vector3(0f, 0.05f, 0f))));
+                        break;
                     case "PosNode":
                         break;
                     default:
@@ -216,6 +228,15 @@ namespace RTXMnesia.ScriptApi
             foreach (var entity in GetComponentsInChildren<AmnesiaEntity>(true))
             {
                 if (IsTemplate(entity.transform)) continue;
+                if (entity.entityType == "Enemy_Grunt")
+                {
+                    // iLuxEnemyLoader (LuxBase.cpp: Enemy_Grunt). The water lurker and man pig come later.
+                    var enemy = new RTXMnesia.Enemies.EnemyGrunt(entity);
+                    enemy.Load(this);
+                    AddEntity(enemy);
+                    _enemies.Add(enemy);
+                    continue;
+                }
                 var prop = Props.PropFactory.Create(entity);
                 if (prop == null)
                 {
@@ -226,7 +247,9 @@ namespace RTXMnesia.ScriptApi
                 prop.Load(this, PhysicsWorld);
                 AddEntity(prop);
             }
-            if (player != null && player.Body != null) PhysicsWorld.SetCharacterShapes(player.Body.Shapes);
+            SetCharacterShapes();
+            // iLuxEnemy::AfterWorldLoad: the node containers.
+            foreach (var enemy in _enemies) enemy.AfterWorldLoad();
 
             InitFog();
 
@@ -264,8 +287,10 @@ namespace RTXMnesia.ScriptApi
             Build();
             if (_started) return;
             _started = true;
-            if (player != null && player.Body != null) PhysicsWorld.SetCharacterShapes(player.Body.Shapes);
+            SetCharacterShapes();
             player?.Hands?.SetWorld(sound, ParticleWorld);
+            // cMapHandlerSoundCallback: started sound entities can be heard by enemies.
+            Sound.HplSoundEntity.Started += OnSoundEntityStarted;
             if (player != null && player.LookAt != null)
             {
                 player.LookAt.AtTarget += function => RunScript(function);
@@ -278,6 +303,7 @@ namespace RTXMnesia.ScriptApi
                 Arrive(_arrival);
                 return;
             }
+            foreach (var enemy in _enemies) enemy.OnMapEnter();
             // New game / a map opened directly: cLuxMapHandler::SetCurrentMap (first time) + OnStart / OnEnter.
             if (player != null) SetCheckPoint("_auto", player.startArea, "");
             if (!runScript || Script == null) return;
@@ -299,6 +325,7 @@ namespace RTXMnesia.ScriptApi
             if (arrival.Effects != null) effects.ApplyCarry(arrival.Effects);
             if (player != null && arrival.Player != null) player.ApplyCarry(arrival.Player);
             PlacePlayerAtStartPos(arrival.StartPos);
+            foreach (var enemy in _enemies) enemy.OnMapEnter();
             SetCheckPoint("_auto", arrival.StartPos, "");
 
             bool firstTime = !HplSavedMaps.MapExists(MapName);
@@ -355,7 +382,12 @@ namespace RTXMnesia.ScriptApi
         {
             if (logDebugMessages) Debug.Log($"[Script debug] Loading check point {CheckPointName} Count: {CheckPointCount}");
             PlacePlayerAtStartPos(CheckPointStartPos);
-            // not ported: enemies are deactivated and reset, the player's terror enemies cleared (enemies, step 6).
+            foreach (var enemy in _enemies)
+            {
+                enemy.SetActive(false);
+                enemy.ResetProperties();
+            }
+            player?.ClearTerrorEnemies();
             effects?.Fade.FadeIn(0.2f);
             var music = sound != null ? sound.Music : null;
             if (music != null)
@@ -407,6 +439,7 @@ namespace RTXMnesia.ScriptApi
             if (_leaving) return;
             if (updateMap)
             {
+                HplGame.Update(timeStep);
                 UpdateTimers(timeStep);
                 for (int i = 0; i < _entities.Count; i++)
                     if (_entities[i].Active) _entities[i].UpdateLogic(timeStep);
@@ -420,6 +453,7 @@ namespace RTXMnesia.ScriptApi
 
             // PostUpdate message: cScene::PostUpdate → cWorld::Update → iPhysicsWorld::Update.
             if (player != null) player.StepPhysics(timeStep);
+            for (int i = 0; i < _enemies.Count; i++) _enemies[i].StepBody(timeStep);
             PhysicsWorld.BeforeSimulate(timeStep);
         }
 
@@ -428,6 +462,7 @@ namespace RTXMnesia.ScriptApi
         {
             if (IsMenuPaused || _leaving) return;
             PhysicsWorld.AfterSimulate(timeStep);
+            for (int i = 0; i < _enemies.Count; i++) _enemies[i].StepMesh(timeStep);
             ParticleWorld.Update(timeStep);
             for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
             sound.Step(timeStep);
@@ -602,6 +637,7 @@ namespace RTXMnesia.ScriptApi
                     PhysicsWorld.RemoveBodies(prop.PhysicsBodies);
                 }
                 _entities.Remove(entity);
+                if (entity is RTXMnesia.Enemies.HplEnemy removedEnemy) _enemies.Remove(removedEnemy);
                 string key = entity.Name.ToLowerInvariant();
                 if (_entitiesByName.TryGetValue(key, out var e) && e == entity) _entitiesByName.Remove(key);
                 foreach (var body in entity.Bodies) if (_bodies.TryGetValue(body.Name, out var b) && b == body) _bodies.Remove(body.Name);
@@ -735,6 +771,108 @@ namespace RTXMnesia.ScriptApi
         {
             if (Script == null || !runScript) return;
             Script.Invoke(function, args);
+        }
+
+        // ------------------------------------------------------------------ enemies (cLuxMap)
+
+        public IReadOnlyList<RTXMnesia.Enemies.HplEnemy> Enemies => _enemies;
+
+        /// <summary>The character shapes of the player and the enemies: bodies with CollideCharacter = false skip them.</summary>
+        void SetCharacterShapes()
+        {
+            var shapes = new List<Collider>();
+            if (player != null && player.Body != null) shapes.AddRange(player.Body.Shapes);
+            foreach (var enemy in _enemies) if (enemy.Body != null) shapes.AddRange(enemy.Body.Shapes);
+            PhysicsWorld.SetCharacterShapes(shapes);
+        }
+
+        /// <summary>
+        /// cWorld::CreateAINodeContainer: one container per name (the enemy file) with the map's path nodes; its
+        /// connections from the map's .nodes file (&lt;map&gt;_&lt;name&gt;.nodes, newer than every shipped map), else compiled.
+        /// Null with a warning when the map has no path nodes.
+        /// </summary>
+        public RTXMnesia.Enemies.AINodeContainer CreateAINodeContainer(string name, string nodeName, Vector3 size, bool nodeIsAtCenter,
+                                                              int minEdges, int maxEdges, float maxEdgeDistance, float maxHeight)
+        {
+            if (_nodeContainers.TryGetValue(name, out var existing)) return existing;
+            if (_pathNodes.Count == 0 || nodeName != "Default")
+            {
+                HplLog.Warn($"AI node type '{nodeName}' does not exist!");
+                return null;
+            }
+            var container = new RTXMnesia.Enemies.AINodeContainer(name, nodeName, size)
+            {
+                MinEdges = minEdges, MaxEdges = maxEdges, MaxEdgeDistance = maxEdgeDistance, MaxHeight = maxHeight, NodeIsAtCenter = nodeIsAtCenter,
+            };
+            foreach (var (nodeName2, id, pos) in _pathNodes) container.AddNodeHpl(nodeName2, id, pos);
+            string xml = RTXMnesia.Enemies.HplEnemyAssets.Instance != null ? RTXMnesia.Enemies.HplEnemyAssets.Instance.GetNodeFile(MapName, name) : null;
+            if (xml != null) container.LoadFromXml(xml);
+            else
+            {
+                Debug.Log($"[RTXMnesia] Rebuilding node connections of '{MapName}_{name}'");
+                container.Compile();
+            }
+            _nodeContainers[name] = container;
+            return container;
+        }
+
+        /// <summary>cLuxMap::BroadcastEnemyMessage: to active enemies (within the radius of the position if given).</summary>
+        public void BroadcastEnemyMessage(RTXMnesia.Enemies.EnemyMessage type, bool hasPosition, Vector3 position, float radius,
+                                          float time = 0f, bool localScope = false, Vector3 vector = default, float x = 0f, int ix = 0)
+        {
+            foreach (var enemy in _enemies.ToArray())
+            {
+                if (!enemy.Active) continue;
+                if (hasPosition && Vector3.Distance(position, enemy.Body.Position) > radius + enemy.BodyRadius) continue;
+                enemy.SendMessage(type, time, localScope, vector, x, ix);
+            }
+        }
+
+        /// <summary>
+        /// cLuxMap::BroadcastEnemySoundMessage: active enemies within the max distance (+ their radius) and at least 2 m
+        /// away hear the sound at volume x (1 - (distance - min) / (max - min)), clamped.
+        /// </summary>
+        public void BroadcastEnemySoundMessage(Vector3 position, float volume, float minDist, float maxDist)
+        {
+            foreach (var enemy in _enemies.ToArray())
+            {
+                if (!enemy.Active) continue;
+                Vector3 center = enemy.Body.Position;
+                if (Vector3.Distance(position, center) > maxDist + enemy.BodyRadius) continue;
+                float distance = Vector3.Distance(center, position);
+                if (distance < 2f) continue;
+                float t = (distance - minDist) / (maxDist - minDist);
+                // cMath::Clamp lets NaN through (a sound entity passes min = max).
+                if (t > 1f) t = 1f;
+                else if (t < 0f) t = 0f;
+                float hearVolume = (1f - t) * volume;
+                enemy.SendMessage(RTXMnesia.Enemies.EnemyMessage.SoundHeard, 0f, false, position, hearVolume, 0);
+            }
+        }
+
+        /// <summary>
+        /// cMapHandlerSoundCallback::OnStart: a started sound entity whose .snt name begins with one of
+        /// sounds/EnemySounds.dat is broadcast (with its max distance as both min and max distance, as in the original).
+        /// </summary>
+        void OnSoundEntityStarted(Sound.HplSoundEntity s)
+        {
+            if (sound == null || _enemies.Count == 0 || !sound.SoundEntityExists(s)) return;
+            var assets = RTXMnesia.Enemies.HplEnemyAssets.Instance;
+            if (assets == null) return;
+            string type = s.Data.name ?? "";
+            bool used = false;
+            foreach (string prefix in assets.hearableSounds)
+                if (type.StartsWith(prefix, StringComparison.Ordinal)) { used = true; break; }
+            if (!used) return;
+            BroadcastEnemySoundMessage(s.WorldPosition, s.Volume, s.MaxDistance, s.MaxDistance);
+        }
+
+        /// <summary>cLuxMap::AINodeIsUsedAsGoal: the first node of some enemy's path list.</summary>
+        public bool AINodeIsUsedAsGoal(RTXMnesia.Enemies.AINode node)
+        {
+            foreach (var enemy in _enemies)
+                if (enemy.Pathfinder != null && enemy.Pathfinder.PathFront == node) return true;
+            return false;
         }
 
         // ------------------------------------------------------------------ lookups

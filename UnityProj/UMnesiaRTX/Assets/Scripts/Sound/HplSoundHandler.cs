@@ -329,6 +329,9 @@ namespace RTXMnesia.Sound
             return null;
         }
 
+        /// <summary>cWorld::SoundEntityExists.</summary>
+        public bool SoundEntityExists(HplSoundEntity sound) => sound != null && _soundEntities.Contains(sound);
+
         public void DestroySoundEntity(HplSoundEntity sound)
         {
             if (_soundEntities.Remove(sound)) sound.Destroy();

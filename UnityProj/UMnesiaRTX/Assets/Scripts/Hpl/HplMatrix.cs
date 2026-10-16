@@ -151,6 +151,40 @@ namespace RTXMnesia.Hpl
             return x + offset;
         }
 
+        /// <summary>cMath::GetAngleFromPoints2D: the angle of goal − start, clockwise from −y (0..2π).</summary>
+        public static float GetAngleFromPoints2D(Vector2 start, Vector2 goal)
+        {
+            float dx = goal.x - start.x;
+            float dy = goal.y - start.y;
+            if (dx == 0f) dx = 0.00001f;
+            if (dy == 0f) dy = 0.00001f;
+            if (dx >= 0f && dy < 0f) return Mathf.Atan(dx / -dy);
+            if (dx >= 0f && dy >= 0f) return Mathf.Atan(dy / dx) + Mathf.PI / 2f;
+            if (dx < 0f && dy >= 0f) return Mathf.Atan(-dx / dy) + Mathf.PI;
+            return Mathf.Atan(-dy / -dx) + Mathf.PI / 2f + Mathf.PI;
+        }
+
+        // cMath's file-local GetAngleFromPoints2DSimple.
+        static float GetAngleFromPoints2DSimple(Vector2 delta)
+        {
+            if (delta.x == 0f) delta.x = -HplPhysics.Epsilon;
+            if (delta.y == 0f) delta.y = HplPhysics.Epsilon;
+            if (delta.x <= 0f) return -Mathf.Atan(delta.y / delta.x);
+            Debug.LogWarning("[Script] ERROR: Error in GetAngle 3D code! ARGHHH run in terror");
+            return -1000f;
+        }
+
+        /// <summary>cMath::GetAngleFromPoints3D: y = heading of the xz direction, x = pitch (wrapped to 0..2π).</summary>
+        public static Vector3 GetAngleFromPoints3D(Vector3 start, Vector3 goal)
+        {
+            var angle = Vector3.zero;
+            angle.y = -GetAngleFromPoints2D(new Vector2(start.x, start.z), new Vector2(goal.x, goal.z));
+            Vector3 g = Mul(RotateY(-angle.y), goal - start);
+            angle.x = GetAngleFromPoints2DSimple(new Vector2(g.z, g.y));
+            angle.x = Wrap(angle.x, 0f, Mathf.PI * 2f);
+            return angle;
+        }
+
         /// <summary>cMath::GetAngleDistanceRad: the shortest signed angle from a1 to a2.</summary>
         public static float AngleDistanceRad(float angle1, float angle2)
         {

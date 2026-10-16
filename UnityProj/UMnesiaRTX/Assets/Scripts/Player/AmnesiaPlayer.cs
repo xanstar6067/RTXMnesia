@@ -333,6 +333,10 @@ namespace RTXMnesia.Player
             _headSpinDamageSpeed = cfg.GetFloat("Player_General", "HeadSpinDamageSpeed", 0f);
             _headSpinDeacc = cfg.GetFloat("Player_General", "HeadSpinDeacc", 0f);
             _autoKillYPos = cfg.GetFloat("Player_General", "AutoKillYPos", 0f);
+            _terrorSoundName = cfg.GetString("Player_General", "TerrorSound", "");
+            _terrorIncSpeed = cfg.GetFloat("Player_General", "TerrorIncSpeed", 0f);
+            _terrorDecSpeed = cfg.GetFloat("Player_General", "TerrorDecSpeed", 0f);
+            _maxPrevSpeeds = cfg.GetInt("Player_General", "MaxPrevSpeedsSaved", 0);
             // The hands are a world entity of Play mode (edit-mode simulations have no animation clock).
             if (Application.isPlaying) Hands = PlayerHands.Create(this, cfg);
         }
@@ -558,7 +562,72 @@ namespace RTXMnesia.Player
             if (Body.Position.y < _autoKillYPos) SetHealth(0f);
             collideCallbacks?.Invoke();
             UpdateCameraEffects(dt);
+            UpdateTerror(dt);
             UpdateFocusText(dt);
+            UpdateAvgSpeed(dt);
+        }
+
+        // ------------------------------------------------------------------ terror (cLuxPlayer)
+
+        readonly HashSet<Enemies.HplEnemy> _terrorEnemies = new();
+        readonly List<float> _prevSpeeds = new();
+        RTXMnesia.Sound.SoundEntry _terrorSound;
+        int _terrorSoundId = -1;
+
+        /// <summary>cLuxPlayer::mfTerror: rises while an enemy hunts or is alert (TerrorIncSpeed), falls otherwise.</summary>
+        public float Terror { get; private set; }
+        /// <summary>cLuxPlayer::GetAvgSpeed: the average speed of the last MaxPrevSpeedsSaved steps.</summary>
+        public float AvgSpeed { get; private set; }
+
+        public void SetTerror(float x) => Terror = x;
+        public void AddTerrorEnemy(Enemies.HplEnemy enemy) => _terrorEnemies.Add(enemy);
+        public void RemoveTerrorEnemy(Enemies.HplEnemy enemy) => _terrorEnemies.Remove(enemy);
+        public void ClearTerrorEnemies() => _terrorEnemies.Clear();
+        public int TerrorEnemyCount => _terrorEnemies.Count;
+
+        /// <summary>cLuxPlayer::StopTerrorSound (inventory and journal open).</summary>
+        public void StopTerrorSound()
+        {
+            if (_terrorSound != null && sound != null && sound.IsValid(_terrorSound, _terrorSoundId)) _terrorSound.Stop();
+            _terrorSound = null;
+            _terrorSoundId = -1;
+        }
+
+        /// <summary>cLuxPlayer::UpdateTerror: the terror and its looping GUI sound at volume = terror.</summary>
+        void UpdateTerror(float dt)
+        {
+            if (_terrorEnemies.Count == 0 || IsDead) Terror = Mathf.Max(0f, Terror - _terrorDecSpeed * dt);
+            else Terror = Mathf.Min(1f, Terror + _terrorIncSpeed * dt);
+
+            if (sound == null) return;
+            if (Terror > 0f && _terrorSound == null)
+            {
+                _terrorSound = sound.PlayGui(_terrorSoundName, true, 1f);
+                if (_terrorSound != null)
+                {
+                    _terrorSound.SetVolumeMul(0f);
+                    _terrorSoundId = _terrorSound.Id;
+                }
+            }
+            if (_terrorSound != null && sound.IsValid(_terrorSound, _terrorSoundId))
+            {
+                _terrorSound.SetVolumeMul(Terror);
+                if (Terror <= 0f)
+                {
+                    _terrorSound.Stop();
+                    _terrorSound = null;
+                    _terrorSoundId = -1;
+                }
+            }
+        }
+
+        void UpdateAvgSpeed(float dt)
+        {
+            _prevSpeeds.Add(Body.GetVelocity(dt).magnitude);
+            if (_prevSpeeds.Count > _maxPrevSpeeds) _prevSpeeds.RemoveAt(0);
+            float sum = 0f;
+            foreach (float s in _prevSpeeds) sum += s;
+            AvgSpeed = sum / _prevSpeeds.Count;
         }
 
         /// <summary>cLuxPlayer::UpdateFocusText: the focus text fades in and out at 2 per second.</summary>
@@ -826,6 +895,9 @@ namespace RTXMnesia.Player
         }
 
         float _headSpinDamageSpeed, _headSpinDeacc, _autoKillYPos;
+        string _terrorSoundName = "";
+        float _terrorIncSpeed, _terrorDecSpeed;
+        int _maxPrevSpeeds;
         Vector2 _headSpinSpeed; // HPL2 (yaw, pitch) per second
 
         /// <summary>cLuxPlayer::SpinHead: a random direction, mostly sideways and up.</summary>
@@ -917,7 +989,7 @@ namespace RTXMnesia.Player
 
         /// <summary>
         /// cLuxMoveState_Normal::FootSound: step_&lt;walk|run|sneak&gt;_&lt;step type&gt; of the material under the
-        /// feet (the body the gravity collided with; "rock" without one). Water steps and enemy hearing: step 6.
+        /// feet (the body the gravity collided with; "rock" without one); enemies hear it. Water steps: step 6.
         /// </summary>
         public void OnFootSound(FootSound type, string moveType)
         {
@@ -933,7 +1005,11 @@ namespace RTXMnesia.Player
                 if (surface != null) step = surface.stepType;
             }
             string name = type == FootSound.Step ? $"step_{moveType}_{step}" : $"step_run_{step}";
-            sound.PlayGuiSoundData(name, RTXMnesia.Sound.SoundEntryType.World);
+            sound.PlayGuiSoundData(name, RTXMnesia.Sound.SoundEntryType.World, out var data, out _);
+            // Enemies hear the step at the feet (cLuxMap::BroadcastEnemySoundMessage with the .snt volume and distances).
+            var map = ScriptApi.HplMap.Current;
+            if (map != null && data != null)
+                map.BroadcastEnemySoundMessage(Body.FeetPosition + new Vector3(0f, 0.1f, 0f), data.volume, data.minDistance, data.maxDistance);
         }
 
         void SetFreeCamera(bool active)

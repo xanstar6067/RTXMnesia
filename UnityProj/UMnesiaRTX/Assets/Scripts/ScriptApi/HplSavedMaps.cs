@@ -96,6 +96,8 @@ namespace RTXMnesia.ScriptApi
                 lockedLevelDoors = new(StringComparer.Ordinal), activeItems = new(StringComparer.Ordinal),
                 unbrokenContainers = new(StringComparer.Ordinal), brokenContainersWithActiveItem = new(StringComparer.Ordinal),
                 unlitLamps = new(StringComparer.Ordinal);
+            // cLuxSavedGameEnemy: the patrol nodes (node id, wait time, animation); the enemy comes back inactive.
+            public readonly Dictionary<string, List<(int nodeId, float waitTime, string animation)>> enemies = new(StringComparer.Ordinal);
         }
 
         static readonly Dictionary<string, SavedMap> s_maps = new(StringComparer.Ordinal);
@@ -215,6 +217,11 @@ namespace RTXMnesia.ScriptApi
                         break;
                     case PropLamp lamp:
                         if (!lamp.Lit) s.unlitLamps.Add(key);
+                        break;
+                    case Enemies.HplEnemy enemy:
+                        var patrol = new List<(int, float, string)>();
+                        foreach (var p in enemy.Patrol) patrol.Add((p.node.Id, p.waitTime, p.animation));
+                        s.enemies[key] = patrol;
                         break;
                 }
             }
@@ -374,9 +381,28 @@ namespace RTXMnesia.ScriptApi
             map.DestroyPendingEntitiesNow();
 
             // Entity settings of the other entities.
+            // Enemies (cLuxSavedGameEnemy::ToEnemy): inactive (FromEnemy saves false), the saved patrol nodes.
+            foreach (var pair in s.enemies)
+            {
+                if (Find(map, byKey, pair.Key) is not Enemies.HplEnemy enemy)
+                {
+                    HplLog.Error($"Saved enemy with ID {pair.Key} does not exist!");
+                    continue;
+                }
+                enemy.SetActive(false);
+                enemy.ClearPatrolNodes();
+                var container = enemy.Pathfinder?.NodeContainer;
+                if (container == null) continue;
+                foreach (var (nodeId, waitTime, animation) in pair.Value)
+                {
+                    var node = container.GetNodeFromId(nodeId);
+                    if (node != null) enemy.AddPatrolNode(node, waitTime, animation);
+                }
+            }
+
             foreach (var e in new List<HplEntity>(map.Entities))
             {
-                if (e.FullGameSave) continue;
+                if (e.FullGameSave || e is Enemies.HplEnemy) continue;
                 string key = Key(e);
                 e.SetActive(!s.disabled.Contains(key));
                 switch (e)

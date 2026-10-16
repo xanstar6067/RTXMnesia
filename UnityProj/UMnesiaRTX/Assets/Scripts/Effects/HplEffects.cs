@@ -715,7 +715,8 @@ namespace RTXMnesia.Effects
                 if (player != null) player.FadeFOVMulTo(0.5f, 0.5f);
                 Handler.RadialBlur.FadeTo(0.15f, 3f);
                 Handler.RadialBlur.SetBlurStartDist(0.6f);
-                // TODO step 6: enemies reset (BroadcastEnemyMessage).
+                // Disable enemies
+                Handler.Map?.BroadcastEnemyMessage(Enemies.EnemyMessage.Reset, false, Vector3.zero, 0f);
             }
 
             /// <summary>Any action key skips the text (DoAction).</summary>

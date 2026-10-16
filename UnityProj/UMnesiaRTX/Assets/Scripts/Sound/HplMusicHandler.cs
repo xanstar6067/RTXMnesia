@@ -9,7 +9,8 @@ namespace RTXMnesia.Sound
     /// The music: port of cMusicHandler (MusicHandler.cpp: one main song, older ones fading out, resume positions)
     /// and cLuxMusicHandler (LuxMusicHandler.cpp: songs by priority, the highest one plays; when it is stopped
     /// or a non-looping one ends, the next looping one resumes). Music volume × Sound/InGameMusicVolume of
-    /// game.cfg. Enemy music (priorities 8 and 9): step 6.
+    /// game.cfg. Enemy music: danger music while an enemy is in range (priority 5), search and attack music of the
+    /// enemies that registered for it (priorities 8 and 9).
     /// </summary>
     public sealed class HplMusicHandler
     {
@@ -50,6 +51,13 @@ namespace RTXMnesia.Sound
             _bank = handler.bank;
             _parent = handler.transform;
         }
+
+        // cLuxMusicHandler enemy music
+        readonly List<Enemies.HplEnemy>[] _enemies = { new(), new() };
+        readonly bool[] _enemyPlaying = new bool[EnemyMusicTypes];
+        readonly float[] _enemyPlayCount = new float[EnemyMusicTypes], _enemyStopCount = new float[EnemyMusicTypes];
+        bool _enemyClosePlaying;
+        float _enemyCloseCount, _enemyGoneCount;
 
         public string CurrentSongName => _mainSong?.File ?? "";
         public float CurrentSongVolume => _mainSong?.Volume ?? 0f;
@@ -99,8 +107,144 @@ namespace RTXMnesia.Sound
         {
             for (int i = 0; i < _gameMusic.Length; i++) _gameMusic[i] = default;
             _currentMaxPrio = -1;
+            for (int i = 0; i < EnemyMusicTypes; i++)
+            {
+                _enemies[i].Clear();
+                _enemyPlaying[i] = false;
+                _enemyPlayCount[i] = 0f;
+                _enemyStopCount[i] = 0f;
+            }
             _resumePositions.Clear();
+            _enemyClosePlaying = false;
+            _enemyCloseCount = 0f;
+            _enemyGoneCount = 0f;
         }
+
+        /// <summary>cLuxMusicHandler::AddEnemy (a set: an enemy is in it once).</summary>
+        public void AddEnemy(Enemies.EnemyMusic type, Enemies.HplEnemy enemy)
+        {
+            if (!_enemies[(int)type].Contains(enemy)) _enemies[(int)type].Add(enemy);
+        }
+
+        public void RemoveEnemy(Enemies.EnemyMusic type, Enemies.HplEnemy enemy) => _enemies[(int)type].Remove(enemy);
+
+        public bool EnemyExists(Enemies.EnemyMusic type, Enemies.HplEnemy enemy) => _enemies[(int)type].Contains(enemy);
+
+        /// <summary>
+        /// cLuxMusicHandler::UpdateDangerMusic: without enemy music, an active living enemy with the player in range
+        /// for 2 s starts its danger music (highest DangerMusicPrio) at priority 5; 6 s with none stops it.
+        /// </summary>
+        void UpdateDangerMusic(float timeStep)
+        {
+            for (int i = 0; i < EnemyMusicTypes; i++) if (_enemyPlaying[i]) return;
+            var map = HplMap.Current;
+            if (map == null) return;
+            if (!_enemyClosePlaying)
+            {
+                string music = "";
+                int highestPrio = -1;
+                foreach (var enemy in map.Enemies)
+                {
+                    if (enemy.Health <= 0f || !enemy.Active) continue;
+                    if (enemy.PlayerInRange && enemy.DangerMusic != "" && (music == "" || highestPrio < enemy.DangerMusicPrio))
+                    {
+                        music = enemy.DangerMusic;
+                        highestPrio = enemy.DangerMusicPrio;
+                    }
+                }
+                if (music != "")
+                {
+                    _enemyGoneCount = 0f;
+                    _enemyCloseCount += timeStep;
+                    if (_enemyCloseCount > 2f)
+                    {
+                        Play(music, true, 1f, 6f, 5, true);
+                        _enemyClosePlaying = true;
+                    }
+                }
+            }
+            else
+            {
+                bool found = false;
+                foreach (var enemy in map.Enemies)
+                {
+                    if (enemy.Health <= 0f || !enemy.Active) continue;
+                    if (enemy.PlayerInRange) found = true;
+                }
+                if (!found)
+                {
+                    _enemyCloseCount = 0f;
+                    _enemyGoneCount += timeStep;
+                    if (_enemyGoneCount > 6f)
+                    {
+                        Stop(6f, 5);
+                        _enemyClosePlaying = false;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// cLuxMusicHandler::UpdateEnemyMusic (not while a higher type plays): 0.1 s after enemies registered, the music
+        /// of the one with the highest priority starts at 8 + type (the danger music stops; the original stops its own
+        /// priority for each lower type instead of theirs); 1.2 s after the last one left it stops (5 s fade).
+        /// </summary>
+        void UpdateEnemyMusic(float timeStep, int type)
+        {
+            if (HplMap.Current == null) return;
+            for (int i = type + 1; i < EnemyMusicTypes; i++) if (_enemyPlaying[i]) return;
+
+            var set = _enemies[type];
+            if (!_enemyPlaying[type] && set.Count > 0)
+            {
+                _enemyStopCount[type] = 0f;
+                _enemyPlayCount[type] += timeStep;
+                if (_enemyPlayCount[type] > 0.1f)
+                {
+                    string music = "";
+                    int maxPrio = -9999;
+                    foreach (var enemy in set)
+                    {
+                        var t = (Enemies.EnemyMusic)type;
+                        if (enemy.GetMusic(t) != "" && enemy.GetMusicPrio(t) > maxPrio)
+                        {
+                            music = enemy.GetMusic(t);
+                            maxPrio = enemy.GetMusicPrio(t);
+                        }
+                    }
+                    if (music != "")
+                    {
+                        if (_enemyClosePlaying)
+                        {
+                            _enemyClosePlaying = false;
+                            Stop(2f, 5);
+                        }
+                        for (int i = 0; i < type; i++)
+                        {
+                            _enemyPlaying[i] = false;
+                            Stop(2f, 8 + type);
+                        }
+                        Play(music, true, 1f, 1.5f, 8 + type, true);
+                        _enemyPlaying[type] = true;
+                        _enemyPlayCount[type] = 0f;
+                    }
+                }
+            }
+            else if (_enemyPlaying[type] && set.Count == 0)
+            {
+                _enemyPlayCount[type] = 0f;
+                _enemyStopCount[type] += timeStep;
+                if (_enemyStopCount[type] > 1.2f)
+                {
+                    _enemyPlaying[type] = false;
+                    Stop(5f, 8 + type);
+                    _enemyStopCount[type] = 0f;
+                }
+            }
+        }
+
+        public bool EnemyMusicPlaying(Enemies.EnemyMusic type) => _enemyPlaying[(int)type];
+        public bool DangerMusicPlaying => _enemyClosePlaying;
 
         void PlayHighestPriority()
         {
@@ -120,6 +264,12 @@ namespace RTXMnesia.Sound
         public void Update(float timeStep)
         {
             UpdateSongs(timeStep);
+            // cLuxMusicHandler::Update: nothing while the player is dead.
+            var player = HplMap.Current != null ? HplMap.Current.player : null;
+            if (player != null && player.IsDead) return;
+            UpdateDangerMusic(timeStep);
+            UpdateEnemyMusic(timeStep, (int)Enemies.EnemyMusic.Search);
+            UpdateEnemyMusic(timeStep, (int)Enemies.EnemyMusic.Attack);
             if (_currentMaxPrio >= 0 && _mainSong == null)
             {
                 _gameMusic[_currentMaxPrio].File = "";
@@ -294,10 +444,14 @@ namespace RTXMnesia.Sound
                 if (s.Source != null) s.Source.transform.SetParent(parent, false);
         }
 
-        /// <summary>cLuxMusicHandler::OnMapEnter: enemy music stops (priorities 8 and up).</summary>
+        /// <summary>cLuxMusicHandler::OnMapEnter: the enemies are forgotten, enemy music stops (priorities 8 and up).</summary>
         public void OnMapEnter()
         {
-            for (int i = 0; i < EnemyMusicTypes; i++) Stop(2f, 8 + i);
+            for (int i = 0; i < EnemyMusicTypes; i++)
+            {
+                _enemies[i].Clear();
+                Stop(2f, 8 + i);
+            }
         }
 
         /// <summary>

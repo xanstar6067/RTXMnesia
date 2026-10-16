@@ -83,6 +83,10 @@ namespace RTXMnesia.Player
 
         public Vector3 Size => _size;
         public Vector3 Position => _position;
+        /// <summary>The position before the last step (iCharacterBody::GetLastPosition).</summary>
+        public Vector3 LastPosition => _lastPosition;
+        /// <summary>iCharacterBody::GetMoveDelay.</summary>
+        public float MoveDelay => _moveDelayCount;
         public Vector3 FeetPosition => _position - new Vector3(0f, _size.y * 0.5f, 0f);
         public Vector3 Forward => _forward;
         public Vector3 Right => _right;
@@ -196,6 +200,13 @@ namespace RTXMnesia.Player
         }
 
         public void SetMoveDelay(float seconds) => _moveDelayCount = seconds;
+
+        /// <summary>iCharacterBody::SetActive: an inactive body does not move and its shapes are not in the world.</summary>
+        public void SetBodyActive(bool active)
+        {
+            enabled = active;
+            if (_shapeRoot != null) _shapeRoot.gameObject.SetActive(active);
+        }
 
         public void AddForce(Vector3 force) => _force += force;
         public void SetForce(Vector3 force) => _force = force;

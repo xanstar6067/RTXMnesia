@@ -184,6 +184,8 @@ namespace RTXMnesia.Ui
             {
                 _map.PhysicsWorld?.FadeOutLoopSounds(1f);
                 _map.effects?.PlayVoice.SetInventoryPaused(true);
+                // cLuxInventory / cLuxJournal::OnEnterContainer: the terror loop stops.
+                _map.player?.StopTerrorSound();
                 _map.sound?.SetInventoryActive(true);
             }
             // Stops Unity's automatic physics too; HplMap also guards explicit Step calls.

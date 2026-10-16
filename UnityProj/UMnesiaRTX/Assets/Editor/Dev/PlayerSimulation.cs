@@ -223,6 +223,7 @@ namespace RTXMnesia.EditorDev
                             if (target == null) { log.Warn($"No entity '{raw.Trim()}'"); continue; }
                             var body = p.Length > 2 ? target.Bodies.Find(b => b.Name == target.Name + "_" + p[2]) : (target.Bodies.Count > 0 ? target.Bodies[0] : null);
                             Vector3 goal = body?.Physics != null ? body.Physics.WorldCenterOfMass : (body != null ? body.Transform.position : target.GameObject.transform.position);
+                            if (target is RTXMnesia.Enemies.HplEnemy aimedEnemy) goal = aimedEnemy.Body.Position;
                             Vector3 dir = goal - player.LogicCameraPosition;
                             float yaw = Mathf.Atan2(dir.x, dir.z), pitch = -Mathf.Atan2(dir.y, new Vector2(dir.x, dir.z).magnitude);
                             player.AddLook(Mathf.DeltaAngle(player.Yaw * Mathf.Rad2Deg, yaw * Mathf.Rad2Deg) * Mathf.Deg2Rad,
@@ -235,7 +236,7 @@ namespace RTXMnesia.EditorDev
                             // body Entity: positions, velocities and joint angles of its bodies.
                             if (map?.GetEntityByName(p.Length > 1 ? p[1] : "") is not HplProp prop) { log.Warn($"No prop '{raw.Trim()}'"); continue; }
                             var firstLight = prop.GameObject.GetComponentInChildren<RTXMnesia.World.AmnesiaLight>(true);
-                            log.Info($"t={time,6:0.00}   prop {prop.Name} {prop.PropType}/{prop.SubType} active {prop.Active} effects {prop.EffectsAlpha:0.00} " +
+                            log.Info($"t={time,6:0.00}   prop {prop.Name} {prop.PropType}/{prop.SubType} active {prop.Active} health {prop.Health:0.#}{(prop is RTXMnesia.Props.PropSwingDoor sd && sd.IsBroken ? " BROKEN" : "")} effects {prop.EffectsAlpha:0.00} " +
                                      (prop is RTXMnesia.Props.PropLamp lamp ? $"lit {lamp.Lit} " : "") +
                                      (prop is RTXMnesia.Props.PropSwingDoor door ? $"closed {door.Closed} locked {door.Locked} state {door.GetDoorState()} " : "") +
                                      (firstLight != null ? $"light {firstLight.name} {firstLight.CurrentColor} r {firstLight.CurrentRadius:0.##}" : ""));
@@ -289,6 +290,21 @@ namespace RTXMnesia.EditorDev
                             foreach (var l in RTXMnesia.World.AmnesiaLight.All
                                          .Select(l => (l, v: l.LightLevelAt(player.Body.Position, 3f))).Where(x => x.v > 0f).OrderByDescending(x => x.v).Take(3))
                                 log.Info($"t={time,6:0.00}     light {l.l.name}: {l.v:0.000} visible {l.l.Visible} box {l.l.box}");
+                            continue;
+                        }
+                        case "enemy":
+                        {
+                            // enemy [name]: the enemies' state (state, senses, path, animation), terror and enemy music.
+                            if (map == null) { log.Warn("enemy needs an HplMap"); continue; }
+                            var music = map.sound?.Music;
+                            log.Info($"t={time,6:0.00}   terror {player.Terror:0.00} ({player.TerrorEnemyCount} enemies) avgSpeed {player.AvgSpeed:0.00} | " +
+                                     $"music \"{music?.CurrentSongName}\" danger {music?.DangerMusicPlaying} search {music?.EnemyMusicPlaying(RTXMnesia.Enemies.EnemyMusic.Search)} " +
+                                     $"attack {music?.EnemyMusicPlaying(RTXMnesia.Enemies.EnemyMusic.Attack)}");
+                            foreach (var en in map.Enemies)
+                            {
+                                if (p.Length > 1 && !string.Equals(en.Name, p[1], StringComparison.OrdinalIgnoreCase)) continue;
+                                log.Info($"t={time,6:0.00}   enemy active {en.Active} {en.DebugText()} nodes {en.Pathfinder.NodeContainer?.NodeCount ?? 0}");
+                            }
                             continue;
                         }
                         case "health":
@@ -418,7 +434,15 @@ namespace RTXMnesia.EditorDev
                      $"fade {e.Fade.Alpha:0.00} trail {e.ImageTrail.Amount:0.00} sepia {e.Sepia.Amount:0.00} blur {e.RadialBlur.Size:0.00} " +
                      $"flash {e.Flash.Alpha:0.00} | voice {voice} \"{Short(e.PlayVoice.Active ? e.PlayVoice.CurrentText : "")}\" | " +
                      $"msg \"{Short(hud.Messages.Alpha > 0f ? hud.Messages.Text : "")}\" hint \"{Short(hud.Hints.Alpha > 0f ? hud.Hints.Text : "")}\" " +
-                     $"quest {hud.Messages.QuestAlpha:0.00} | timers {map.TimerCount} sanity {player.sanity:0} | snd {map.sound?.Entries.Count ?? 0} music \"{map.sound?.Music?.CurrentSongName}\" | ps {map.ParticleWorld?.Systems.Count ?? 0} outline {map.effects?.Renderer.OutlineObjects.Count ?? 0} flash {map.effects?.Renderer.FlashObjects.Count ?? 0}");
+                     $"quest {hud.Messages.QuestAlpha:0.00} | timers {map.TimerCount} sanity {player.sanity:0} terror {player.Terror:0.00} | {EnemyLine(map)}snd {map.sound?.Entries.Count ?? 0} music \"{map.sound?.Music?.CurrentSongName}\" | ps {map.ParticleWorld?.Systems.Count ?? 0} outline {map.effects?.Renderer.OutlineObjects.Count ?? 0} flash {map.effects?.Renderer.FlashObjects.Count ?? 0}");
+        }
+
+        static string EnemyLine(HplMap map)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var en in map.Enemies)
+                if (en.Active) sb.Append($"{en.Name} {en.CurrentStateName} at {en.Body.FeetPosition:F1} d {Vector3.Distance(en.Body.FeetPosition, map.player.Body.FeetPosition):0.0} {(en.CanSeePlayer ? "sees " : "")}| ");
+            return sb.ToString();
         }
 
         static void Call(object target, string method) =>

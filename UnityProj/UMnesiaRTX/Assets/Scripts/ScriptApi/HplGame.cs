@@ -193,9 +193,21 @@ namespace RTXMnesia.ScriptApi
         public static readonly HashSet<string> HintsBlocked = new(StringComparer.Ordinal);
         public static readonly List<Item> Items = new();
 
+        /// <summary>cLuxGlobalDataHandler::mfEnemyActivateSoundCount: 5 s after an enemy's activation sound no other plays.</summary>
+        public static float EnemyActivateSoundCount;
+        public static bool EnemyActivateSoundAllowed => EnemyActivateSoundCount <= 0f;
+        public static void SetEnemyActivateSoundMade() => EnemyActivateSoundCount = 5f;
+
+        /// <summary>cLuxGlobalDataHandler::Update.</summary>
+        public static void Update(float timeStep)
+        {
+            if (EnemyActivateSoundCount > 0f) EnemyActivateSoundCount -= timeStep;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         public static void Reset()
         {
+            EnemyActivateSoundCount = 0f;
             GlobalVars.Clear();
             Quests.Clear();
             HintsGiven.Clear();

@@ -14,7 +14,7 @@ namespace RTXMnesia.Player
     /// - very low sanity: SanityLow hint every 3 s, image trail 1.6, panting;
     /// - sanity regains SanityRegainSpeed/s up to SanityRegainLimit; after SanityLowLimitMaxTime s below
     ///   SanityLowLimit it jumps to SanityLowNewSanityAmount;
-    /// - enemies and critters in view lower it (UpdateCheckEnemySeen; none are ported yet, so nothing is seen).
+    /// - enemies in view lower it (UpdateCheckEnemySeen; critters are not ported yet).
     /// </summary>
     public sealed class PlayerSanity
     {
@@ -23,7 +23,7 @@ namespace RTXMnesia.Player
         readonly float _sanityRegainSpeed, _sanityRegainLimit, _sanityVeryLowLimit, _sanityEffectsStart;
         readonly float _sanityWaveAlphaMul, _sanityWaveSpeedMul;
         readonly float _sanityLowLimit, _sanityLowLimitMaxTime, _sanityLowNewSanityAmount;
-        readonly float _checkNearEnemyInterval;
+        readonly float _checkNearEnemyInterval, _nearEnemyDecrease;
 
         float _hitAlpha;
         bool _hitActive, _hitIsUpdated, _sanityLostIsUpdated, _sanityEffectUpdated;
@@ -50,6 +50,7 @@ namespace RTXMnesia.Player
             _sanityLowLimitMaxTime = cfg.GetFloat(g, "SanityLowLimitMaxTime", 0f);
             _sanityLowNewSanityAmount = cfg.GetFloat(g, "SanityLowNewSanityAmount", 0f);
             _checkNearEnemyInterval = cfg.GetFloat(g, "CheckNearEnemyInterval", 0f);
+            _nearEnemyDecrease = cfg.GetFloat(g, "NearEnemyDecrease", 0f);
         }
 
         public float HitAlpha => _hitAlpha;
@@ -154,8 +155,8 @@ namespace RTXMnesia.Player
 
         /// <summary>
         /// cLuxPlayerSanity::UpdateCheckEnemySeen: every CheckNearEnemyInterval s critters within 3 m and enemies in view
-        /// (frustum and 2 of 5 rays) lower sanity. Critters and enemies are not ported yet; the seen state still ends
-        /// the radial blur like the original.
+        /// (within 35 m, in the camera frustum, 2 of 5 rays from the eye to the body center and its sides / top / bottom
+        /// free) lower sanity; every enemy's seen flag is set. Critters are not ported yet.
         /// </summary>
         void UpdateCheckEnemySeen(float timeStep)
         {
@@ -167,7 +168,41 @@ namespace RTXMnesia.Player
             _checkEnemySeenCount = _checkNearEnemyInterval;
 
             bool seenEnemy = false;
-            if (!seenEnemy && _enemyIsSeen)
+            var map = ScriptApi.HplMap.Current;
+            var cam = _player.playerCamera;
+            if (map != null && cam != null)
+            {
+                const float maxRangeSqr = 35f * 35f;
+                Vector3 head = cam.transform.position;
+                Vector3 right = cam.transform.right, up = cam.transform.up;
+                var planes = GeometryUtility.CalculateFrustumPlanes(cam);
+                foreach (var enemy in map.Enemies)
+                {
+                    enemy.IsSeenByPlayer = false;
+                    if (!enemy.Active || !enemy.CausesSanityDecrease) continue;
+                    var body = enemy.Body;
+                    if ((body.Position - head).sqrMagnitude > maxRangeSqr) continue;
+                    if (!GeometryUtility.TestPlanesAABB(planes, new Bounds(body.Position, body.Size))) continue;
+                    Vector3 half = body.Size * 0.5f;
+                    Vector3[] adds = { Vector3.zero, right * half.x, right * -half.x, up * half.y * 0.8f, up * half.y * -0.8f };
+                    int count = 0;
+                    foreach (var add in adds)
+                    {
+                        if (!ScriptApi.HplCollision.CheckLineOfSight(head, body.Position + add)) continue;
+                        if (++count < 2) continue;
+                        seenEnemy = true;
+                        enemy.IsSeenByPlayer = true;
+                        break;
+                    }
+                    // No break: every enemy's visibility is checked.
+                }
+            }
+            if (seenEnemy)
+            {
+                _player.LowerSanity(_nearEnemyDecrease, true);
+                _enemyIsSeen = true;
+            }
+            else if (_enemyIsSeen)
             {
                 _enemyIsSeen = false;
                 Effects?.RadialBlur.FadeTo(0f, 0.12f / 2f);
@@ -369,7 +404,7 @@ namespace RTXMnesia.Player
     /// cLuxPlayerInsanityCollapse: sanity below 0 makes the player fall (head down to InsanityCollapse_HeightAddGoal,
     /// roll up to 35°), sleep InsanityCollapse_SleepTime s with a loop and random sounds and world sound slowed and
     /// quieter, then wake with InsanityCollapse_AwakenSanity. Moving is slowed by the collapse speed multiplier.
-    /// Enemies are alerted (step 6 / stage C enemies).
+    /// Enemies are alerted.
     /// </summary>
     public sealed class PlayerInsanityCollapse
     {
@@ -427,7 +462,11 @@ namespace RTXMnesia.Player
                 _loopSound = sound.PlayGui(_sleepLoopSound, true, 1f);
                 _loopSound?.FadeIn(_sleepLoopSoundVolume, 0.2f);
             }
-            // Enemies: AlertOfPlayerPresence (stage C).
+            // Attract enemies.
+            var map = ScriptApi.HplMap.Current;
+            if (map != null)
+                foreach (var enemy in map.Enemies)
+                    if (enemy.Active) enemy.AlertOfPlayerPresence();
 
             Active = true;
             _state = 0;

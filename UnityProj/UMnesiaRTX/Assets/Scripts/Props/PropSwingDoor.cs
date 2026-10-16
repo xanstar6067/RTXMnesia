@@ -35,6 +35,8 @@ namespace RTXMnesia.Props
         public bool Closed { get; private set; }
         public bool Locked { get; private set; }
         public bool DisableAutoClose;
+        /// <summary>cLuxProp_SwingDoor::IsBroken.</summary>
+        public bool IsBroken => _broken;
 
         public PropSwingDoor(AmnesiaEntity entity) : base(entity, HplEntityType.Prop) { }
 

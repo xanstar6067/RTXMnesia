@@ -321,7 +321,7 @@ namespace RTXMnesia.Player
             }
             _skipStartSound = false;
 
-            // not ported: BroadcastEnemyMessage(PlayerDead) (enemies, step 6).
+            ScriptApi.HplMap.Current?.BroadcastEnemyMessage(Enemies.EnemyMessage.PlayerDead, false, Vector3.zero, 0f);
 
             _heightAdd = 0f;
             _roll = 0f;

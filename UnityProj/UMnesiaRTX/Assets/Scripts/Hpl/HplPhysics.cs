@@ -60,12 +60,13 @@ namespace RTXMnesia.Hpl
         {
             pushBack = Vector3.zero;
             bool collided = false;
+            // Other characters collide too (HPL2 character bodies are physics bodies): the player and the enemies.
             int count = Physics.OverlapBoxNonAlloc(position, halfExtents, Overlaps, rotation,
-                                                   Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                                                   Physics.DefaultRaycastLayers | (1 << CharacterLayer), QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
                 Collider other = Overlaps[i];
-                if (other == shape || !CollidesWithCharacter(other)) continue;
+                if (other == shape || other.gameObject == shape.gameObject || !CollidesWithCharacter(other)) continue;
 
                 Transform t = other.transform;
                 Vector3 total = Vector3.zero;

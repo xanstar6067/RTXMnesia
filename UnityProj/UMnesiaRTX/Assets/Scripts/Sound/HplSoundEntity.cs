@@ -20,6 +20,8 @@ namespace RTXMnesia.Sound
         public readonly string Name;
         public readonly HplSoundBank.SoundEntityData Data;
         public readonly int CreationId;
+        /// <summary>cSoundEntity::AddGlobalCallback / iSoundEntityGlobalCallback::OnStart: a sound entity started by itself.</summary>
+        public static event System.Action<HplSoundEntity> Started;
         public bool RemoveWhenOver;
         public bool Active = true;
         /// <summary>cSoundEntity::SetForcePlayAsGUISound: played without position (PlaySoundAtEntity on "Player").</summary>
@@ -181,6 +183,8 @@ namespace RTXMnesia.Sound
                 {
                     _started = true;
                     _prioRemove = false;
+                    // cSoundEntity global callbacks: the map handler's enemy hearing (cMapHandlerSoundCallback::OnStart).
+                    Started?.Invoke(this);
                 }
                 else if (_prioRemove) _sleepCount = 0.3f;
             }
