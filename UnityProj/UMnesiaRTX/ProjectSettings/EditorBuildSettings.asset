@@ -27,6 +27,9 @@ EditorBuildSettings:
     path: Assets/AmnesiaImported/Levels/maps/main/ch01/05_wine_cellar.unity
     guid: ea45a92776c03984babd915bd35a38c6
   - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/main/ch01/06_distillery.unity
+    guid: 26b6e9d2f10785a41965af625a635ae5
+  - enabled: 1
     path: Assets/AmnesiaImported/Levels/maps/main/ch02/20_sewer.unity
     guid: f7336c0165dd26d429820606a561a124
   m_configObjects:
