@@ -45,7 +45,7 @@ namespace RTXMnesia.Ui
             _flash.rectTransform.anchorMin = Vector2.zero; _flash.rectTransform.anchorMax = Vector2.one;
             _flash.rectTransform.offsetMin = _flash.rectTransform.offsetMax = Vector2.zero;
             _cursor = Image(_screen, "Journal cursor");
-            var menus = Resources.Load<HplMenuAssets>(HplMenuAssets.ResourceName);
+            var menus = Resources.Load<HplMenuAssets>(map.Campaign.ResourceName(HplMenuAssets.ResourceName));
             _cursor.texture = menus != null ? menus.Find("PointerNormal").texture : Assets?.Texture("gui_def_pointer_normal.tga");
             _cursor.enabled = HasCursor;
             _root.SetActive(false);

@@ -24,7 +24,8 @@ namespace RTXMnesia.Importer
 
         public static HplInventoryAssets Convert(ResourceIndex index, HplLanguage language, ImportLog log)
         {
-            var assets = AssetDatabase.LoadAssetAtPath<HplInventoryAssets>(AssetPath);
+            string assetPath = HplCampaign.ForLanguage(language).AssetPath(AssetPath);
+            var assets = AssetDatabase.LoadAssetAtPath<HplInventoryAssets>(assetPath);
             bool created = assets == null;
             if (created) assets = ScriptableObject.CreateInstance<HplInventoryAssets>();
             assets.defaultFont = FontConverter.Convert("game_default.fnt", language, index, log);
@@ -62,8 +63,8 @@ namespace RTXMnesia.Importer
             assets.ResetLookup();
             if (created)
             {
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(AssetPath)));
-                AssetDatabase.CreateAsset(assets, AssetPath);
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
+                AssetDatabase.CreateAsset(assets, assetPath);
             }
             else EditorUtility.SetDirty(assets);
             AssetDatabase.SaveAssets();

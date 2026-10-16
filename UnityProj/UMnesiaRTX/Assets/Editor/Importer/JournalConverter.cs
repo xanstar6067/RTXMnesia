@@ -21,7 +21,8 @@ namespace RTXMnesia.Importer
 
         public static HplJournalAssets Convert(ResourceIndex index, HplLanguage language, ImportLog log)
         {
-            var assets = AssetDatabase.LoadAssetAtPath<HplJournalAssets>(AssetPath);
+            string assetPath = HplCampaign.ForLanguage(language).AssetPath(AssetPath);
+            var assets = AssetDatabase.LoadAssetAtPath<HplJournalAssets>(assetPath);
             bool created = assets == null;
             if (created) assets = ScriptableObject.CreateInstance<HplJournalAssets>();
             assets.textFont = FontConverter.Convert("game_journal.fnt", language, index, log);
@@ -42,8 +43,8 @@ namespace RTXMnesia.Importer
             assets.ResetLookup();
             if (created)
             {
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(AssetPath)));
-                AssetDatabase.CreateAsset(assets, AssetPath);
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
+                AssetDatabase.CreateAsset(assets, assetPath);
             }
             else EditorUtility.SetDirty(assets);
             AssetDatabase.SaveAssets();

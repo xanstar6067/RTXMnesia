@@ -40,6 +40,8 @@ namespace RTXMnesia.ScriptApi
 
         public static void EnsureInventoryScript(HplMap map)
         {
+            // Justine inventory.hps has no operations; base recipes belong only to the main campaign.
+            if (map.Campaign.IsJustine) return;
             bool first = InventoryScript == null;
             InventoryScript ??= new Levels.InventoryScript();
             InventoryScript.Map = map;

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Copies the resources needed for the port from the installed Amnesia: The Dark Descent into source/.
 .DESCRIPTION
@@ -22,7 +22,7 @@ $folders = @(
     'sounds', 'music', 'commentary', 'lang', 'particles', 'lights', 'billboards',
     'flashbacks', 'main_menu', 'models', 'misc', 'config', 'core', 'shaders'
 )
-$rootFiles = @('resources.cfg', 'materials.cfg')
+$rootFiles = @('resources.cfg', 'materials.cfg', 'ptest_materials.cfg')
 
 New-Item -ItemType Directory -Force $Destination | Out-Null
 $Destination = (Resolve-Path $Destination).Path

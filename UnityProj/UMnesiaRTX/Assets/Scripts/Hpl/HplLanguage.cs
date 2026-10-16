@@ -39,6 +39,7 @@ namespace RTXMnesia.Hpl
         }
 
         public string language;
+        public string campaignId = "main";
         public List<string> sourceFiles = new();
         [Tooltip("RESOURCES folders of the language (fonts/rus, lang/rus): searched first for its fonts and voices.")]
         public List<string> resourceDirs = new();

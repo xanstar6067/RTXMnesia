@@ -85,7 +85,7 @@ namespace RTXMnesia.Ui
 
         void Init(HplMap from)
         {
-            _assets = Resources.Load<HplLoadScreenAssets>(HplLoadScreenAssets.ResourceName);
+            _assets = Resources.Load<HplLoadScreenAssets>(from.Campaign.ResourceName(HplLoadScreenAssets.ResourceName));
             if (_assets == null) Debug.LogError("[RTXMnesia] Load screen resources missing (run Import > Level or Import > Load screen resources)");
             _language = from.language;
             var menu = from.menuConfig;

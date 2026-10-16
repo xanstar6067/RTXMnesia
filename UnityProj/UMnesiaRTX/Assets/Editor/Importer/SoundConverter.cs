@@ -25,6 +25,8 @@ namespace RTXMnesia.Importer
 
         public static HplSoundBank Convert(ImportLog log, HplLanguage language)
         {
+            string bankPath = HplCampaign.ForLanguage(language).AssetPath(BankPath);
+            Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(bankPath)));
             var files = new List<string>(); // source-relative, in search order
             foreach (string folder in SoundFolders)
             {
@@ -49,11 +51,11 @@ namespace RTXMnesia.Importer
                 finally { EditorUtility.ClearProgressBar(); }
             }
 
-            var bank = AssetDatabase.LoadAssetAtPath<HplSoundBank>(BankPath);
+            var bank = AssetDatabase.LoadAssetAtPath<HplSoundBank>(bankPath);
             if (bank == null)
             {
                 bank = ScriptableObject.CreateInstance<HplSoundBank>();
-                AssetDatabase.CreateAsset(bank, BankPath);
+                AssetDatabase.CreateAsset(bank, bankPath);
             }
 
             bank.clips.Clear();
@@ -88,7 +90,7 @@ namespace RTXMnesia.Importer
             }
             EditorUtility.SetDirty(bank);
             AssetDatabase.SaveAssets();
-            log.Info($"Sound bank {BankPath}: {bank.clips.Count} clips, {bank.soundEntities.Count} sound entities" +
+            log.Info($"Sound bank {bankPath}: {bank.clips.Count} clips, {bank.soundEntities.Count} sound entities" +
                      (bad > 0 ? $", {bad} unreadable .snt" : ""));
             return bank;
         }

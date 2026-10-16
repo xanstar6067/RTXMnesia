@@ -26,6 +26,8 @@ namespace RTXMnesia.ScriptApi
         [Tooltip("Map file relative to the game folder, e.g. maps/main/ch01/00_rainy_hall.map")]
         public string mapFile;
         public HplConfig gameConfig;
+        public HplConfig initConfig, preMenuConfig;
+        public HplCampaign Campaign => HplCampaign.ForMap(mapFile);
         public HplConfig menuConfig;
         [Tooltip("config/default_user_keys.cfg: key names in messages and hints ($ButJournal).")]
         public HplConfig keysConfig;
@@ -309,7 +311,7 @@ namespace RTXMnesia.ScriptApi
             }
             foreach (var enemy in _enemies) enemy.OnMapEnter();
             // New game / a map opened directly: cLuxMapHandler::SetCurrentMap (first time) + OnStart / OnEnter.
-            if (player != null) SetCheckPoint("_auto", player.startArea, "");
+            if (player != null && !Campaign.IsJustine) SetCheckPoint("_auto", player.startArea, "");
             if (!runScript || Script == null) return;
             Script.Run(Script.OnStart, "OnStart");
             Script.Run(Script.OnEnter, "OnEnter");
@@ -330,7 +332,7 @@ namespace RTXMnesia.ScriptApi
             if (player != null && arrival.Player != null) player.ApplyCarry(arrival.Player);
             PlacePlayerAtStartPos(arrival.StartPos);
             foreach (var enemy in _enemies) enemy.OnMapEnter();
-            SetCheckPoint("_auto", arrival.StartPos, "");
+            if (!Campaign.IsJustine) SetCheckPoint("_auto", arrival.StartPos, "");
 
             bool firstTime = !HplSavedMaps.MapExists(MapName);
             HplSavedMaps.LoadMap(this);

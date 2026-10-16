@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using RTXMnesia.Ui;
+using RTXMnesia.Hpl;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,6 +10,12 @@ namespace RTXMnesia.Importer
 {
     public static class MainMenuConverter
     {
+        [MenuItem("Tools/RTXMnesia/Import/Justine menu and build scenes")]
+        public static void ConvertJustineBatch()
+        {
+            LevelConverter.ConvertMenuBackground(Path.Combine(AmnesiaPaths.SourceRoot, HplCampaign.Justine.MenuMap));
+            ConfigureBuildScenes();
+        }
         [MenuItem("Tools/RTXMnesia/Import/Main menu and build scenes")]
         public static void ConvertBatch()
         {
@@ -33,6 +40,7 @@ namespace RTXMnesia.Importer
             }
             if (File.Exists(AmnesiaPaths.ToAbsolute(HplGameUi.MainMenuScene))) Add(HplGameUi.MainMenuScene, true);
             if (File.Exists(AmnesiaPaths.ToAbsolute(HplGameUi.FirstLevelScene))) Add(HplGameUi.FirstLevelScene, true);
+            if (File.Exists(AmnesiaPaths.ToAbsolute(HplCampaign.Justine.MenuScene))) Add(HplCampaign.Justine.MenuScene, true);
             string maps = AmnesiaPaths.ToAbsolute(LevelConverter.LevelsRoot + "/maps");
             if (Directory.Exists(maps))
             {

@@ -25,24 +25,26 @@ namespace RTXMnesia.Importer
 
         public static string AssetPathFor(string language) => LangRoot + "/" + language + ".asset";
 
-        public static HplLanguage Convert(string language, ImportLog log)
+        public static HplLanguage Convert(string language, ImportLog log, HplCampaign campaign = null)
         {
+            campaign ??= HplCampaign.Main;
             var files = new List<string>
             {
-                $"config/lang_main/{language}.lang",
+                $"{campaign.LanguageFolder}/{language}.lang",
                 $"config/base_{language}.lang",
             };
             if (language != FallbackLanguage)
             {
-                files.Add($"config/lang_main/{FallbackLanguage}.lang");
+                files.Add($"{campaign.LanguageFolder}/{FallbackLanguage}.lang");
                 files.Add($"config/base_{FallbackLanguage}.lang");
             }
 
-            string assetPath = AssetPathFor(language);
+            string assetPath = campaign.AssetPath(AssetPathFor(language));
             var asset = AssetDatabase.LoadAssetAtPath<HplLanguage>(assetPath);
             bool created = asset == null;
             if (created) asset = ScriptableObject.CreateInstance<HplLanguage>();
             asset.language = language;
+            asset.campaignId = campaign.Id;
             asset.sourceFiles.Clear();
             asset.categories.Clear();
             asset.voices.Clear();
@@ -133,7 +135,7 @@ namespace RTXMnesia.Importer
 
             if (created)
             {
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(LangRoot));
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
                 AssetDatabase.CreateAsset(asset, assetPath);
             }
             else EditorUtility.SetDirty(asset);

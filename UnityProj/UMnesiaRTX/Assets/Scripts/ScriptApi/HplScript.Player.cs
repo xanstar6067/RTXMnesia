@@ -47,7 +47,10 @@ namespace RTXMnesia.ScriptApi
 
         protected void MovePlayerForward(float afAmount) => Player.Body.Move(CharDir.Forward, afAmount);
 
-        protected void SetPlayerPermaDeathSound(string asSound) { }
+        protected void SetPlayerPermaDeathSound(string asSound)
+        {
+            if (Map.player?.Death != null) Map.player.Death.PermaDeathSound = asSound;
+        }
 
         protected void SetSanityDrainDisabled(bool abX) => Player.sanityDrainDisabled = abX;
 

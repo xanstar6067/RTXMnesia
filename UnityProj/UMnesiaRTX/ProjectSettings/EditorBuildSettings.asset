@@ -12,6 +12,9 @@ EditorBuildSettings:
     path: Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity
     guid: 8afe18766aa87ad4b9febdc2713da2fc
   - enabled: 1
+    path: Assets/AmnesiaImported/Levels/main_menu/ptest/ptest_menu.unity
+    guid: f5edd03594d92434a8551ed14e0b0bb7
+  - enabled: 1
     path: Assets/AmnesiaImported/Levels/maps/main/ch01/01_old_archives.unity
     guid: 57e844d6906a27b4d90e52e02b306951
   - enabled: 1
@@ -107,5 +110,17 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/AmnesiaImported/Levels/maps/main/ch03/29_orb_chamber.unity
     guid: 2cac022f09141cb4cad3c223b0aa1fcb
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/ptest/01_cells.unity
+    guid: e2320e543e4a8d842923d0e42d5c398b
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/ptest/02_library.unity
+    guid: 33e764b821e231f4aa2563995affdb8f
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/ptest/03_dungeon.unity
+    guid: 811cc024571645e46ba142ce8ce9d49c
+  - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/ptest/04_final.unity
+    guid: 2c3f55de8d7a3a046977c41d3bbaf34c
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

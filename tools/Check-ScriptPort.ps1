@@ -18,11 +18,13 @@
 param(
     [Parameter(Mandatory = $true)][string]$Map,   # имя карты без расширения, например 03_archives
     [Parameter(Mandatory = $true)][string]$Port,  # путь к C#-файлу порта
-    [string]$Chapter = "ch01"
+    [string]$Chapter = "ch01",
+    [ValidateSet("maps/main", "maps/ptest")][string]$MapRoot = "maps/main"
 )
 
 $root = Split-Path -Parent $PSScriptRoot
-$hpsPath = Join-Path $root "source/maps/main/$Chapter/$Map.hps"
+$sourceFolder = if ($MapRoot -eq "maps/ptest") { "source/maps/ptest" } else { "source/maps/main/$Chapter" }
+$hpsPath = Join-Path $root "$sourceFolder/$Map.hps"
 $csPath = if ([System.IO.Path]::IsPathRooted($Port)) { $Port } else { Join-Path $root $Port }
 if (-not (Test-Path $hpsPath)) { Write-Host "Нет файла $hpsPath"; exit 2 }
 if (-not (Test-Path $csPath)) { Write-Host "Нет файла $csPath"; exit 2 }
@@ -111,7 +113,7 @@ $csNums = Numbers $cs
 foreach ($v in ((Numbers $hps).Keys | Sort-Object)) { if (-not $csNums.ContainsKey($v)) { Warn "число $v не найдено в порте" } }
 
 # 5. Коллбэки, заданные в самой карте (.map): скрипт их может нигде не вызывать, но движок вызывает по имени.
-$mapPath = Join-Path $root "source/maps/main/$Chapter/$Map.map"
+$mapPath = Join-Path $root "$sourceFolder/$Map.map"
 if (Test-Path $mapPath) {
     $mapText = [System.IO.File]::ReadAllText($mapPath, $latin1)
     $pattern = '<Var Name="(AttachFunction|Callback|CallbackFunc|ConnectionStateChangeCallback|DiaryCallback|PlayerInteractCallback|PlayerLookAtCallback)" Value="([^"]+)"'

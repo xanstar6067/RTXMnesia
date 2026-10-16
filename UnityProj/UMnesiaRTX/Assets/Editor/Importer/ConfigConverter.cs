@@ -21,7 +21,7 @@ namespace RTXMnesia.Importer
         public static string AssetPathFor(string sourceRelative) =>
             ConfigRoot + "/" + Path.GetFileNameWithoutExtension(sourceRelative) + ".asset";
 
-        public static HplConfig Convert(string sourceRelative, ImportLog log)
+        public static HplConfig Convert(string sourceRelative, ImportLog log, HplCampaign campaign = null)
         {
             string file = Path.Combine(AmnesiaPaths.SourceRoot, sourceRelative);
             if (!File.Exists(file))
@@ -34,12 +34,13 @@ namespace RTXMnesia.Importer
             var doc = new XmlDocument();
             doc.LoadXml("<Root>" + File.ReadAllText(file) + "</Root>");
 
-            string assetPath = AssetPathFor(sourceRelative);
+            string assetPath = (campaign ?? HplCampaign.Main).AssetPath(AssetPathFor(sourceRelative));
             var config = AssetDatabase.LoadAssetAtPath<HplConfig>(assetPath);
             bool created = config == null;
             if (created) config = ScriptableObject.CreateInstance<HplConfig>();
 
             config.sourceFile = sourceRelative;
+            config.sourceXml = File.ReadAllText(file);
             config.sections.Clear();
             foreach (XmlNode node in doc.DocumentElement.ChildNodes)
             {
@@ -51,7 +52,7 @@ namespace RTXMnesia.Importer
 
             if (created)
             {
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(ConfigRoot));
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
                 AssetDatabase.CreateAsset(config, assetPath);
             }
             else EditorUtility.SetDirty(config);

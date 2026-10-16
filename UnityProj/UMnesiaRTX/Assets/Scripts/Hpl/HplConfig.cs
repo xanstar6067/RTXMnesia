@@ -22,6 +22,7 @@ namespace RTXMnesia.Hpl
         }
 
         public string sourceFile;
+        [TextArea] public string sourceXml;
         public List<Section> sections = new();
 
         Dictionary<string, Dictionary<string, string>> _lookup;

@@ -25,7 +25,8 @@ namespace RTXMnesia.Importer
 
         public static HplLoadScreenAssets Convert(ResourceIndex index, HplLanguage language, HplConfig menuConfig, ImportLog log)
         {
-            var assets = AssetDatabase.LoadAssetAtPath<HplLoadScreenAssets>(AssetPath);
+            string assetPath = HplCampaign.ForLanguage(language).AssetPath(AssetPath);
+            var assets = AssetDatabase.LoadAssetAtPath<HplLoadScreenAssets>(assetPath);
             bool created = assets == null;
             if (created) assets = ScriptableObject.CreateInstance<HplLoadScreenAssets>();
             string font = menuConfig != null ? menuConfig.GetString("LoadScreen", "DefaultFont") : "";
@@ -39,11 +40,18 @@ namespace RTXMnesia.Importer
                 if (texture == null) log.Error("Missing load screen texture: " + file);
                 assets.images.Add(new HplLoadScreenAssets.Image { file = AmnesiaPaths.ToSourceRelative(file), texture = texture });
             }
+            if (HplCampaign.ForLanguage(language).IsJustine)
+                foreach (string file in Directory.EnumerateFiles(Path.Combine(AmnesiaPaths.SourceRoot, "graphics/ptest"), "ptest_gameloading_*.jpg"))
+                {
+                    string path = TextureConverter.Convert(file, TextureRole.Gui, null, false, out bool written);
+                    if (written) AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+                    assets.images.Add(new HplLoadScreenAssets.Image { file = AmnesiaPaths.ToSourceRelative(file), texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path) });
+                }
             assets.ResetLookup();
             if (created)
             {
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(AssetPath)));
-                AssetDatabase.CreateAsset(assets, AssetPath);
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
+                AssetDatabase.CreateAsset(assets, assetPath);
             }
             else EditorUtility.SetDirty(assets);
             AssetDatabase.SaveAssets();

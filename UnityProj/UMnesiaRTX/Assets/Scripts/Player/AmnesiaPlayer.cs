@@ -192,6 +192,7 @@ namespace RTXMnesia.Player
             public float handAlpha;
             // cLuxPlayerDeath: the death hint stays for the whole game.
             public string deathHintCat, deathHintEntry;
+            public string permaDeathSound;
         }
 
         public Carry CaptureCarry() => new()
@@ -207,6 +208,7 @@ namespace RTXMnesia.Player
             handState = Hands != null ? Hands.State : PlayerHands.HandsState.Disabled,
             handAlpha = Hands != null ? Hands.HandObjectAlpha : 0f,
             deathHintCat = Death != null ? Death.HintCat : "", deathHintEntry = Death != null ? Death.HintEntry : "",
+            permaDeathSound = Death != null ? Death.PermaDeathSound : "",
         };
 
         public void ApplyCarry(Carry c)
@@ -230,6 +232,7 @@ namespace RTXMnesia.Player
             if (c.crouching && MoveState != null) MoveState.RestoreCrouch();
             Hands?.Restore(c.handObject, c.handState, c.handAlpha);
             Death?.SetHint(c.deathHintCat, c.deathHintEntry);
+            if (Death != null) Death.PermaDeathSound = c.permaDeathSound ?? "";
         }
 
         /// <summary>cLuxPlayer::DoAction: the state first; if it lets the action through, the lantern key toggles the lantern.</summary>

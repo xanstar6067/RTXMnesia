@@ -52,7 +52,7 @@ namespace RTXMnesia.Ui
         public HplJournal(HplMap map)
         {
             _map = map;
-            Assets = Resources.Load<HplJournalAssets>(HplJournalAssets.ResourceName);
+            Assets = Resources.Load<HplJournalAssets>(map.Campaign.ResourceName(HplJournalAssets.ResourceName));
             View = new HplJournalView(map, this);
         }
 

@@ -142,8 +142,8 @@ namespace RTXMnesia.Ui
                     ConfirmingQuit = true;
                     _selected = 1;
                     break;
-                case MenuControl.ConfirmNewGame: LoadScene(HplGameUi.FirstLevelScene, true); break;
-                case MenuControl.ConfirmReturnTitle: LoadScene(HplGameUi.MainMenuScene, false); break;
+                case MenuControl.ConfirmNewGame: LoadScene(_map.Campaign.FirstScene, true); break;
+                case MenuControl.ConfirmReturnTitle: LoadScene(_map.Campaign.MenuScene, false); break;
                 case MenuControl.Cancel: Show(); break;
                 case MenuControl.Apply:
                     _ui.Settings = DraftSettings.Copy();

@@ -24,7 +24,8 @@ namespace RTXMnesia.Importer
 
         public static HplMenuAssets Convert(ResourceIndex index, HplLanguage language, HplConfig config, ImportLog log)
         {
-            var assets = AssetDatabase.LoadAssetAtPath<HplMenuAssets>(AssetPath);
+            string assetPath = HplCampaign.ForLanguage(language).AssetPath(AssetPath);
+            var assets = AssetDatabase.LoadAssetAtPath<HplMenuAssets>(assetPath);
             bool created = assets == null;
             if (created) assets = ScriptableObject.CreateInstance<HplMenuAssets>();
             assets.menuFont = FontConverter.Convert(config.GetString("Main", "TopMenuFont", "menu.fnt"), language, index, log);
@@ -33,13 +34,21 @@ namespace RTXMnesia.Importer
             skin.Load(skinPath);
             string guiFont = ((XmlElement)skin.SelectSingleNode("/GuiSkin/Fonts/Font[@type='Default']"))?.GetAttribute("file");
             assets.guiFont = FontConverter.Convert(guiFont ?? "menu_gui_default.fnt", language, index, log);
+            string logoName = config.GetString("Main", "MenuLogo", "graphics/main_menu/menu_logo.tga");
             string logoFile = null;
             foreach (string folder in language.resourceDirs)
             {
-                string candidate = Path.Combine(AmnesiaPaths.SourceRoot, folder, "graphics/main_menu/menu_logo.tga");
+                string candidate = Path.Combine(AmnesiaPaths.SourceRoot, folder, logoName);
                 if (File.Exists(candidate)) { logoFile = candidate; break; }
+                // Language resource directories are recursive in HPL2 (Justine lives under lang/eng/ptest).
+                string directory = Path.Combine(AmnesiaPaths.SourceRoot, folder);
+                if (!Directory.Exists(directory)) continue;
+                foreach (string file in Directory.EnumerateFiles(directory, Path.GetFileName(logoName), SearchOption.AllDirectories))
+                    if (file.Replace('\\', '/').EndsWith("/" + logoName, System.StringComparison.OrdinalIgnoreCase))
+                    { logoFile = file; break; }
+                if (logoFile != null) break;
             }
-            logoFile ??= index.Find("graphics/main_menu/menu_logo.tga");
+            logoFile ??= index.Find(logoName);
             if (logoFile != null)
             {
                 string logoPath = TextureConverter.Convert(logoFile, TextureRole.Gui, null, false, out bool written);
@@ -65,8 +74,8 @@ namespace RTXMnesia.Importer
                 if (assets.Find(required).texture == null) log.Error("Required menu image missing: " + required);
             if (created)
             {
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(AssetPath)));
-                AssetDatabase.CreateAsset(assets, AssetPath);
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
+                AssetDatabase.CreateAsset(assets, assetPath);
             }
             else EditorUtility.SetDirty(assets);
             AssetDatabase.SaveAssets();

@@ -88,8 +88,8 @@ namespace RTXMnesia.Importer
                 }
                 font.lastChar = largest;
 
-                string assetPath = FontsRoot + "/" + Path.GetFileNameWithoutExtension(abs) + ".asset";
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(FontsRoot));
+                string assetPath = HplCampaign.ForLanguage(language).AssetPath(FontsRoot + "/" + Path.GetFileNameWithoutExtension(abs) + ".asset");
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
                 var existing = AssetDatabase.LoadAssetAtPath<HplFont>(assetPath);
                 if (existing != null)
                 {

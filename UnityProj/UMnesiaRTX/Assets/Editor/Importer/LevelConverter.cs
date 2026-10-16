@@ -48,6 +48,7 @@ namespace RTXMnesia.Importer
         readonly string _mapRelative;
         readonly string _mapName;
         readonly bool _menuBackground;
+        readonly HplCampaign _campaign;
         readonly string _levelFolder;
         readonly ImportLog _log = new();
         readonly ResourceIndex _index = new(AmnesiaPaths.SourceRoot);
@@ -78,6 +79,7 @@ namespace RTXMnesia.Importer
             _menuBackground = menuBackground;
             _mapAbsolute = Path.GetFullPath(mapAbsolute);
             _mapRelative = AmnesiaPaths.ToSourceRelative(_mapAbsolute);
+            _campaign = HplCampaign.ForMap(_mapRelative);
             _mapName = Path.GetFileNameWithoutExtension(_mapAbsolute);
             _levelFolder = AmnesiaPaths.ToAssetPath(LevelsRoot, _mapRelative);
         }
@@ -117,8 +119,8 @@ namespace RTXMnesia.Importer
             _decalFiles = Array.Empty<string>();
             _entityFiles = entities.Select(e => e.entAbsolute).ToArray();
             PrepareResources(null);
-            _gameConfig = ConfigConverter.Convert(ConfigConverter.GameConfig, _log);
-            _surfaces = SurfaceConverter.Convert(_log);
+            _gameConfig = ConfigConverter.Convert(_campaign.GameConfig, _log, _campaign);
+            _surfaces = SurfaceConverter.Convert(_log, _campaign);
 
             string generated = Path.ChangeExtension(prefabPath, null) + "_generated.asset";
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(prefabPath)));
@@ -151,8 +153,8 @@ namespace RTXMnesia.Importer
             _decalFiles = FileIndex(contents, "FileIndex_Decals");
 
             PrepareResources(contents);
-            _gameConfig = ConfigConverter.Convert(ConfigConverter.GameConfig, _log);
-            _surfaces = SurfaceConverter.Convert(_log);
+            _gameConfig = ConfigConverter.Convert(_campaign.GameConfig, _log, _campaign);
+            _surfaces = SurfaceConverter.Convert(_log, _campaign);
 
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(_levelFolder));
             AssetDatabase.Refresh();
@@ -1390,7 +1392,7 @@ namespace RTXMnesia.Importer
             go.transform.SetParent(root, false);
             // HPL cameras look along local -Z; PlayerStart's +Z is only for gameplay spawning.
             go.transform.SetPositionAndRotation(start.position, start.rotation * Quaternion.Euler(0, 180, 0));
-            var config = ConfigConverter.Convert(ConfigConverter.MenuConfig, _log);
+            var config = ConfigConverter.Convert(_campaign.MenuConfig, _log, _campaign);
             var camera = go.AddComponent<Camera>(); camera.fieldOfView = config.GetFloat("Main", "BGCamera_FOV", 70);
             camera.nearClipPlane = 0.05f; camera.farClipPlane = 500;
             var data = go.AddComponent<HDAdditionalCameraData>();
@@ -1448,9 +1450,11 @@ namespace RTXMnesia.Importer
             map.menuBackground = _menuBackground;
             if (_menuBackground) map.backgroundCamera = root.GetComponentInChildren<Camera>();
             map.gameConfig = _gameConfig;
-            map.menuConfig = ConfigConverter.Convert(ConfigConverter.MenuConfig, _log);
-            map.keysConfig = ConfigConverter.Convert(ConfigConverter.KeysConfig, _log);
-            map.language = LanguageConverter.Convert(LanguageConverter.DefaultLanguage, _log);
+            map.initConfig = ConfigConverter.Convert(_campaign.InitFile, _log, _campaign);
+            map.preMenuConfig = ConfigConverter.Convert(_campaign.PreMenuConfig, _log, _campaign);
+            map.menuConfig = ConfigConverter.Convert(_campaign.MenuConfig, _log, _campaign);
+            map.keysConfig = ConfigConverter.Convert(ConfigConverter.KeysConfig, _log, _campaign);
+            map.language = LanguageConverter.Convert(LanguageConverter.DefaultLanguage, _log, _campaign);
             map.player = Object.FindAnyObjectByType<AmnesiaPlayer>();
             map.surfaces = _surfaces;
 

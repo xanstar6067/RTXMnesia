@@ -40,7 +40,7 @@ namespace RTXMnesia.Ui
         {
             _titleScreen = titleScreen;
             _map = map;
-            _assets = Resources.Load<HplMenuAssets>(HplMenuAssets.ResourceName);
+            _assets = Resources.Load<HplMenuAssets>(map.Campaign.ResourceName(HplMenuAssets.ResourceName));
             _root = new GameObject("HPL game menu", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
             _root.hideFlags = HideFlags.DontSave;
             _root.transform.SetParent(parent, false);

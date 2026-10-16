@@ -26,7 +26,7 @@ namespace RTXMnesia.Ui
         public HplInventory(HplMap map)
         {
             _map = map;
-            Assets = Resources.Load<HplInventoryAssets>(HplInventoryAssets.ResourceName);
+            Assets = Resources.Load<HplInventoryAssets>(map.Campaign.ResourceName(HplInventoryAssets.ResourceName));
             HplGame.EnsureInventoryScript(map);
             View = new HplInventoryView(map, this);
         }

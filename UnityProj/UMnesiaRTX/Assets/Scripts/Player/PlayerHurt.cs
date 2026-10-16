@@ -242,6 +242,11 @@ namespace RTXMnesia.Player
         float _heightAdd, _minHeightAdd, _roll, _textOnScreenCount, _whiteCount;
         bool _skipStartSound;
         int _state;
+        readonly bool _permaDeath;
+        SoundEntry _permaVoice;
+        int _permaVoiceId;
+        public string PermaDeathSound { get; set; } = "";
+        public bool Terminal { get; private set; }
 
         public bool Active { get; private set; }
         public float FadeAlpha { get; private set; }
@@ -258,6 +263,9 @@ namespace RTXMnesia.Player
         public PlayerDeath(AmnesiaPlayer player, HplConfig cfg)
         {
             _player = player;
+            // Edit-mode simulation initializes the player before HplMap.Build; use its scene's context too.
+            foreach (var map in UnityEngine.Object.FindObjectsByType<HplMap>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (map.gameObject.scene == player.gameObject.scene) { _permaDeath = map.Campaign.IsJustine; break; }
             _heightAddGoal = cfg.GetFloat("Player_General", "Death_HeightAdd", 0f);
             _heightAddGoalCrouch = cfg.GetFloat("Player_General", "Death_HeightAddCrouch", 0f);
             _fadeOutTime = cfg.GetFloat("Player_General", "Death_FadeTime", 1000f);
@@ -265,11 +273,16 @@ namespace RTXMnesia.Player
             _rollSpeed = cfg.GetFloat("Player_General", "Death_RollSpeed", 0f);
             _startSound = cfg.GetString("Player_General", "Death_StartSound", "");
             _awakenSound = cfg.GetString("Player_General", "Death_AwakenSound", "");
+            // cLuxPlayerDeath: Justine falls faster and fades out in half the time.
+            if (_permaDeath) { _fadeOutTime /= 2f; _heightAddSpeed *= 1.2f; _rollSpeed *= 1.2f; }
             // Death_Max/Min*Gain are only used by commented out code of the original (OnPressButton).
         }
 
         public void Reset()
         {
+            PermaDeathSound = "";
+            _permaVoice = null;
+            Terminal = false;
             _heightAdd = 0f;
             _roll = 0f;
             TextAlpha = 0f;
@@ -355,8 +368,17 @@ namespace RTXMnesia.Player
             if (_state == 1)
             {
                 FadeAlpha += timeStep * (1f / _fadeOutTime);
-                if (FadeAlpha > 1f) FadeAlpha = 1f;
-                if (FadeAlpha > 0.75f)
+                if (FadeAlpha > 1f)
+                {
+                    FadeAlpha = 1f;
+                    if (_permaDeath)
+                    {
+                        _state = 4;
+                        if (_player.sound != null && _player.sound.PlayGuiSoundData(PermaDeathSound, SoundEntryType.Gui, out _, out _permaVoice,
+                                1f, SoundEntityType.Main, true)) _permaVoiceId = _permaVoice.Id;
+                    }
+                }
+                if (FadeAlpha > 0.75f && !_permaDeath)
                 {
                     TextAlpha += (1f - TextAlpha) * 0.5f * timeStep;
                     if (TextAlpha > 1f) TextAlpha = 1f;
@@ -371,6 +393,20 @@ namespace RTXMnesia.Player
                         HplMap.Current?.effects?.Flash.Start(0.7f, 1.2f, 2.5f);
                         _player.sound?.PlayGuiSoundData(_awakenSound, SoundEntryType.Gui);
                     }
+                }
+            }
+
+            // cLuxPlayerDeath state 4 exits the application after the selected voice, with no checkpoint reset.
+            if (_state == 4 && !Terminal && (_player.sound == null || !_player.sound.IsValid(_permaVoice, _permaVoiceId)))
+            {
+                Terminal = true;
+                if (Application.isPlaying)
+                {
+#if UNITY_EDITOR
+                    UnityEditor.EditorApplication.isPlaying = false;
+#else
+                    Application.Quit();
+#endif
                 }
             }
 

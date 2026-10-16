@@ -17,9 +17,12 @@ namespace RTXMnesia.Importer
         public const string SourceFile = "materials.cfg";
         public const string AssetPath = AmnesiaPaths.ImportedAssetsRoot + "/Physics/surfaces.asset";
 
-        public static HplSurfaces Convert(ImportLog log)
+        public static HplSurfaces Convert(ImportLog log, HplCampaign campaign = null)
         {
-            string file = Path.Combine(AmnesiaPaths.SourceRoot, SourceFile);
+            campaign ??= HplCampaign.Main;
+            string sourceFile = campaign.Materials;
+            string assetPath = campaign.AssetPath(AssetPath);
+            string file = Path.Combine(AmnesiaPaths.SourceRoot, sourceFile);
             if (!File.Exists(file))
             {
                 log.Error($"Physics materials not found: {file}");
@@ -28,17 +31,17 @@ namespace RTXMnesia.Importer
             var doc = new XmlDocument();
             doc.Load(file);
 
-            var asset = AssetDatabase.LoadAssetAtPath<HplSurfaces>(AssetPath);
+            var asset = AssetDatabase.LoadAssetAtPath<HplSurfaces>(assetPath);
             bool created = asset == null;
             if (created)
             {
                 asset = ScriptableObject.CreateInstance<HplSurfaces>();
-                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(AssetPath)));
-                AssetDatabase.CreateAsset(asset, AssetPath);
+                Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Path.GetDirectoryName(assetPath)));
+                AssetDatabase.CreateAsset(asset, assetPath);
             }
 
             var oldMaterials = new System.Collections.Generic.Dictionary<string, PhysicsMaterial>();
-            foreach (var o in AssetDatabase.LoadAllAssetRepresentationsAtPath(AssetPath))
+            foreach (var o in AssetDatabase.LoadAllAssetRepresentationsAtPath(assetPath))
                 if (o is PhysicsMaterial pm) oldMaterials[pm.name] = pm;
 
             asset.surfaces.Clear();
@@ -109,7 +112,7 @@ namespace RTXMnesia.Importer
 
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssets();
-            log.Info($"Physics materials {SourceFile} → {AssetPath} ({asset.surfaces.Count})");
+            log.Info($"Physics materials {sourceFile} → {assetPath} ({asset.surfaces.Count})");
             return asset;
         }
 
