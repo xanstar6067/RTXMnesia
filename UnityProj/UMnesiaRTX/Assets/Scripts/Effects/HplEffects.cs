@@ -620,6 +620,9 @@ namespace RTXMnesia.Effects
 
             public bool IsActive => Active;
 
+            /// <summary>cLuxEffect_PlayVoice::VoiceDonePlaying: checks the pointer, not validity; ignores effect sounds.</summary>
+            public bool VoiceDonePlaying() => _voices.Count == 0 && _voiceEntry == null;
+
             public override void Update(float timeStep)
             {
                 if (VolumeMul < 1f)

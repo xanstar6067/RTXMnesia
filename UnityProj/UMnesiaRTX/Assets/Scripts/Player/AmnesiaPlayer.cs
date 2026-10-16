@@ -51,6 +51,8 @@ namespace RTXMnesia.Player
         int _uiInputFrame = -1;
         public float scriptMoveSpeedMul = 1f;
         public float scriptRunSpeedMul = 1f;
+        public float eventMoveSpeedMul = 1f;
+        public float eventRunSpeedMul = 1f;
         public float scriptJumpForceMul = 1f;
         public float lookSpeedMul = 1f;
         public bool jumpDisabled, crouchDisabled, noFallDamage;
@@ -97,8 +99,8 @@ namespace RTXMnesia.Player
         public bool PressingRun { get; private set; }
         public bool PressingJump { get; private set; }
         public Vector3 CameraRight => playerCamera != null ? playerCamera.transform.right : Body.Right;
-        public float MoveSpeedMul => scriptMoveSpeedMul * interactionMoveSpeedMul * (InsanityCollapseHelper != null ? InsanityCollapseHelper.SpeedMul : 1f);
-        public float RunSpeedMul => scriptRunSpeedMul;
+        public float MoveSpeedMul => scriptMoveSpeedMul * eventMoveSpeedMul * interactionMoveSpeedMul * (InsanityCollapseHelper != null ? InsanityCollapseHelper.SpeedMul : 1f);
+        public float RunSpeedMul => scriptRunSpeedMul * eventRunSpeedMul;
 
         // ------------------------------------------------------------------ interaction (step 4.3)
 
@@ -314,6 +316,7 @@ namespace RTXMnesia.Player
             MoveState.OnEnterState();
             States = new PlayerStates(this);
             Lantern = new PlayerLantern(this, cfg);
+            Flashback = new PlayerFlashback(this, cfg);
             LightLevel = new PlayerLightLevel(this, cfg);
             InDarkness = new PlayerInDarkness(this, cfg);
             SanityHelper = new PlayerSanity(this, cfg);
@@ -327,6 +330,8 @@ namespace RTXMnesia.Player
         public PlayerHands Hands { get; private set; }
         /// <summary>cLuxPlayerLantern.</summary>
         public PlayerLantern Lantern { get; private set; }
+        /// <summary>cLuxPlayerFlashback.</summary>
+        public PlayerFlashback Flashback { get; private set; }
         /// <summary>cLuxPlayerLightLevel.</summary>
         public PlayerLightLevel LightLevel { get; private set; }
         /// <summary>cLuxPlayerInDarkness.</summary>
@@ -515,6 +520,7 @@ namespace RTXMnesia.Player
             Lantern.Update(dt);
             SanityHelper.Update(dt);
             LookAt.Update(dt);
+            Flashback.Update(dt);
             CamDirEffects.Update(dt);
             InsanityCollapseHelper.Update(dt);
             PressedMove = false;

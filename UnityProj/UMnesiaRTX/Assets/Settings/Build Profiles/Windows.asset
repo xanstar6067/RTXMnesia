@@ -28,6 +28,21 @@ MonoBehaviour:
   - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/00_rainy_hall.unity
     m_guid: 8afe18766aa87ad4b9febdc2713da2fc
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/01_old_archives.unity
+    m_guid: 57e844d6906a27b4d90e52e02b306951
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/02_entrance_hall.unity
+    m_guid: 274715e51a693ce49a0a41c9e2056ce8
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/04_wine_cellar_lab.unity
+    m_guid: ee0959ae5f995364eae3f0d8ec4841a5
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/05_wine_cellar.unity
+    m_guid: ea45a92776c03984babd915bd35a38c6
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/20_sewer.unity
+    m_guid: f7336c0165dd26d429820606a561a124
   m_HasScriptingDefines: 0
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:

@@ -179,7 +179,7 @@
 | `RemoveUseItemCallback` | 4 | ✓ | `void RemoveUseItemCallback(string &in asName)` |
 | `QuestIsAdded` | 4 | ✓ | `bool QuestIsAdded(string &in asName)` |
 | `GetPlayerYSpeed` | 4 | ✓ | `float GetPlayerYSpeed()` |
-| `GetFlashbackIsActive` | 4 | — | `bool GetFlashbackIsActive()` |
+| `GetFlashbackIsActive` | 4 | ✓ | `bool GetFlashbackIsActive()` |
 | `SetNPCFollowPlayer` | 3 | — | `void SetNPCFollowPlayer(string &in asName, bool abX)` |
 | `GetEffectVoiceActive` | 3 | ✓ | `bool GetEffectVoiceActive()` |
 | `BreakJoint` | 2 | ✓ | `void BreakJoint(string &in asName)` |

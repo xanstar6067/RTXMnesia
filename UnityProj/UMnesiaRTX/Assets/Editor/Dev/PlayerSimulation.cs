@@ -401,7 +401,7 @@ namespace RTXMnesia.EditorDev
             string Short(string s) => string.IsNullOrEmpty(s) ? "-" : (s.Length > 40 ? s.Substring(0, 40) + "…" : s).Replace('\n', ' ');
             log.Info($"t={time,6:0.00}   script: active {player.active} feet {player.Body.FeetPosition:F2} yaw {player.Yaw * Mathf.Rad2Deg:0} " +
                      $"pitch {player.Pitch * Mathf.Rad2Deg:0} roll {player.Roll * Mathf.Rad2Deg:0} fov×{player.FovMul:0.00} " +
-                     $"aspect×{player.AspectMul:0.00} move×{player.scriptMoveSpeedMul:0.00} look×{player.lookSpeedMul:0.00} lookAt {player.LookAt.Active} | " +
+                     $"aspect×{player.AspectMul:0.00} move×{player.MoveSpeedMul:0.00} look×{player.lookSpeedMul:0.00} lookAt {player.LookAt.Active} | " +
                      $"fade {e.Fade.Alpha:0.00} trail {e.ImageTrail.Amount:0.00} sepia {e.Sepia.Amount:0.00} blur {e.RadialBlur.Size:0.00} " +
                      $"flash {e.Flash.Alpha:0.00} | voice {voice} \"{Short(e.PlayVoice.Active ? e.PlayVoice.CurrentText : "")}\" | " +
                      $"msg \"{Short(hud.Messages.Alpha > 0f ? hud.Messages.Text : "")}\" hint \"{Short(hud.Hints.Alpha > 0f ? hud.Hints.Text : "")}\" " +

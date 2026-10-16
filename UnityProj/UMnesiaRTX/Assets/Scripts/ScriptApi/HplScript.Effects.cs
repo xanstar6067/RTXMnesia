@@ -50,7 +50,7 @@ namespace RTXMnesia.ScriptApi
         protected void StartScreenShake(float afAmount, float afTime, float afFadeInTime, float afFadeOutTime) =>
             Effects.ScreenShake.Start(afAmount, afTime, afFadeInTime, afFadeOutTime);
 
-        protected bool GetFlashbackIsActive() => false;
+        protected bool GetFlashbackIsActive() => Player.Flashback.Active;
 
         // ------------------------------------------------------------------ insanity (step 6)
 

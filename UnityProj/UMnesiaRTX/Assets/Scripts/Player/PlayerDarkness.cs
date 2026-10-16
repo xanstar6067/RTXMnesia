@@ -191,7 +191,7 @@ namespace RTXMnesia.Player
 
                 var map = HplMap.Current;
                 bool emotionFlash = map != null && map.effects != null && map.effects.EmotionFlash.Active;
-                if (!_player.sanityDrainDisabled && !emotionFlash)
+                if (!_player.Flashback.Active && !_player.sanityDrainDisabled && !emotionFlash)
                 {
                     _player.LowerSanity(_sanityLossPerSecond * timeStep * _sanityLossMul, true);
                     if (_showHintTimer <= 0f && _sanityLossMul > 0.05f)

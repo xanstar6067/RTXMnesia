@@ -454,6 +454,9 @@ namespace RTXMnesia.ScriptApi
         public override HplEntityType Type => AreaType == "Rope" ? HplEntityType.Rope : HplEntityType.Area;
 
         bool _itemInteraction;
+        readonly string _flashbackFile, _flashbackCallback;
+        readonly Collider[] _flashbackPlayerShape;
+        float _flashbackCheckCollisionCount;
 
         public HplArea(AmnesiaArea area, Hpl.HplConfig gameConfig) : base(area.gameObject, area.hplId)
         {
@@ -472,6 +475,13 @@ namespace RTXMnesia.ScriptApi
                 MaxFocusDistance = gameConfig != null ? gameConfig.GetFloat("Player_Interaction", "ScriptArea_MaxFocusDist") : 0f;
                 string max = area.GetVariable("MaxFocusDistance");
                 if (!string.IsNullOrEmpty(max) && Hpl.HplMath.Atof(max) >= 0f) MaxFocusDistance = Hpl.HplMath.Atof(max);
+            }
+            else if (AreaType == "Flashback")
+            {
+                // cLuxAreaLoader_Flashback::LoadVariables.
+                _flashbackFile = area.GetVariable("FlashbackFile") ?? "";
+                _flashbackCallback = area.GetVariable("Callback") ?? "";
+                _flashbackPlayerShape = new Collider[1];
             }
             else if (AreaType == "Ladder")
             {
@@ -492,6 +502,23 @@ namespace RTXMnesia.ScriptApi
 
         public override int BodyCount => 1;
         public override IReadOnlyList<Collider> GetBodyColliders(int index) => Bodies[0].Colliders;
+
+        /// <summary>cLuxArea_Flashback::OnUpdate: only proper game steps; check the current player shape every 0.1 s.</summary>
+        protected override void OnUpdate(float timeStep)
+        {
+            if (AreaType != "Flashback" || timeStep < Time.fixedDeltaTime * 0.8f) return;
+            _flashbackCheckCollisionCount -= timeStep;
+            if (_flashbackCheckCollisionCount > 0f) return;
+            _flashbackCheckCollisionCount = 0.1f;
+
+            var player = Map.player;
+            var body = player != null ? player.Body : null;
+            if (body == null || body.Shapes.Count == 0) return;
+            _flashbackPlayerShape[0] = body.Shapes[body.ActiveSize];
+            if (!HplCollision.BodiesCollide(GetBodyColliders(0), _flashbackPlayerShape)) return;
+            SetActive(false);
+            player.Flashback.Start(_flashbackFile, _flashbackCallback);
+        }
 
         // cLuxArea_Script and cLuxArea_Ladder; other areas (signs, examine, ropes) are not ported yet.
         public override bool CanInteract(Dynamics.HplPhysicsBody body) =>
