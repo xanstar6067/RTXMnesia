@@ -90,6 +90,29 @@ namespace RTXMnesia.Dev
             Capture(target, Path.Combine(folder, "InventoryMessage.png"), camera, inventoryCanvas);
             map.GameUi.Resume();
             Debug.Log("PASS: Play-mode inventory screenshots");
+            HplGame.JournalEntries.Clear(); HplGame.Quests.Clear();
+            var note = HplGame.AddJournalEntry("Note", "CH01L03_VillageTales", "journal/default_note");
+            var diary = HplGame.AddJournalEntry("Diary", "CH01L03_Daniel", "journal/diary_page");
+            HplGame.AddQuest("preview", "00Trail");
+            var journal = map.GameUi.Journal;
+            if (!map.GameUi.OpenJournal()) { Debug.LogError("Journal refused to open"); Finish(1); yield break; }
+            var journalCanvas = journal.View.Canvas;
+            journalCanvas.renderMode = RenderMode.ScreenSpaceCamera; journalCanvas.worldCamera = camera; journalCanvas.planeDistance = 1;
+            foreach (var child in journalCanvas.GetComponentsInChildren<Transform>(true)) child.gameObject.layer = 31;
+            yield return new WaitForSecondsRealtime(0.8f);
+            journal.View.Refresh(1, Vector2.zero); Capture(target, Path.Combine(folder, "JournalMain.png"), camera, journalCanvas);
+            foreach (var state in new[] { JournalState.Notes, JournalState.Diaries, JournalState.QuestLog })
+            {
+                journal.ChangeState(state); yield return new WaitForSecondsRealtime(0.6f);
+                journal.View.Refresh(1, Vector2.zero); Capture(target, Path.Combine(folder, "Journal" + state + ".png"), camera, journalCanvas);
+            }
+            journal.OpenEntry(note, false); yield return new WaitForSecondsRealtime(0.6f);
+            journal.View.Refresh(1, Vector2.zero); Capture(target, Path.Combine(folder, "JournalNote.png"), camera, journalCanvas);
+            journal.TurnPage(1); yield return null;
+            journal.View.Refresh(1, Vector2.zero); Capture(target, Path.Combine(folder, "JournalNotePage2.png"), camera, journalCanvas);
+            journal.OpenEntry(diary, true); yield return new WaitForSecondsRealtime(0.6f);
+            journal.View.Refresh(1, Vector2.zero); Capture(target, Path.Combine(folder, "JournalNarrated.png"), camera, journalCanvas);
+            map.GameUi.Resume(); Debug.Log("PASS: Play-mode journal screenshots");
             camera.targetTexture = null;
             target.Release();
             Destroy(target);

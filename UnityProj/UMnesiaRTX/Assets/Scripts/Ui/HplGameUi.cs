@@ -21,6 +21,11 @@ namespace RTXMnesia.Ui
         public HplUserSettings DraftSettings { get; private set; }
         public HplInventory Inventory { get; private set; }
         public bool InventoryOpen { get; private set; }
+        public bool InventoryFromJournal { get; private set; }
+        public HplJournal Journal { get; private set; }
+        public bool JournalOpen { get; private set; }
+        public bool ReadingUiOpen => InventoryOpen || JournalOpen;
+        public bool IsClosing => _closing;
         /// <summary>Real render time excluding menu pauses, including pauses with no rendered frames.</summary>
         public double RenderTime => (IsPaused ? _pauseStartedAt : Time.realtimeSinceStartupAsDouble) - _pausedDuration;
 
@@ -43,6 +48,7 @@ namespace RTXMnesia.Ui
             if (Application.isPlaying) Settings.Apply(map);
             _menu = new HplPauseMenu(map, transform);
             Inventory = new HplInventory(map);
+            Journal = new HplJournal(map);
         }
 
         void Update()
@@ -52,20 +58,42 @@ namespace RTXMnesia.Ui
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
             {
                 if (!IsPaused) Pause();
+                else if (JournalOpen) Journal.ExitPressed(false);
                 else if (InventoryOpen && Inventory.MessageActive) Inventory.DismissMessage();
                 else if (ConfirmingQuit || ShowingOptions) ShowPauseMenu();
                 else _closing = true;
                 return;
             }
+            if (keyboard != null && (keyboard.jKey.wasPressedThisFrame || keyboard.mKey.wasPressedThisFrame || keyboard.nKey.wasPressedThisFrame))
+            {
+                if (JournalOpen) Journal.ExitPressed(true);
+                else if (InventoryOpen && keyboard.jKey.wasPressedThisFrame) OpenJournal(fromInventory: true);
+                else if (!IsPaused)
+                {
+                    if (keyboard.nKey.wasPressedThisFrame) OpenRecentText();
+                    else OpenJournal(keyboard.mKey.wasPressedThisFrame ? JournalState.QuestLog : JournalState.Main);
+                }
+                return;
+            }
+            if (keyboard != null && keyboard.tabKey.wasPressedThisFrame && JournalOpen) { Journal.ExitPressed(true); return; }
             if (keyboard != null && keyboard.tabKey.wasPressedThisFrame && (!IsPaused || InventoryOpen))
             {
                 if (InventoryOpen) CloseInventory(); else OpenInventory();
                 return;
             }
             if (!IsPaused) return;
-            float fadeTime = _map.menuConfig != null ? _map.menuConfig.GetFloat(InventoryOpen ? "Inventory" : "Main", InventoryOpen ? (_closing ? "FadeOutTime" : "FadeInTime") : (_closing ? "MainFadeOutTimeFast" : "MainFadeInTime"), _closing ? 0.3f : 1f) : (_closing ? 0.3f : 1f);
+            float fadeTime = JournalOpen ? (_closing ? 1f / 3f : 0.5f) : _map.menuConfig != null ? _map.menuConfig.GetFloat(InventoryOpen ? "Inventory" : "Main", InventoryOpen ? (_closing ? "FadeOutTime" : "FadeInTime") : (_closing ? "MainFadeOutTimeFast" : "MainFadeInTime"), _closing ? 0.3f : 1f) : (_closing ? 0.3f : 1f);
             MenuOpacity = Mathf.MoveTowards(MenuOpacity, _closing ? 0f : 1f, Time.unscaledDeltaTime / Mathf.Max(0.001f, fadeTime));
-            if (_closing && MenuOpacity <= 0f) { Resume(); return; }
+            if (InventoryOpen && !_closing && MenuOpacity >= 1) InventoryFromJournal = false;
+            if (_closing && MenuOpacity <= 0f) { FinishClosing(); return; }
+
+            if (JournalOpen)
+            {
+                _map.sound?.StepMenu(Time.unscaledDeltaTime);
+                Journal.Tick(Time.unscaledDeltaTime);
+                UpdateJournalInput(keyboard);
+                return;
+            }
 
             if (InventoryOpen)
             {
@@ -111,6 +139,80 @@ namespace RTXMnesia.Ui
 
         public void Pause() => EnterScreen(false);
 
+        bool CanOpenPlayerMenu() => _map?.player != null && _map.player.active && !_map.player.IsDead &&
+            _map.Script?.InventoryDisabled != true && _map.player.States?.CurrentType != Player.PlayerStateType.Ladder;
+
+        public bool OpenJournal(JournalState state = JournalState.Main, bool fromInventory = false, bool force = false, bool instantExit = false)
+        {
+            if (JournalOpen) return true;
+            if (_map?.player == null || (IsPaused && !InventoryOpen) || (!force && !CanOpenPlayerMenu())) return false;
+            bool returnToInventory = InventoryOpen && fromInventory;
+            if (InventoryOpen)
+            {
+                Inventory.Close(); InventoryOpen = false; JournalOpen = true;
+                _closing = false; MenuOpacity = 0.01f;
+            }
+            else EnterScreen(false, true);
+            if (_map.player.States?.CurrentType == Player.PlayerStateType.UseItem) _map.player.States.ChangeState(Player.PlayerStateType.Normal);
+            Journal.Open(returnToInventory, instantExit || state == JournalState.QuestLog, state);
+            Journal.View.Refresh(MenuOpacity, Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
+            return true;
+        }
+        public bool OpenJournalEntry(HplGame.JournalEntry entry, bool narrated, bool instantExit)
+        {
+            if (entry == null || !OpenJournal(fromInventory: InventoryOpen, force: true, instantExit: instantExit)) return false;
+            Journal.OpenEntry(entry, narrated);
+            return true;
+        }
+        public bool OpenRecentText()
+        {
+            if (!CanOpenPlayerMenu() || HplGame.LastReadEntry == null) return false;
+            return OpenJournalEntry(HplGame.LastReadEntry, false, true);
+        }
+        public void CloseJournal() { if (JournalOpen) _closing = true; }
+        void FinishClosing()
+        {
+            if (JournalOpen && Journal.OpenedFromInventory)
+            {
+                Journal.Close(); JournalOpen = false; InventoryOpen = true;
+                InventoryFromJournal = true;
+                _closing = false; MenuOpacity = 0.01f;
+                Inventory.Open();
+                Inventory.View.Refresh(MenuOpacity, Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
+            }
+            else Resume();
+        }
+
+        void UpdateJournalInput(Keyboard keyboard)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = !Journal.View.HasCursor;
+            var mouse = Mouse.current;
+            Vector2 position = mouse != null ? mouse.position.ReadValue() : Vector2.zero;
+            if (!_closing)
+            {
+                if (keyboard != null)
+                {
+                    if (keyboard.upArrowKey.wasPressedThisFrame) Journal.Navigate(-1);
+                    if (keyboard.downArrowKey.wasPressedThisFrame) Journal.Navigate(1);
+                    if (keyboard.leftArrowKey.wasPressedThisFrame) Journal.TurnPage(-1);
+                    if (keyboard.rightArrowKey.wasPressedThisFrame) { if (Journal.IsNarrated) Journal.ExitPressed(false); else Journal.TurnPage(1); }
+                    if (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame)
+                    { if (Journal.IsNarrated) Journal.ExitPressed(false); else Journal.View.Activate(Journal.Selected); }
+                }
+                if (mouse != null)
+                {
+                    int hit = Journal.View.HitTest(position);
+                    if (mouse.delta.ReadValue().sqrMagnitude > 0) Journal.Select(hit);
+                    if (mouse.leftButton.wasPressedThisFrame) { if (Journal.IsNarrated) Journal.ExitPressed(false); else Journal.View.Activate(hit); }
+                    if (mouse.rightButton.wasPressedThisFrame) Journal.ExitPressed(false);
+                    float scroll = mouse.scroll.ReadValue().y;
+                    if (scroll != 0) Journal.TurnPage(scroll < 0 ? 1 : -1);
+                }
+            }
+            Journal.View.Refresh(MenuOpacity, position);
+        }
+
         public bool OpenInventory()
         {
             if (IsPaused || _map?.player == null || !_map.player.active || _map.player.IsDead ||
@@ -153,7 +255,7 @@ namespace RTXMnesia.Ui
             Inventory.View.Refresh(MenuOpacity, position);
         }
 
-        void EnterScreen(bool inventory)
+        void EnterScreen(bool inventory, bool journal = false)
         {
             if (IsPaused || _map == null || _menu == null) return;
             _previousTimeScale = Time.timeScale;
@@ -163,12 +265,14 @@ namespace RTXMnesia.Ui
             _pauseStartedAt = Time.realtimeSinceStartupAsDouble;
             IsPaused = true;
             InventoryOpen = inventory;
+            InventoryFromJournal = false;
+            JournalOpen = journal;
             PauseGeneration++;
             MenuOpacity = 0.01f;
             _closing = false;
             _dragSlider = null;
             _map.player?.SetUiInputBlocked(true);
-            if (inventory)
+            if (inventory || journal)
             {
                 _map.PhysicsWorld?.FadeOutLoopSounds(1f);
                 _map.effects?.PlayVoice.SetInventoryPaused(true);
@@ -179,27 +283,30 @@ namespace RTXMnesia.Ui
             Time.timeScale = 0f;
             if (_map.hud != null && _map.hud.Canvas != null) _map.hud.Canvas.enabled = false;
             Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = inventory ? !Inventory.View.HasCursor : !_menu.HasCursor;
+            Cursor.visible = journal ? !Journal.View.HasCursor : inventory ? !Inventory.View.HasCursor : !_menu.HasCursor;
             if (inventory)
             {
                 Inventory.Open();
                 Inventory.View.Refresh(MenuOpacity, Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
             }
-            else ShowPauseMenu();
+            else if (!journal) ShowPauseMenu();
         }
 
         public void Resume()
         {
             if (!IsPaused) return;
-            if (InventoryOpen)
+            if (ReadingUiOpen)
             {
                 _map.effects?.PlayVoice.SetInventoryPaused(false);
                 _map.sound?.SetInventoryActive(false);
                 Inventory.Close();
+                Journal.Close();
             }
             _pausedDuration += Time.realtimeSinceStartupAsDouble - _pauseStartedAt;
             IsPaused = false;
             InventoryOpen = false;
+            InventoryFromJournal = false;
+            JournalOpen = false;
             ConfirmingQuit = false;
             ShowingOptions = false;
             DraftSettings = null;
@@ -234,7 +341,7 @@ namespace RTXMnesia.Ui
 
         public void OpenOptions(int tab = -1)
         {
-            if (!IsPaused || InventoryOpen) return;
+            if (!IsPaused || ReadingUiOpen) return;
             if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, 3);
             ShowingOptions = true;
             _dragSlider = null;
@@ -303,7 +410,7 @@ namespace RTXMnesia.Ui
 
         void OnApplicationFocus(bool focused)
         {
-            if (InventoryOpen)
+            if (ReadingUiOpen)
             {
                 // The inventory stays open, but an unfocused application must not keep playing its ambience.
                 _map.sound?.SetMenuPaused(!focused);
@@ -323,6 +430,7 @@ namespace RTXMnesia.Ui
         {
             _menu?.Destroy();
             Inventory?.View.Destroy();
+            Journal?.View.Destroy();
         }
     }
 }

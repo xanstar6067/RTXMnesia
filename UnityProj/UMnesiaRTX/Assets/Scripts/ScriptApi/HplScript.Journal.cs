@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace RTXMnesia.ScriptApi
 {
     // Messages, quests, notes, hints and the inventory (LuxScriptHandler.cpp → cLuxMessageHandler, cLuxJournal,
-    // cLuxHintHandler, cLuxInventory). The journal screen follows the inventory port.
+    // cLuxHintHandler, cLuxInventory). Journal collections belong to the game, its screen to HplGameUi.
     public abstract partial class HplScript
     {
         protected void SetMessage(string asTextCategory, string asTextEntry, float afTime) =>
@@ -13,11 +13,11 @@ namespace RTXMnesia.ScriptApi
 
         protected void DisableDeathStartSound() { }
 
-        protected void AddNote(string asNameAndTextEntry, string asImage) => NotPorted(nameof(AddNote), "the journal (step 6)");
+        protected void AddNote(string asNameAndTextEntry, string asImage) => HplGame.AddJournalEntry("Note", asNameAndTextEntry, asImage);
 
-        protected void AddDiary(string asNameAndTextEntry, string asImage) => NotPorted(nameof(AddDiary), "the journal (step 6)");
+        protected void AddDiary(string asNameAndTextEntry, string asImage) => HplGame.AddJournalEntry("Diary", asNameAndTextEntry, asImage);
 
-        protected void ReturnOpenJournal(bool abOpenJournal) { }
+        protected void ReturnOpenJournal(bool abOpenJournal) => HplGame.ShowJournalOnDiaryPickup = abOpenJournal;
 
         /// <summary>A new quest note: "QuestAdded" hint and the quest icon (cLuxScriptHandler::AddQuest).</summary>
         protected void AddQuest(string asName, string asNameAndTextEntry)

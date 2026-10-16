@@ -64,6 +64,7 @@ namespace RTXMnesia.Ui
         public void PointerDown(int index, Vector2 position)
         {
             if (MessageActive) { DismissMessage(); return; }
+            if (index == Journal) { _map.GameUi?.OpenJournal(fromInventory: true); return; }
             var item = ItemAt(index);
             if (item == null) return;
             double now = Time.realtimeSinceStartupAsDouble;
@@ -93,6 +94,7 @@ namespace RTXMnesia.Ui
         public void UseSelected()
         {
             if (MessageActive) DismissMessage();
+            else if (Selected == Journal) _map.GameUi?.OpenJournal(fromInventory: true);
             else Use(ItemAt(Selected));
         }
         public bool Use(HplGame.Item item)

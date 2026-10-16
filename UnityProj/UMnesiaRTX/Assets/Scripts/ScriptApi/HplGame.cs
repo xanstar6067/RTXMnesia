@@ -46,8 +46,32 @@ namespace RTXMnesia.ScriptApi
             if (first) InventoryScript.OnStart();
         }
 
-        /// <summary>Notes and diaries picked up (cLuxJournal::AddNote / AddDiary); the journal screen is step 6.</summary>
-        public static readonly List<(string type, string textEntry, string image)> JournalEntries = new();
+        public sealed class JournalEntry
+        {
+            public string type, textEntry, image;
+            public int number;
+            public bool read;
+            public string NameEntry => type == "Diary" ? "Diary_" + textEntry + "_Name" + number : "Note_" + textEntry + "_Name";
+            public string TextEntry => type == "Diary" ? "Diary_" + textEntry + "_Text" + number : "Note_" + textEntry + "_Text";
+            public string ImageFile(bool icon)
+            {
+                string file = (image ?? "").Replace('\\', '/');
+                if (file == "") file = "journal/default_note";
+                string ext = System.IO.Path.GetExtension(file);
+                return (ext == "" ? file : file.Substring(0, file.Length - ext.Length)) + (icon ? "_icon" : "_large") + (ext == "" ? ".tga" : ext);
+            }
+        }
+        public static readonly List<JournalEntry> JournalEntries = new();
+        public static JournalEntry LastReadEntry;
+        public static bool ShowJournalOnDiaryPickup = true;
+
+        public static JournalEntry AddJournalEntry(string type, string textEntry, string image)
+        {
+            int number = type == "Diary" ? JournalEntries.FindAll(e => e.type == type && e.textEntry == textEntry).Count + 1 : 0;
+            var entry = new JournalEntry { type = type, textEntry = textEntry, image = image, number = number };
+            JournalEntries.Add(entry);
+            return entry;
+        }
         public static int Coins;
 
         static readonly string[] ItemTypes = { "Puzzle", "Coins", "Note", "Diary", "Lantern", "Health", "Sanity", "LampOil", "Tinderbox", "HandObject" };
@@ -120,16 +144,18 @@ namespace RTXMnesia.ScriptApi
                     consumed = true;
                     break;
                 case "Note":
-                    JournalEntries.Add(("Note", val, item.image));
+                    var note = AddJournalEntry("Note", val, item.image);
                     HplLog.Info("ProgLog: Picked up note " + val);
-                    // Opening the note in the journal (amount > 0): step 6.
+                    if (amount > 0) map.GameUi?.OpenJournalEntry(note, amount >= 2, true);
                     consumed = true;
                     break;
                 case "Diary":
-                    JournalEntries.Add(("Diary", val, item.image));
+                    var diary = AddJournalEntry("Diary", val, item.image);
                     HplLog.Info("ProgLog: Picked up diary " + val);
-                    int diaryIndex = JournalEntries.FindAll(e => e.type == "Diary").Count - 1;
-                    if (extraVal != "") map.RunScript(extraVal, name, diaryIndex);
+                    ShowJournalOnDiaryPickup = true;
+                    if (extraVal != "") map.RunScript(extraVal, name, diary.number);
+                    if (ShowJournalOnDiaryPickup) map.GameUi?.OpenJournalEntry(diary, true, true);
+                    else LastReadEntry = diary;
                     consumed = true;
                     break;
                 case "Lantern":
@@ -182,6 +208,8 @@ namespace RTXMnesia.ScriptApi
             HintsBlocked.Clear();
             Items.Clear();
             JournalEntries.Clear();
+            LastReadEntry = null;
+            ShowJournalOnDiaryPickup = true;
             Coins = 0;
             CombineCallbacks.Clear();
             InventoryScript = null;

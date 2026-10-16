@@ -13,7 +13,7 @@ namespace RTXMnesia.Ui
         readonly GameObject _root;
         readonly RectTransform _screen;
         readonly HplGuiText _text, _header, _message;
-        readonly RawImage _cursor, _drag, _modalShade, _flash;
+        readonly RawImage _cursor, _drag, _modalShade, _flash, _transitionShade;
         readonly List<RawImage> _images = new();
         readonly Dictionary<int, Rect> _regions = new();
         int _imageCount;
@@ -55,6 +55,9 @@ namespace RTXMnesia.Ui
             _message.rectTransform.anchoredPosition = Vector2.zero;
             _message.rectTransform.sizeDelta = new Vector2(800, 600);
             _drag = Image(_screen, "Picked inventory item");
+            _transitionShade = Image(_root.transform, "Journal return fade");
+            _transitionShade.rectTransform.anchorMin = Vector2.zero; _transitionShade.rectTransform.anchorMax = Vector2.one;
+            _transitionShade.rectTransform.offsetMin = _transitionShade.rectTransform.offsetMax = Vector2.zero;
             _flash = Image(_root.transform, "Sanity gain flash");
             _flash.rectTransform.anchorMin = Vector2.zero; _flash.rectTransform.anchorMax = Vector2.one;
             _flash.rectTransform.offsetMin = _flash.rectTransform.offsetMax = Vector2.zero;
@@ -111,7 +114,8 @@ namespace RTXMnesia.Ui
             Around("generic", "Tinderboxes", tinder);
             Label(_text, "x " + _map.player.tinderboxes, V("TinderboxesCenter", new Vector2(720, 127)) - Vector2.up * 10, V("FontSize_Label", Vector2.one * 20), HplFontAlign.Center);
             Oil();
-            var journal = Center("inventory_journal.tga", V("JournalCenter", new Vector2(720, 472)), 0.5f);
+            var journal = Center("inventory_journal.tga", V("JournalCenter", new Vector2(720, 472)));
+            if (_inventory.Selected == HplInventory.Journal) Center("inventory_journal_mouse_over.tga", journal.center, 0.5f);
             _regions[HplInventory.Journal] = journal;
             Around("generic", "Journal", journal);
 
@@ -142,6 +146,7 @@ namespace RTXMnesia.Ui
                 Place(_drag.rectTransform, new Rect(VirtualPoint(mousePosition) + _inventory.PickOffset, new Vector2(picked.width, picked.height)));
             }
             _flash.color = _map.effects != null ? new Color(_map.effects.SanityGainFlash.Color.r, _map.effects.SanityGainFlash.Color.g, _map.effects.SanityGainFlash.Color.b, _map.effects.SanityGainFlash.Alpha) : Color.clear;
+            _transitionShade.color = new Color(0, 0, 0, _map.GameUi != null && _map.GameUi.InventoryFromJournal ? 1 - alpha : 0);
             if (HasCursor) Place(_cursor.rectTransform, new Rect(VirtualPoint(mousePosition), new Vector2(_cursor.texture.width, _cursor.texture.height)));
         }
 

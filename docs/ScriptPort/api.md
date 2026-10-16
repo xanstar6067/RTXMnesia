@@ -2,7 +2,7 @@
 
 Функции, которые движок Amnesia предоставляет скриптам `.hps` (регистрируются в `src/.../amnesia/src/game/LuxScriptHandler.cpp`, всего 261).
 Сгенерировано по копии игры в `source/`; «гл.1» и «всего» — число вызовов в скриптах первой главы и всей игры.
-Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но поведения ещё нет: экран журнала, затухание моделей, враги); — пропускается с одним предупреждением в логе (часть движка не портирована).
+Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но части поведения ещё нет: завершение прохождения, затухание моделей, враги); — пропускается с одним предупреждением в логе (часть движка не портирована).
 
 ## Нужны для главы 1 (по частоте)
 
@@ -143,7 +143,7 @@
 | `SetWheelAngle` | 1 | 1 | ✓ | `void SetWheelAngle(string &in asName, float afAngle, bool abAutoMove)` |
 | `SetSkyBoxColor` | 1 | 1 | — | `void SetSkyBoxColor(float afR, float afG, float afB, float afA)` |
 | `SetPlayerSanity` | 1 | 9 | ✓ | `void SetPlayerSanity(float afSanity)` |
-| `ReturnOpenJournal` | 1 | 3 | — | `void ReturnOpenJournal(bool abOpenJournal)` |
+| `ReturnOpenJournal` | 1 | 3 | ✓ | `void ReturnOpenJournal(bool abOpenJournal)` |
 | `RemoveHint` | 1 | 1 | ✓ | `void RemoveHint(string &in asName)` |
 | `QuestIsCompleted` | 1 | 2 | ✓ | `bool QuestIsCompleted(string &in asName)` |
 | `InteractConnectPropWithMoveObject` | 1 | 4 | — | `void InteractConnectPropWithMoveObject(string &in asName, string &in asPropName, string &in asMoveObjectName, bool abInteractOnly,bool abInvert, int alStatesUsed)` |
@@ -155,7 +155,7 @@
 | `CreateRope` | 1 | 1 | — | `void CreateRope(string &in asName,string &in asStartArea, string &in asEndArea, string &in asStartBody, string &in asEndBody,float afMinTotalLength, float afMaxTotalLength,float afSegmentLength, float afDamping,float afStrength, float afStiffness, string &in asMaterial, float afRadius, float afLengthTileAmount, float afLengthTileSize, string &in asSound,float afSoundStartSpeed, float afSoundStopSpeed,bool abAutoMove, float afAutoMoveAcc, float afAutoMoveMaxSpeed)` |
 | `AddPropHealth` | 1 | 1 | ✓ | `void AddPropHealth(string &in asName, float afHealth)` |
 | `AddPlayerLampOil` | 1 | 1 | ✓ | `void AddPlayerLampOil(float afOil)` |
-| `AddNote` | 1 | 1 | — | `void AddNote(string &in asNameAndTextEntry, string &in asImage)` |
+| `AddNote` | 1 | 1 | ✓ | `void AddNote(string &in asNameAndTextEntry, string &in asImage)` |
 
 ## Используются только в других главах
 
@@ -206,8 +206,12 @@
 | `ExitInventory` | ✓ | Закрытие сообщения либо выход с плавным переходом, как ExitPressed |
 | `SetInventoryMessage` | ✓ | Локализация, ParseString, сообщение ждёт ручного закрытия, как исходный Update |
 
-GiveItemFromFile читает определения `.ent` из генерируемого HplInventoryAssets. Подбор записок / дневников пока сохраняет данные для следующего этапа журнала. RemoveItem по имени удаляет всю запись; использование расходника уменьшает стопку на одну единицу.
+GiveItemFromFile читает определения `.ent` из генерируемого HplInventoryAssets. Подбор записок / дневников подключён к журналу и озвучке. RemoveItem по имени удаляет всю запись; использование расходника уменьшает стопку на одну единицу.
+
+## Журнал
+
+`AddDiary` — ✓: добавляет следующую запись внутри серии; API добавления не открывают экран. `ReturnOpenJournal` вызывается из DiaryCallback, который получает номер с 1 внутри серии; false оставляет запись доступной через N без автооткрытия. Подбор записок с включённым открытием и дневников запускает чтение / озвучку. `CompleteQuest` скрывает выполненное задание из списка, но процент завершения ещё не реализован. Подробности и проверки — [journal.md](journal.md).
 
 ## Остальные функции без вызовов в скриптах карт (можно не портировать)
 
-`AddDiary`, `AddGlobalVarFloat`, `AddGlobalVarString`, `AddKeyPart`, `AddLocalVarString`, `AddPlayerSanity`, `AlertEnemyOfPlayerPresence`, `AttachPropToProp`, `AttachPropToStickyArea`, `ChangeManPigPose`, `FadeEnemyToSmoke`, `FadeInSound`, `ForceTeslaPigSighting`, `GetBodyMass`, `GetEnemyStateName`, `GetEntityPosX`, `GetEntityPosY`, `GetEntityPosZ`, `GetGlobalVarFloat`, `GetPlayerPosX`, `GetPlayerPosY`, `GetPlayerPosZ`, `GetPropHealth`, `GetPropIsInteractedWith`, `GetSwingDoorLocked`, `InsanityEventIsActive`, `MathAbs`, `MathAcos`, `MathAsin`, `MathAtan`, `MathAtan2`, `MathClamp`, `MathCos`, `MathMax`, `MathMin`, `MathPow`, `MathSin`, `MathSqrt`, `MathTan`, `MovePlayerForward`, `PlaceEntityAtEntity`, `ProgLog`, `ReplaceEntity`, `SetAllowStickyAreaAttachment`, `SetBodyMass`, `SetButtonSwitchedOn`, `SetEnemyIsHallucination`, `SetEnemySanityDecreaseActive`, `SetEntityPos`, `SetEntityVisible`, `SetGlobalVarFloat`, `SetInDarknessEffectsActive`, `SetLanternLitCallback`, `SetLevelDoorLockedSound`, `SetLevelDoorLockedText`, `SetMultiSliderCallback`, `SetMultiSliderStuckState`, `SetPlayerFallDamageDisabled`, `SetPlayerJumpForceMul`, `SetPlayerPermaDeathSound`, `SetPlayerPos`, `SetSkyBoxTexture`, `SetTeslaPigEasyEscapeDisabled`, `SetTeslaPigFadeDisabled`, `SetTeslaPigSoundDisabled`, `StartDemoEnd`, `StartInsanityEvent`, `StartPlayerSpawnPS`, `StartRandomInsanityEvent`, `StopCurrentInsanityEvent`, `StopPlayerSpawnPS`, `StringToBool`, `StringToFloat`, `StringToInt`, `TeleportEnemyToEntity`, `TeleportEnemyToNode`
+`AddGlobalVarFloat`, `AddGlobalVarString`, `AddKeyPart`, `AddLocalVarString`, `AddPlayerSanity`, `AlertEnemyOfPlayerPresence`, `AttachPropToProp`, `AttachPropToStickyArea`, `ChangeManPigPose`, `FadeEnemyToSmoke`, `FadeInSound`, `ForceTeslaPigSighting`, `GetBodyMass`, `GetEnemyStateName`, `GetEntityPosX`, `GetEntityPosY`, `GetEntityPosZ`, `GetGlobalVarFloat`, `GetPlayerPosX`, `GetPlayerPosY`, `GetPlayerPosZ`, `GetPropHealth`, `GetPropIsInteractedWith`, `GetSwingDoorLocked`, `InsanityEventIsActive`, `MathAbs`, `MathAcos`, `MathAsin`, `MathAtan`, `MathAtan2`, `MathClamp`, `MathCos`, `MathMax`, `MathMin`, `MathPow`, `MathSin`, `MathSqrt`, `MathTan`, `MovePlayerForward`, `PlaceEntityAtEntity`, `ProgLog`, `ReplaceEntity`, `SetAllowStickyAreaAttachment`, `SetBodyMass`, `SetButtonSwitchedOn`, `SetEnemyIsHallucination`, `SetEnemySanityDecreaseActive`, `SetEntityPos`, `SetEntityVisible`, `SetGlobalVarFloat`, `SetInDarknessEffectsActive`, `SetLanternLitCallback`, `SetLevelDoorLockedSound`, `SetLevelDoorLockedText`, `SetMultiSliderCallback`, `SetMultiSliderStuckState`, `SetPlayerFallDamageDisabled`, `SetPlayerJumpForceMul`, `SetPlayerPermaDeathSound`, `SetPlayerPos`, `SetSkyBoxTexture`, `SetTeslaPigEasyEscapeDisabled`, `SetTeslaPigFadeDisabled`, `SetTeslaPigSoundDisabled`, `StartDemoEnd`, `StartInsanityEvent`, `StartPlayerSpawnPS`, `StartRandomInsanityEvent`, `StopCurrentInsanityEvent`, `StopPlayerSpawnPS`, `StringToBool`, `StringToFloat`, `StringToInt`, `TeleportEnemyToEntity`, `TeleportEnemyToNode`
