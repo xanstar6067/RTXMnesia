@@ -118,12 +118,11 @@ namespace RTXMnesia.ScriptApi
 
         protected void AutoSave() => NotPorted(nameof(AutoSave), "saving (step 6)");
 
-        /// <summary>cLuxMap::SetCheckPoint (+ death hint). Respawning at it comes with death (step 6).</summary>
+        /// <summary>cLuxMap::SetCheckPoint + the death hint (cLuxPlayerDeath::SetHint).</summary>
         protected void CheckPoint(string asName, string asStartPos, string asCallback, string asDeathHintCat, string asDeathHintEntry)
         {
-            if (Map.CheckPointData.name != asName) Map.CheckPointData = (asName, asStartPos, asCallback, 0);
+            Map.SetCheckPoint(asName, asStartPos, asCallback);
             SetDeathHint(asDeathHintCat, asDeathHintEntry);
-            AddDebugMessage($"Setting check point {asName}", false);
         }
 
         protected void ChangeMap(string asMapName, string asStartPos, string asStartSound, string asEndSound) =>

@@ -30,7 +30,7 @@ namespace RTXMnesia.EditorDev
             };
             EditorApplication.update += () =>
             {
-                if (SessionState.GetBool(Pending, false) && EditorApplication.timeSinceStartup - SessionState.GetFloat(Start, 0) > 240)
+                if (SessionState.GetBool(Pending, false) && EditorApplication.timeSinceStartup - SessionState.GetFloat(Start, 0) > 360)
                 {
                     Debug.LogError("Map change preview timed out");
                     SessionState.SetBool(Pending, false);

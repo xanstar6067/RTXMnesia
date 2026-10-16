@@ -75,9 +75,15 @@ namespace RTXMnesia.ScriptApi
             else Player.LowerSanity(afAmount, false);
         }
 
-        /// <summary>Health only for now; damage splash, red flash and head spin come with step 6.</summary>
-        protected void GivePlayerDamage(float afAmount, string asType, bool abSpinHead, bool abLethal) =>
-            Player.GiveDamage(afAmount, abLethal);
+        /// <summary>The type in any case: "claws", "slash", anything else BloodSplat; strength 1.</summary>
+        protected void GivePlayerDamage(float afAmount, string asType, bool abSpinHead, bool abLethal)
+        {
+            string lowType = (asType ?? "").ToLowerInvariant();
+            var type = DamageType.BloodSplat;
+            if (lowType == "claws") type = DamageType.Claws;
+            if (lowType == "slash") type = DamageType.Slash;
+            Player.GiveDamage(afAmount, 1, type, abSpinHead, abLethal);
+        }
 
         protected void FadePlayerFOVMulTo(float afX, float afSpeed) => Player.FadeFOVMulTo(afX, afSpeed);
 

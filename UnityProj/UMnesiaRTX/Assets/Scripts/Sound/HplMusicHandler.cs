@@ -81,6 +81,27 @@ namespace RTXMnesia.Sound
             PlayHighestPriority();
         }
 
+        /// <summary>cLuxMusicHandler::GetMaxPrio.</summary>
+        public int GetMaxPrio() => MaxPrio;
+
+        /// <summary>cLuxMusicHandler::GetMusic: the song of a priority (volume with <see cref="GameVolumeMul"/>).</summary>
+        public (string file, bool loop, bool resume, float volume) GetMusic(int prio)
+        {
+            var m = _gameMusic[Mathf.Clamp(prio, 0, MaxPrio)];
+            return (m.File ?? "", m.Loop, m.Resume, m.Volume);
+        }
+
+        /// <summary>
+        /// cLuxMusicHandler::Reset: forgets the songs of all priorities and the resume positions (cMusicHandler::
+        /// ResetResumeData); the playing song is not stopped. Enemy music state comes with step 6.
+        /// </summary>
+        public void Reset()
+        {
+            for (int i = 0; i < _gameMusic.Length; i++) _gameMusic[i] = default;
+            _currentMaxPrio = -1;
+            _resumePositions.Clear();
+        }
+
         void PlayHighestPriority()
         {
             for (int i = MaxPrio; i >= 0; i--)

@@ -67,7 +67,11 @@ namespace RTXMnesia.ScriptApi
         [NonSerialized] public string DisplayNameEntry = "";
         [NonSerialized] public int NumberOfQuests;
         [NonSerialized] public string LanternLitCallback = "";
-        [NonSerialized] public (string name, string startPos, string callback, int count) CheckPointData;
+        // cLuxMap check point (SetCheckPoint / LoadCheckPoint): where death puts the player back.
+        [NonSerialized] public string CheckPointName = "", CheckPointStartPos = "", CheckPointCallback = "", CheckPointMusic = "";
+        [NonSerialized] public int CheckPointCount, CheckPointMusicPrio;
+        [NonSerialized] public bool CheckPointMusicResume;
+        [NonSerialized] public float CheckPointMusicVolume;
 
         sealed class Timer
         {
@@ -275,7 +279,7 @@ namespace RTXMnesia.ScriptApi
                 return;
             }
             // New game / a map opened directly: cLuxMapHandler::SetCurrentMap (first time) + OnStart / OnEnter.
-            if (player != null) CheckPointData = ("_auto", player.startArea, "", 0);
+            if (player != null) SetCheckPoint("_auto", player.startArea, "");
             if (!runScript || Script == null) return;
             Script.Run(Script.OnStart, "OnStart");
             Script.Run(Script.OnEnter, "OnEnter");
@@ -295,7 +299,7 @@ namespace RTXMnesia.ScriptApi
             if (arrival.Effects != null) effects.ApplyCarry(arrival.Effects);
             if (player != null && arrival.Player != null) player.ApplyCarry(arrival.Player);
             PlacePlayerAtStartPos(arrival.StartPos);
-            CheckPointData = ("_auto", arrival.StartPos, "", 0);
+            SetCheckPoint("_auto", arrival.StartPos, "");
 
             bool firstTime = !HplSavedMaps.MapExists(MapName);
             HplSavedMaps.LoadMap(this);
@@ -311,6 +315,59 @@ namespace RTXMnesia.ScriptApi
         }
 
         /// <summary>cLuxMap::PlacePlayerAtStartPos: an unknown position is an error, then the first start.</summary>
+        /// <summary>
+        /// cLuxMap::SetCheckPoint: a new name only; remembers the highest priority looping music (its volume without
+        /// the music handler's volume multiplier).
+        /// </summary>
+        public void SetCheckPoint(string name, string startPos, string callback)
+        {
+            if (CheckPointName == name) return;
+            CheckPointName = name;
+            CheckPointStartPos = startPos;
+            CheckPointCallback = callback;
+            CheckPointCount = 0;
+
+            CheckPointMusic = "";
+            var music = sound != null ? sound.Music : null;
+            if (music != null)
+            {
+                for (int i = music.GetMaxPrio(); i >= 0; i--)
+                {
+                    var m = music.GetMusic(i);
+                    // mbSpecialEffect: no script call plays special effect music, it is always false here.
+                    if (m.file == "" || !m.loop) continue;
+                    CheckPointMusic = m.file;
+                    CheckPointMusicPrio = i;
+                    CheckPointMusicResume = m.resume;
+                    CheckPointMusicVolume = m.volume;
+                    if (music.GameVolumeMul > 0f) CheckPointMusicVolume /= music.GameVolumeMul;
+                    break;
+                }
+            }
+            if (logDebugMessages) Debug.Log($"[Script debug] Setting check point {CheckPointName} Music: '{CheckPointMusic}'");
+        }
+
+        /// <summary>
+        /// cLuxMap::LoadCheckPoint (after death): the player at the check point start, a short fade in, the check
+        /// point music again, then the callback (name, count) as the last thing.
+        /// </summary>
+        public void LoadCheckPoint()
+        {
+            if (logDebugMessages) Debug.Log($"[Script debug] Loading check point {CheckPointName} Count: {CheckPointCount}");
+            PlacePlayerAtStartPos(CheckPointStartPos);
+            // not ported: enemies are deactivated and reset, the player's terror enemies cleared (enemies, step 6).
+            effects?.Fade.FadeIn(0.2f);
+            var music = sound != null ? sound.Music : null;
+            if (music != null)
+            {
+                music.Reset();
+                if (CheckPointMusic != "")
+                    music.Play(CheckPointMusic, true, CheckPointMusicVolume, 1f, CheckPointMusicPrio, CheckPointMusicResume);
+            }
+            RunScript(CheckPointCallback, CheckPointName, CheckPointCount);
+            CheckPointCount++;
+        }
+
         public void PlacePlayerAtStartPos(string name)
         {
             if (player == null) return;

@@ -117,6 +117,7 @@ if (Test-Path $mapPath) {
     $pattern = '<Var Name="(AttachFunction|Callback|CallbackFunc|ConnectionStateChangeCallback|DiaryCallback|PlayerInteractCallback|PlayerLookAtCallback)" Value="([^"]+)"'
     $mapCallbacks = [regex]::Matches($mapText, $pattern) | ForEach-Object { $_.Groups[2].Value } | Sort-Object -Unique
     foreach ($f in $mapCallbacks) {
+        if ($f -notmatch '^[A-Za-z_]\w*$') { continue }  # not a function name (some entities keep other data in "Callback")
         $inPort = $cs -match "(?m)^[ \t]*(?:public |protected |private |override |static )*[\w\[\]<>]+[ \t]+$f[ \t]*\("
         if ($inPort) { continue }
         if ($funcs -contains $f) { Err "коллбэк карты $f не найден в порте" }

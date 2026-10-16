@@ -9,9 +9,9 @@ namespace RTXMnesia.ScriptApi
         protected void SetMessage(string asTextCategory, string asTextEntry, float afTime) =>
             Hud.Messages.SetMessage(Translate(asTextCategory, asTextEntry), afTime);
 
-        protected void SetDeathHint(string asTextCategory, string asTextEntry) { }
+        protected void SetDeathHint(string asTextCategory, string asTextEntry) => Player.Death.SetHint(asTextCategory, asTextEntry);
 
-        protected void DisableDeathStartSound() { }
+        protected void DisableDeathStartSound() => Player.Death.DisableStartSound();
 
         protected void AddNote(string asNameAndTextEntry, string asImage) => HplGame.AddJournalEntry("Note", asNameAndTextEntry, asImage);
 

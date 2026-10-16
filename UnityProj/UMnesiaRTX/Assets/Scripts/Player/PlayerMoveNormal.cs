@@ -381,7 +381,7 @@ namespace RTXMnesia.Player
 
             _bounceSizeMul = _fallDamageBounceSizeMul;
             _bounceSpeedMul = _fallDamageBounceSpeedMul;
-            _player.GiveDamage(damage);
+            _player.GiveDamage(damage, 100, DamageType.BloodSplat, false, false);
             _player.PlaySound(sound);
         }
 

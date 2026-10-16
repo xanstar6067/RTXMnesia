@@ -291,6 +291,19 @@ namespace RTXMnesia.EditorDev
                                 log.Info($"t={time,6:0.00}     light {l.l.name}: {l.v:0.000} visible {l.l.Visible} box {l.l.box}");
                             continue;
                         }
+                        case "health":
+                        {
+                            // health: health, the hurt effect, HUD splashes / flash, death and the check point.
+                            var death = player.Death;
+                            var hudFx = player.HudEffect;
+                            log.Info($"t={time,6:0.00}   health {player.health:0.00} sanity {player.sanity:0.00} dead {player.IsDead} pos {player.Body.Position:F2} " +
+                                     $"roll {player.Roll * Mathf.Rad2Deg:0.0} pitch {player.Pitch * Mathf.Rad2Deg:0.0} yaw {player.Yaw * Mathf.Rad2Deg:0.0} | " +
+                                     $"hurt {player.Hurt.Alpha:0.00} noise {player.Hurt.CurrentNoise} move× {player.MoveSpeedMul:0.00} head {player.GetHeadPosAdd(RTXMnesia.Player.HeadPosAdd.Hurt).y:0.000} | " +
+                                     $"splashes {hudFx.Splashes.Count} flash {(hudFx.FlashActive ? hudFx.FlashAlpha.ToString("0.00") : "-")} | " +
+                                     $"death {(death.Active ? $"state {death.State} fade {death.FadeAlpha:0.00} text {death.TextAlpha:0.00} \"{death.CurrentHintText}\" deathY {player.GetHeadPosAdd(RTXMnesia.Player.HeadPosAdd.Death).y:0.00}" : "-")} " +
+                                     $"hint {death.HintCat}/{death.HintEntry} | check point {map?.CheckPointName} at {map?.CheckPointStartPos} count {map?.CheckPointCount}");
+                            continue;
+                        }
                         case "sounds":
                         {
                             // sounds: the playing sound entries, sound entities and music.

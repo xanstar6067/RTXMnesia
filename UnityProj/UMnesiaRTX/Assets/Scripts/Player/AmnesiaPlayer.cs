@@ -99,7 +99,8 @@ namespace RTXMnesia.Player
         public bool PressingRun { get; private set; }
         public bool PressingJump { get; private set; }
         public Vector3 CameraRight => playerCamera != null ? playerCamera.transform.right : Body.Right;
-        public float MoveSpeedMul => scriptMoveSpeedMul * eventMoveSpeedMul * interactionMoveSpeedMul * (InsanityCollapseHelper != null ? InsanityCollapseHelper.SpeedMul : 1f);
+        public float MoveSpeedMul => scriptMoveSpeedMul * eventMoveSpeedMul * interactionMoveSpeedMul * (Hurt != null ? Hurt.MoveSpeedMul : 1f) *
+                                     (InsanityCollapseHelper != null ? InsanityCollapseHelper.SpeedMul : 1f);
         public float RunSpeedMul => scriptRunSpeedMul * eventRunSpeedMul;
 
         // ------------------------------------------------------------------ interaction (step 4.3)
@@ -181,6 +182,8 @@ namespace RTXMnesia.Player
             public string handObject;
             public PlayerHands.HandsState handState;
             public float handAlpha;
+            // cLuxPlayerDeath: the death hint stays for the whole game.
+            public string deathHintCat, deathHintEntry;
         }
 
         public Carry CaptureCarry() => new()
@@ -195,6 +198,7 @@ namespace RTXMnesia.Player
             handObject = Hands != null ? Hands.CurrentHandObject : "",
             handState = Hands != null ? Hands.State : PlayerHands.HandsState.Disabled,
             handAlpha = Hands != null ? Hands.HandObjectAlpha : 0f,
+            deathHintCat = Death != null ? Death.HintCat : "", deathHintEntry = Death != null ? Death.HintEntry : "",
         };
 
         public void ApplyCarry(Carry c)
@@ -217,6 +221,7 @@ namespace RTXMnesia.Player
             Array.Copy(c.headOffsets, _headOffsets, Math.Min(c.headOffsets.Length, _headOffsets.Length));
             if (c.crouching && MoveState != null) MoveState.RestoreCrouch();
             Hands?.Restore(c.handObject, c.handState, c.handAlpha);
+            Death?.SetHint(c.deathHintCat, c.deathHintEntry);
         }
 
         /// <summary>cLuxPlayer::DoAction: the state first; if it lets the action through, the lantern key toggles the lantern.</summary>
@@ -322,6 +327,12 @@ namespace RTXMnesia.Player
             SanityHelper = new PlayerSanity(this, cfg);
             CamDirEffects = new PlayerCamDirEffects(this, cfg);
             InsanityCollapseHelper = new PlayerInsanityCollapse(this, cfg);
+            HudEffect = new PlayerHudEffect();
+            Hurt = new PlayerHurt(this, cfg);
+            Death = new PlayerDeath(this, cfg);
+            _headSpinDamageSpeed = cfg.GetFloat("Player_General", "HeadSpinDamageSpeed", 0f);
+            _headSpinDeacc = cfg.GetFloat("Player_General", "HeadSpinDeacc", 0f);
+            _autoKillYPos = cfg.GetFloat("Player_General", "AutoKillYPos", 0f);
             // The hands are a world entity of Play mode (edit-mode simulations have no animation clock).
             if (Application.isPlaying) Hands = PlayerHands.Create(this, cfg);
         }
@@ -342,6 +353,12 @@ namespace RTXMnesia.Player
         public PlayerCamDirEffects CamDirEffects { get; private set; }
         /// <summary>cLuxPlayerInsanityCollapse.</summary>
         public PlayerInsanityCollapse InsanityCollapseHelper { get; private set; }
+        /// <summary>cLuxPlayerHudEffect (damage splashes, HUD flash).</summary>
+        public PlayerHudEffect HudEffect { get; private set; }
+        /// <summary>cLuxPlayerHurt (health regain, hurt noise, panting, slower movement).</summary>
+        public PlayerHurt Hurt { get; private set; }
+        /// <summary>cLuxPlayerDeath.</summary>
+        public PlayerDeath Death { get; private set; }
 
         void Start()
         {
@@ -416,7 +433,16 @@ namespace RTXMnesia.Player
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && !cursorWasLocked) LockCursor(true);
             if (_freeCameraActive) return;
 
-            // cLuxInputHandler::UpdateGamePlayerInput: an inactive player gets no input at all.
+            // cLuxInputHandler::UpdateGamePlayerInput: a dead player's attack / interact / ignite / jump / crouch
+            // keys only skip the death text; an inactive player gets no input at all.
+            if (IsDead)
+            {
+                held = default;
+                bool pressed = (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.leftCtrlKey.wasPressedThisFrame)) ||
+                               (mouse != null && cursorWasLocked && (mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame));
+                if (pressed) Death?.OnPressButton();
+                return;
+            }
             if (!active)
             {
                 held = default;
@@ -511,19 +537,25 @@ namespace RTXMnesia.Player
             MoveState.Update(dt);
             States.Current.Update(dt);
             UpdateHeadPosAdd(dt);
+            UpdateHeadSpin(dt);
             // Helpers in cLuxPlayer's order (HudEffect, LightLevel, InDarkness, Lean, Death, Hands, Lantern, Sanity,
             // LookAt, Flashback, Hurt, SpawnPS, CamDirEffects, InsanityCollapse).
+            HudEffect.Update(dt);
             LightLevel.Update(dt);
             InDarkness.Update(dt);
             Lean.Update(dt);
+            Death.Update(dt);
             Hands?.Update(dt);
             Lantern.Update(dt);
             SanityHelper.Update(dt);
             LookAt.Update(dt);
             Flashback.Update(dt);
+            Hurt.Update(dt);
             CamDirEffects.Update(dt);
             InsanityCollapseHelper.Update(dt);
             PressedMove = false;
+            // Too far down (fell out of the map): dead.
+            if (Body.Position.y < _autoKillYPos) SetHealth(0f);
             collideCallbacks?.Invoke();
             UpdateCameraEffects(dt);
             UpdateFocusText(dt);
@@ -758,28 +790,71 @@ namespace RTXMnesia.Player
 
         // ------------------------------------------------------------------ misc
 
-        /// <summary>cLuxPlayer::GiveDamage (hud splash, flash and head spin come with step 6).</summary>
-        public void GiveDamage(float amount, bool lethal = false)
+        /// <summary>
+        /// cLuxPlayer::GiveDamage: damage splash, red HUD flash, head spin; a non lethal hit leaves at least 10 health.
+        /// The strength is only used by the enemies' attacks (step 6).
+        /// </summary>
+        public void GiveDamage(float amount, int strength, DamageType type, bool spinHead, bool lethal)
         {
             if (health <= 0f) return;
             health -= amount;
+            HudEffect.AddDamageSplash(type);
+            HudEffect.Flash(new Color(0.6f, 0f, 0f, 0.5f), 0f, 0.25f);
+            if (spinHead) SpinHead(_headSpinDamageSpeed);
             if (!lethal && health < 10f) health = 10f;
-            if (health <= 0f) Died?.Invoke();
+            if (health <= 0f) StartDeath();
         }
 
         public void SetHealth(float x)
         {
             if (health <= 0f && x <= 0f) return;
             health = x;
-            if (health <= 0f) Died?.Invoke();
+            if (health <= 0f) StartDeath();
         }
 
         public void AddHealth(float x)
         {
             if ((health >= 100f && x > 0f) || health < 0f) return;
             health = Mathf.Min(100f, health + x);
-            if (health <= 0f) Died?.Invoke();
+            if (health <= 0f) StartDeath();
         }
+
+        void StartDeath()
+        {
+            Death.Start();
+            Died?.Invoke();
+        }
+
+        float _headSpinDamageSpeed, _headSpinDeacc, _autoKillYPos;
+        Vector2 _headSpinSpeed; // HPL2 (yaw, pitch) per second
+
+        /// <summary>cLuxPlayer::SpinHead: a random direction, mostly sideways and up.</summary>
+        public void SpinHead(float speed)
+        {
+            _headSpinSpeed = new Vector2(HplMath.RandRectf(-1f, 1f), HplMath.RandRectf(0f, 0.5f));
+            if (_headSpinSpeed.x == 0f && _headSpinSpeed.y == 0f) _headSpinSpeed.x = 1f;
+            else _headSpinSpeed.Normalize();
+            _headSpinSpeed *= speed;
+        }
+
+        /// <summary>cLuxPlayer::UpdateHeadSpin: turns the camera directly (HPL2 angles), slowing by HeadSpinDeacc.</summary>
+        void UpdateHeadSpin(float dt)
+        {
+            if (_headSpinSpeed == Vector2.zero) return;
+            // HPL2 pitch / yaw are minus the Unity ones; the camera limits apply.
+            _pitch = Mathf.Clamp(_pitch - _headSpinSpeed.y * dt, _pitchMin, _pitchMax);
+            _yaw -= _headSpinSpeed.x * dt;
+            if (_yawLimited) _yaw = Mathf.Clamp(_yaw, _yawMin, _yawMax);
+            Body.Yaw = _yaw;
+            float length = Mathf.Max(0f, _headSpinSpeed.magnitude - dt * _headSpinDeacc);
+            _headSpinSpeed = _headSpinSpeed.normalized * length;
+        }
+
+        /// <summary>
+        /// cLuxPlayer::SetCurrentHandObjectDrawn: draws / holsters the equipped hand object item. Only items of type
+        /// HandObject are equipped (the lantern is its own type) and the game has none, so this does nothing.
+        /// </summary>
+        public void SetCurrentHandObjectDrawn(bool drawn) { }
 
         public void SetSanity(float x) => sanity = x;
 

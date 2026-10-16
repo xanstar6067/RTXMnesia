@@ -107,7 +107,7 @@
 1. Сверка всех карт партии: «ошибок 0».
 2. Прогоны всех карт партии: без исключений, все `[Script] ERROR` разобраны.
 3. **Регрессия** — запустить и приложить строки PASS:
-   - `RTXMnesia.EditorDev.MapChangePreview.RunBatch` (без `-quit` и без `-nographics`): ожидается `PASS: 60 ...`;
+   - `RTXMnesia.EditorDev.MapChangePreview.RunBatch` (без `-quit` и без `-nographics`): ожидается `PASS: 66 ...`;
    - `RTXMnesia.EditorDev.MainMenuPreview.RunBatch` (так же): ожидается 27 / 50 / 36 / 14 / 14 PASS.
 
    Если что-то упало — **не чинить движок и не отключать проверку**, а остановиться и написать в отчёт, что упало и после какой карты.

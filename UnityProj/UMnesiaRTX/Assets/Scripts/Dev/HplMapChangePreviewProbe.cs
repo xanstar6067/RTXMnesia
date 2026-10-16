@@ -2,12 +2,14 @@
 using System;
 using System.Collections;
 using System.IO;
+using RTXMnesia.Player;
 using RTXMnesia.Props;
 using RTXMnesia.ScriptApi;
 using RTXMnesia.Ui;
 using HplInventoryAssets = RTXMnesia.Ui.HplInventoryAssets;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace RTXMnesia.Dev
 {
@@ -261,7 +263,42 @@ namespace RTXMnesia.Dev
             Check(map.GetEntityByName("slime_pile_1") is { Active: true }, "Guardian event did not show the slime");
             CaptureCamera(map.PlayerCamera, "Guardian.png");
 
-            string report = $"PASS: {_checks} Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots {Folder}";
+            // Damage, hurt and death (cLuxPlayerHudEffect, cLuxPlayerHurt, cLuxPlayerDeath): the HUD images of the
+            // Play loop, then a lethal hit and the respawn at the check point of the last map start.
+            RawImage HudImage(string name)
+            {
+                foreach (var image in map.hud.Canvas.GetComponentsInChildren<RawImage>(true)) if (image.name == name) return image;
+                return null;
+            }
+            float healthBefore = player.health;
+            player.GiveDamage(60f, 1, DamageType.Claws, true, false);
+            Check(Mathf.Abs(player.health - Mathf.Max(10f, healthBefore - 60f)) < 0.01f && player.HudEffect.Splashes.Count == 2 && player.HudEffect.FlashActive,
+                  $"Damage: health {healthBefore} -> {player.health}, splashes {player.HudEffect.Splashes.Count}, flash {player.HudEffect.FlashActive}");
+            yield return new WaitForSecondsRealtime(1f);
+            var noise = HudImage("Hurt noise");
+            int splashImages = 0;
+            foreach (var image in map.hud.Canvas.GetComponentsInChildren<RawImage>()) if (image.name == "Damage splash" && image.enabled) splashImages++;
+            Check(player.Hurt.Alpha > 0.1f && noise != null && noise.enabled && noise.color.g < 0.95f && noise.texture != null && splashImages == 2,
+                  $"Hurt HUD: alpha {player.Hurt.Alpha}, noise {(noise != null ? $"{noise.enabled} {noise.color}" : "missing")}, splash images {splashImages}");
+            Check(player.MoveSpeedMul < 1f, "Hurt does not slow the player: " + player.MoveSpeedMul);
+
+            string checkPoint = map.CheckPointStartPos;
+            player.GiveDamage(200f, 1, DamageType.Slash, true, true);
+            yield return new WaitForSecondsRealtime(5f);
+            var deathFade = HudImage("Death fade");
+            Check(player.IsDead && player.Death.Active && deathFade != null && deathFade.enabled && deathFade.color.r < 0.1f &&
+                  player.Roll > 60f * Mathf.Deg2Rad && map.sound.GetGlobalVolume(Sound.SoundEntryType.World) < 0.5f,
+                  $"Death: dead {player.IsDead}, active {player.Death.Active}, fade {(deathFade != null ? $"{deathFade.enabled} {deathFade.color}" : "missing")}, roll {player.Roll * Mathf.Rad2Deg}");
+            Check(player.Death.CurrentHintText != "" && player.Death.TextAlpha > 0.5f, "Death hint text: " + player.Death.CurrentHintText + " " + player.Death.TextAlpha);
+            deadline = Time.realtimeSinceStartupAsDouble + 20;
+            while (player.Death.Active && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+            yield return null; // the HUD refreshes in LateUpdate, after this coroutine
+            var respawnStart = map.GetPlayerStart(checkPoint);
+            Check(!player.Death.Active && !player.IsDead && player.health >= 50f && !deathFade.enabled && respawnStart != null &&
+                  Vector3.Distance(player.Body.FeetPosition, respawnStart.transform.position) < 0.3f && map.CheckPointCount == 1,
+                  $"Respawn: active {player.Death.Active}, health {player.health}, at {player.Body.FeetPosition} vs {checkPoint}, count {map.CheckPointCount}");
+
+            string report = $"PASS: {_checks} Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots {Folder}";
             File.WriteAllText(Path.Combine(Folder, "PlayTests.txt"), report);
             Debug.Log(report);
         }

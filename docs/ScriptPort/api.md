@@ -79,7 +79,7 @@
 | `RemoveItem` | 12 | 55 | ✓ | `void RemoveItem(string &in asName)` |
 | `GiveHint` | 12 | 12 | ✓ | `void GiveHint(string &in asName, string &in asMessageCat, string &in asMessageEntry, float afTimeShown)` |
 | `GetLocalVarFloat` | 12 | 33 | ✓ | `float GetLocalVarFloat(string &in asName)` |
-| `CheckPoint` | 12 | 48 | ~ | `void CheckPoint(string &in asName,string &in asStartPos ,string &in asCallback, string &in asDeathHintCat, string &in asDeathHintEntry)` |
+| `CheckPoint` | 12 | 48 | ✓ | `void CheckPoint(string &in asName,string &in asStartPos ,string &in asCallback, string &in asDeathHintCat, string &in asDeathHintEntry)` |
 | `TeleportPlayer` | 11 | 19 | ✓ | `void TeleportPlayer(string &in asStartPosName)` |
 | `SetPlayerCrouchDisabled` | 11 | 25 | ✓ | `void SetPlayerCrouchDisabled(bool abX)` |
 | `RotatePropToSpeed` | 11 | 34 | ✓ | `void RotatePropToSpeed(string &in asName, float afAcc, float afGoalSpeed, float afAxisX, float afAxisY, float afAxisZ, bool abResetSpeed, string &in asOffsetArea)` |
@@ -110,7 +110,7 @@
 | `SetFogProperties` | 5 | 6 | ~ | `void SetFogProperties(float afStart, float afEnd, float afFalloffExp, bool abCulling)` |
 | `SetFogColor` | 5 | 6 | ✓ | `void SetFogColor(float afR, float afG, float afB, float afA)` |
 | `HasItem` | 5 | 24 | ✓ | `bool HasItem(string &in asName)` |
-| `GivePlayerDamage` | 5 | 32 | ~ | `void GivePlayerDamage(float afAmount, string &in asType, bool abSpinHead, bool abLethal)` |
+| `GivePlayerDamage` | 5 | 32 | ✓ | `void GivePlayerDamage(float afAmount, string &in asType, bool abSpinHead, bool abLethal)` |
 | `AddGlobalVarInt` | 5 | 13 | ✓ | `void AddGlobalVarInt(string &in asName, int alVal)` |
 | `SetPlayerLampOil` | 4 | 4 | ✓ | `void SetPlayerLampOil(float afOil)` |
 | `SetMoveObjectStateExt` | 4 | 5 | ✓ | `void SetMoveObjectStateExt(string &in asName, float afState, float afAcc, float afMaxSpeed, float afSlowdownDist, bool abResetSpeed)` |
@@ -133,7 +133,7 @@
 | `SetEntityCustomFocusCrossHair` | 2 | 5 | ✓ | `void SetEntityCustomFocusCrossHair(string &in asName, string &in asCrossHair)` |
 | `SetEntityCallbackFunc` | 2 | 2 | ~ | `void SetEntityCallbackFunc(string &in asName, string &in asCallback)` |
 | `SetEnemyDisabled` | 2 | 3 | — | `void SetEnemyDisabled(string &in asName, bool abDisabled)` |
-| `SetDeathHint` | 2 | 2 | — | `void SetDeathHint(string &in asTextCategory, string &in asTextEntry)` |
+| `SetDeathHint` | 2 | 2 | ✓ | `void SetDeathHint(string &in asTextCategory, string &in asTextEntry)` |
 | `InteractConnectPropWithRope` | 2 | 9 | — | `void InteractConnectPropWithRope(string &in asName, string& asLeverName, string& asPropName, bool abInteractOnly, float afSpeedMul,float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed)` |
 | `GetEntitiesCollide` | 2 | 2 | ✓ | `bool GetEntitiesCollide(string &in asEntityA, string &in asEntityB)` |
 | `CreateEntityAtArea` | 2 | 5 | ✓ | `void CreateEntityAtArea(string &in asEntityName, string &in asEntityFile, string &in asAreaName, bool abFullGameSave)` |
@@ -151,7 +151,7 @@
 | `GetPlayerLampOil` | 1 | 1 | ✓ | `float GetPlayerLampOil()` |
 | `GetLeverState` | 1 | 5 | ✓ | `int GetLeverState(string &in asName)` |
 | `GetEntityExists` | 1 | 3 | ✓ | `bool GetEntityExists(string &in asName)` |
-| `DisableDeathStartSound` | 1 | 7 | — | `void DisableDeathStartSound()` |
+| `DisableDeathStartSound` | 1 | 7 | ✓ | `void DisableDeathStartSound()` |
 | `CreateRope` | 1 | 1 | — | `void CreateRope(string &in asName,string &in asStartArea, string &in asEndArea, string &in asStartBody, string &in asEndBody,float afMinTotalLength, float afMaxTotalLength,float afSegmentLength, float afDamping,float afStrength, float afStiffness, string &in asMaterial, float afRadius, float afLengthTileAmount, float afLengthTileSize, string &in asSound,float afSoundStartSpeed, float afSoundStopSpeed,bool abAutoMove, float afAutoMoveAcc, float afAutoMoveMaxSpeed)` |
 | `AddPropHealth` | 1 | 1 | ✓ | `void AddPropHealth(string &in asName, float afHealth)` |
 | `AddPlayerLampOil` | 1 | 1 | ✓ | `void AddPlayerLampOil(float afOil)` |
@@ -223,3 +223,7 @@ GiveItemFromFile читает определения `.ent` из генерир�
 ## Рассудок и темнота
 
 `GiveSanityDamage` — ✓: подсказка SanityHit, удар `cLuxPlayerSanity::StartHit` (звук, наезд камеры), потеря рассудка с эффектом (сердцебиение, утечка, эффект безумия), обморок ниже 0. `SetSanityDrainDisabled` — ✓: отключает потерю рассудка в темноте (`cLuxPlayerInDarkness`). `SetInDarknessEffectsActive` — ✓ (без вызовов в картах): `cLuxPlayerInDarkness::SetActive`. `SetInsanitySetEnabled`, `StartInsanityEvent`, `StartRandomInsanityEvent` — пока пропускаются (`cLuxInsanityHandler`).
+
+## Урон и смерть
+
+`GivePlayerDamage` — ✓: тип по строке без учёта регистра (`claws`, `slash`, иначе BloodSplat), сила 1; брызги, красная вспышка HUD, поворот головы, не смертельный удар оставляет 10, ниже 0 — смерть (`cLuxPlayer::GiveDamage`). `CheckPoint` — ✓: `cLuxMap::SetCheckPoint` (только новое имя, запоминает зацикленную музыку высшего приоритета) + подсказка смерти; после смерти `LoadCheckPoint` ставит игрока на стартовую точку и вызывает коллбэк `(имя, счётчик)`. `SetDeathHint`, `DisableDeathStartSound` — ✓ (`cLuxPlayerDeath`). `SetPlayerHealth` / `AddPlayerHealth` при здоровье ≤ 0 начинают смерть.

@@ -31,7 +31,7 @@ namespace RTXMnesia.Ui
         public Canvas Canvas => _canvas;
 
         /// <summary>The text layers in drawing order (for tools).</summary>
-        public IEnumerable<HplGuiText> TextLayers => new[] { _focusText, _gameText, _hintText };
+        public IEnumerable<HplGuiText> TextLayers => new[] { _focusText, _gameText, _deathText, _hintText };
 
         /// <summary>Text draw calls of the frame per layer (for tools).</summary>
         public string DescribeText() =>
@@ -47,8 +47,13 @@ namespace RTXMnesia.Ui
 
         HplMap _map;
         Canvas _canvas;
-        HplGuiText _gameText, _hintText, _focusText;
+        HplGuiText _gameText, _hintText, _focusText, _deathText;
         RawImage _questIcon, _questGlow, _crosshair;
+        // Player HUD effects (cLuxPlayerHurt, cLuxPlayerHudEffect, cLuxPlayerDeath).
+        RawImage _hurtNoise, _hudFlash, _deathFade;
+        RectTransform _screen, _splashLayer;
+        readonly List<RawImage> _splashImages = new();
+        Material _alphaMaterial, _modulativeMaterial;
         readonly RawImage[] _crosshairGlow = new RawImage[3];
         Vector2 _voiceFontSize = new(18f, 18f);
         float _voiceRowWidth = 600f;
@@ -171,6 +176,7 @@ namespace RTXMnesia.Ui
             _gameText.Clear();
             _hintText.Clear();
             _focusText.Clear();
+            _deathText.Clear();
 
             // cLuxEffect_PlayVoice::OnDraw: rows ending at y = 580, left aligned at 400 - width / 2.
             string voice = effects != null && effects.PlayVoice.Active && showSubtitles ? effects.PlayVoice.CurrentText : "";
@@ -237,6 +243,117 @@ namespace RTXMnesia.Ui
             _questGlow.color = new Color(glowAlpha, glowAlpha, glowAlpha, 1f);
 
             RefreshCrosshair();
+            RefreshPlayerEffects();
+        }
+
+        /// <summary>
+        /// cLuxPlayerHurt / cLuxPlayerHudEffect / cLuxPlayerDeath OnDraw. The noise, flash and splashes (z -1..1) and
+        /// the death fade (z 3) are under the screen fade of HPL2's HUD set (z 3.2), the death text (z 6) above it.
+        /// Here the screen fade is already in the image: alpha blended colors are scaled by (1 - fade), which gives
+        /// the same result; modulative images need nothing.
+        /// </summary>
+        void RefreshPlayerEffects()
+        {
+            var player = _map != null ? _map.player : null;
+            float fade = _map != null && _map.effects != null ? Mathf.Clamp01(_map.effects.Fade.Alpha) : 0f;
+            Vector2 full = ((RectTransform)_canvas.transform).rect.size;
+            if (full.x <= 0f || full.y <= 0f) full = new Vector2(800f, 600f);
+            foreach (var image in new[] { _hurtNoise, _hudFlash, _deathFade }) image.rectTransform.sizeDelta = full;
+
+            // Hurt noise: 256×256 tiles from the top left of the whole screen, colored (1, 1 - a, 1 - a), modulative.
+            var hurt = player != null ? player.Hurt : null;
+            var assets = HplHudEffectAssets.Instance;
+            Texture2D noise = hurt != null && hurt.Alpha > 0f && assets != null && hurt.CurrentNoise < assets.hurtNoise.Length
+                ? assets.hurtNoise[hurt.CurrentNoise] : null;
+            _hurtNoise.enabled = noise != null;
+            if (noise != null)
+            {
+                noise.wrapMode = TextureWrapMode.Repeat;
+                _hurtNoise.texture = noise;
+                _hurtNoise.uvRect = new Rect(0f, 1f - full.y / 256f, full.x / 256f, full.y / 256f);
+                _hurtNoise.color = new Color(1f, 1f - hurt.Alpha, 1f - hurt.Alpha, 1f);
+            }
+
+            // Damage splashes on the virtual screen, then the flash over the whole screen (both alpha blended).
+            var hudEffect = player != null ? player.HudEffect : null;
+            int count = hudEffect != null ? hudEffect.Splashes.Count : 0;
+            while (_splashImages.Count < count)
+            {
+                var image = CreateImage(_splashLayer, "Damage splash", new Rect(0f, 0f, 1f, 1f), _alphaMaterial);
+                _splashImages.Add(image);
+            }
+            for (int i = 0; i < _splashImages.Count; i++)
+            {
+                var image = _splashImages[i];
+                image.enabled = i < count;
+                if (i >= count) continue;
+                var splash = hudEffect.Splashes[i];
+                image.texture = splash.image;
+                image.color = new Color(1f - fade, 1f - fade, 1f - fade, splash.alpha * splash.alphaMul);
+                Place(image.rectTransform, new Rect(splash.pos, splash.size));
+            }
+            bool flash = hudEffect != null && hudEffect.FlashActive && hudEffect.FlashAlpha > 0f;
+            _hudFlash.enabled = flash;
+            if (flash)
+            {
+                var c = hudEffect.FlashColor;
+                _hudFlash.color = new Color(c.r * (1f - fade), c.g * (1f - fade), c.b * (1f - fade), c.a * hudEffect.FlashAlpha);
+            }
+
+            // Death: the whole screen times (1 - fade alpha), then the hint text with waving letters.
+            var death = player != null ? player.Death : null;
+            bool dead = death != null && death.Active;
+            _deathFade.enabled = dead;
+            if (!dead) return;
+            float keep = 1f - death.FadeAlpha;
+            _deathFade.color = new Color(keep, keep, keep, 1f);
+            if (!death.ShowHint || defaultFont == null || string.IsNullOrEmpty(death.CurrentHintText)) return;
+
+            var fontSize = new Vector2(32f, 32f);
+            float mul = 1.5f + (1f - death.TextAlpha) * 4f;
+            float y = 300f;
+            foreach (string row in defaultFont.GetWordWrapRows(550f, fontSize, death.CurrentHintText))
+            {
+                float x = 400f - defaultFont.GetLength(fontSize * mul, row) / 2f;
+                for (int i = 0; i < row.Length; i++)
+                {
+                    float tAdd = 0.3f * i;
+                    float yAdd = Mathf.Sin(death.T * 0.5f + tAdd) * 5f + Mathf.Cos(death.T * 0.97f - tAdd * 2.73f) * 3.5f;
+                    string ch = row.Substring(i, 1);
+                    var pos = new Vector2(x, y + yAdd - fontSize.y * 0.5f * mul);
+                    var size = new Vector2(fontSize.x, fontSize.y + Mathf.Abs(yAdd) * 1.5f) * mul;
+                    _deathText.DrawFont(ch, pos, size, new Color(1f, 1f, 1f, death.TextAlpha));
+
+                    float blurAlpha = death.TextAlpha < 0.5f ? death.TextAlpha / 0.5f : 1f - (death.TextAlpha - 0.5f) / 0.5f;
+                    _deathText.DrawFont(ch, pos + size * 0.05f, size * 1.1f, new Color(1f, 1f, 1f, blurAlpha * 0.3f), HplFontAlign.Right);
+                    _deathText.DrawFont(ch, pos + size * 0.15f, size * 1.3f, new Color(1f, 1f, 1f, blurAlpha * 0.2f), HplFontAlign.Right);
+
+                    x += defaultFont.GetLength(fontSize * mul, ch);
+                }
+                y += fontSize.y * 1.35f;
+            }
+        }
+
+        /// <summary>An image over the whole screen (centered on the virtual screen, sized in RefreshPlayerEffects).</summary>
+        RawImage CreateFullScreenImage(string name, Material material)
+        {
+            var image = CreateImage(_screen, name, new Rect(0f, 0f, 800f, 600f), material);
+            var rect = image.rectTransform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            image.texture = Texture2D.whiteTexture;
+            return image;
+        }
+
+        Material GuiMaterial(string name, UnityEngine.Rendering.BlendMode src, UnityEngine.Rendering.BlendMode dst)
+        {
+            var assets = HplHudEffectAssets.Instance;
+            var shader = assets != null && assets.guiShader != null ? assets.guiShader : Shader.Find("Hidden/RTXMnesia/HplGui");
+            if (shader == null) return null;
+            var material = new Material(shader) { hideFlags = HideFlags.DontSave, name = name };
+            material.SetFloat("_SrcBlend", (float)src);
+            material.SetFloat("_DstBlend", (float)dst);
+            return material;
         }
 
         /// <summary>cLuxPlayer::CanDrawCrossHair + DrawHud: the state's crosshair, the focus text fading.</summary>
@@ -312,6 +429,16 @@ namespace RTXMnesia.Ui
             screen.SetParent(go.transform, false);
             screen.anchorMin = screen.anchorMax = new Vector2(0.5f, 0.5f);
             screen.sizeDelta = new Vector2(800f, 600f);
+            _screen = screen;
+
+            // Player HUD effects under the other HUD elements: hurt noise (z -1), flash (0), damage splashes (1).
+            _alphaMaterial = GuiMaterial("HUD alpha", UnityEngine.Rendering.BlendMode.SrcAlpha, UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            _modulativeMaterial = GuiMaterial("HUD modulative", UnityEngine.Rendering.BlendMode.DstColor, UnityEngine.Rendering.BlendMode.Zero);
+            _hurtNoise = CreateFullScreenImage("Hurt noise", _modulativeMaterial);
+            _hudFlash = CreateFullScreenImage("HUD flash", _alphaMaterial);
+            _splashLayer = new GameObject("Damage splashes", typeof(RectTransform)).GetComponent<RectTransform>();
+            _splashLayer.SetParent(screen, false);
+            Place(_splashLayer, new Rect(0f, 0f, 800f, 600f));
 
             if (defaultFont == null || hintsFont == null || focusFont == null)
                 HplLog.Warn("HUD fonts missing: re-import the level to convert the game fonts");
@@ -329,7 +456,10 @@ namespace RTXMnesia.Ui
 
             // Text layers in the HUD set's depth order: focus text (z 1), messages / voices / emotion text (4), hints (20).
             _focusText = CreateText(screen, "Focus text", focusFont);
+            // Death: the fade (z 3) under the game text (4), the death hint (6) above it.
+            _deathFade = CreateFullScreenImage("Death fade", _modulativeMaterial);
             _gameText = CreateText(screen, "Game text", defaultFont);
+            _deathText = CreateText(screen, "Death text", defaultFont);
             _hintText = CreateText(screen, "Hint text", hintsFont);
             Refresh();
         }

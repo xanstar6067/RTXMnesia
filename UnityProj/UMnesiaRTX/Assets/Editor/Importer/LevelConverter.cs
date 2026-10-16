@@ -1480,6 +1480,7 @@ namespace RTXMnesia.Importer
             LoadScreenConverter.Convert(_index, map.language, map.menuConfig, _log);
             PostEffectsConverter.Convert(_log);
             FlashbackConverter.Convert(_log);
+            HudEffectsConverter.Convert(_log);
 
             var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
             sound.bank = SoundConverter.Convert(_log, map.language);
