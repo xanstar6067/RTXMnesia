@@ -107,6 +107,7 @@ namespace RTXMnesia.ScriptApi
         MapChangeData _mapChange;
         bool _leaving;
         HplMapChange.Arrival _arrival;
+        RTXMnesia.Save.SaveGame _loadGame;
 
         Fog _fog;
         AmnesiaLevel _level;
@@ -176,6 +177,8 @@ namespace RTXMnesia.ScriptApi
             // A map change loaded this scene: the player starts at the asked position (AmnesiaPlayer.Start).
             if (!menuBackground && Application.isPlaying) _arrival = HplMapChange.Take(mapFile);
             if (_arrival != null && player != null) player.startArea = _arrival.StartPos;
+            // A save is being loaded into this map (cLuxSaveHandler::LoadSaveGameData).
+            if (!menuBackground && _arrival == null) _loadGame = RTXMnesia.Save.HplSaveHandler.TakePending(mapFile);
             if (effects == null && !TryGetComponent(out effects)) effects = gameObject.AddComponent<HplEffects>();
             if (hud == null && !TryGetComponent(out hud)) hud = gameObject.AddComponent<HplHud>();
             effects.Init(this);
@@ -309,6 +312,12 @@ namespace RTXMnesia.ScriptApi
                 Arrive(_arrival);
                 return;
             }
+            if (_loadGame != null)
+            {
+                LoadGame(_loadGame);
+                _loadGame = null;
+                return;
+            }
             foreach (var enemy in _enemies) enemy.OnMapEnter();
             // New game / a map opened directly: cLuxMapHandler::SetCurrentMap (first time) + OnStart / OnEnter.
             if (player != null && !Campaign.IsJustine) SetCheckPoint("_auto", player.startArea, "");
@@ -347,7 +356,17 @@ namespace RTXMnesia.ScriptApi
             Debug.Log($"[RTXMnesia] Entering map {MapName} ({(firstTime ? "first visit" : "saved state")}), loaded in {loadTime:0.00} s");
         }
 
-        /// <summary>cLuxMap::PlacePlayerAtStartPos: an unknown position is an error, then the first start.</summary>
+        /// <summary>
+        /// cLuxSaveHandler::LoadSaveGameData into this freshly loaded map: the entities and modules take the saved state;
+        /// OnStart / OnEnter do not run (the check point, timers and variables are the saved ones).
+        /// </summary>
+        void LoadGame(RTXMnesia.Save.SaveGame save)
+        {
+            foreach (var enemy in _enemies) enemy.OnMapEnter();
+            RTXMnesia.Save.HplSaveGame.Load(this, save);
+            Debug.Log($"[RTXMnesia] Loaded saved game of map {MapName} ({save.date})");
+        }
+
         /// <summary>
         /// cLuxMap::SetCheckPoint: a new name only; remembers the highest priority looping music (its volume without
         /// the music handler's volume multiplier).
@@ -406,6 +425,7 @@ namespace RTXMnesia.ScriptApi
             CheckPointCount++;
         }
 
+        /// <summary>cLuxMap::PlacePlayerAtStartPos: an unknown position is an error, then the first start.</summary>
         public void PlacePlayerAtStartPos(string name)
         {
             if (player == null) return;
@@ -629,6 +649,9 @@ namespace RTXMnesia.ScriptApi
             if (entity is HplProp prop) prop.DestroyMe = true;
             _destroy.Add(entity);
         }
+
+        /// <summary>iLuxEntity::GetDestroyMe: destroyed in this step, not saved any more.</summary>
+        public bool IsDestroyPending(HplEntity entity) => _destroy.Contains(entity);
 
         void DestroyPendingEntities()
         {

@@ -206,6 +206,26 @@ namespace RTXMnesia.Effects
             if (CurrentEventIndex >= 0) _events[CurrentEventIndex].OnMapLeave();
         }
 
+        /// <summary>cLuxInsanityHandler_SaveData::FromInsanityHandler: the wait, the used flags, the disabled sets.</summary>
+        public static Save.InsanitySave CaptureSave()
+        {
+            var save = new Save.InsanitySave { newEventCount = NewEventCount };
+            foreach (var e in _events) save.used.Add(e.Used);
+            save.disabledSets.AddRange(_disabledSets);
+            return save;
+        }
+
+        /// <summary>cLuxInsanityHandler_SaveData::ToInsanityHandler: the used flags only when the event count matches.</summary>
+        public static void ApplySave(HplMap map, Save.InsanitySave save)
+        {
+            EnsureLoaded(map != null ? map.gameConfig : null);
+            NewEventCount = save.newEventCount;
+            if (save.used.Count == _events.Count)
+                for (int i = 0; i < _events.Count; i++) _events[i].Used = save.used[i];
+            _disabledSets.Clear();
+            foreach (string set in save.disabledSets) _disabledSets.Add(set);
+        }
+
         /// <summary>For the simulation log.</summary>
         public static string Describe() =>
             $"insanity event {(CurrentEvent != null ? CurrentEvent.Name : "-")} wait {NewEventCount:0.0} " +

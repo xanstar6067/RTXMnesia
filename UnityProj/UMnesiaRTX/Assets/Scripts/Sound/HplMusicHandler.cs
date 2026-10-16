@@ -473,6 +473,56 @@ namespace RTXMnesia.Sound
             }
         }
 
+        /// <summary>cLuxMusicHandler_SaveData::FromMusicHandler (enemies by id are not kept: the enemies of a loaded map re-register).</summary>
+        public RTXMnesia.Save.MusicSave CaptureSave()
+        {
+            var save = new RTXMnesia.Save.MusicSave
+            {
+                currentMaxPrio = _currentMaxPrio,
+                enemyClosePlaying = _enemyClosePlaying,
+                attackPlaying = _enemyPlaying[(int)Enemies.EnemyMusic.Attack],
+                searchPlaying = _enemyPlaying[(int)Enemies.EnemyMusic.Search],
+            };
+            if (_mainSong != null)
+            {
+                save.currentMusic = _mainSong.File;
+                save.currentMaxVolume = _mainSong.MaxVolume;
+                save.currentVolume = _mainSong.Volume;
+                save.currentVolumeAdd = _mainSong.VolumeAdd;
+                save.currentTime = _mainSong.Elapsed;
+                save.currentLoop = _mainSong.Loop;
+            }
+            foreach (var m in _gameMusic)
+                save.music.Add(new RTXMnesia.Save.MusicSlotSave { file = m.File ?? "", loop = m.Loop, resume = m.Resume, volume = m.Volume });
+            return save;
+        }
+
+        /// <summary>cLuxMusicHandler_SaveData::ToMusicHandler: the current song from its saved time, then the priorities.</summary>
+        public void ApplySave(RTXMnesia.Save.MusicSave save)
+        {
+            if (!string.IsNullOrEmpty(save.currentMusic) && PlaySong(save.currentMusic, save.currentMaxVolume, 0.1f, save.currentLoop, false) && _mainSong != null)
+            {
+                _mainSong.MaxVolume = save.currentMaxVolume;
+                _mainSong.Volume = save.currentVolume;
+                _mainSong.VolumeAdd = save.currentVolumeAdd;
+                _mainSong.Loop = save.currentLoop;
+                _mainSong.Elapsed = save.currentTime;
+                var clip = _mainSong.Source.clip;
+                if (clip != null && clip.length > 0f)
+                    _mainSong.Source.time = save.currentLoop ? save.currentTime % clip.length : Mathf.Min(save.currentTime, clip.length - 0.01f);
+                _mainSong.Source.volume = _mainSong.Volume * _volumeMul;
+            }
+            _currentMaxPrio = save.currentMaxPrio;
+            _enemyClosePlaying = save.enemyClosePlaying;
+            _enemyPlaying[(int)Enemies.EnemyMusic.Attack] = save.attackPlaying;
+            _enemyPlaying[(int)Enemies.EnemyMusic.Search] = save.searchPlaying;
+            for (int i = 0; i < _gameMusic.Length && i < save.music.Count; i++)
+            {
+                var m = save.music[i];
+                _gameMusic[i] = new GameMusic { File = m.file ?? "", Loop = m.loop, Resume = m.resume, Volume = m.volume };
+            }
+        }
+
         internal void StopAllNow()
         {
             if (_mainSong != null) Release(_mainSong);

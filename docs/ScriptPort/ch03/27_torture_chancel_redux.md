@@ -79,7 +79,7 @@
 - Таймеры SmallObjectCogWait/WeakObjectCogWait/TimerInteractCogWheel имеют пустые callbacks: исходный движок пишет Script call without a function name.
 - В исходной карте отсутствуют barrier_spotlight_2 и barrier_spotlight_weak_2. PSOrbStream_1 — имя созданной системы частиц; PlaySoundAtEntity ищет сущность и не находит. Литералы сохранены.
 - Проверяются оба порядка завершения машины/сферы, смола и отказ без неё, все шесть частей, barrier orb absorption и снятие блокера; разные CP и падение. Диагностические выдачи/прямые callbacks не заменяют физическое решение коробкой.
-- AutoSave — NotPorted. ChangePlayerStateToNormal и PreloadSound — пустые API. Grunt/brute используют уже существующий EnemyGrunt, новых механик врага карта не добавляет.
+- AutoSave с 2026-10-17 работает (сохранения перенесены (CLAUDE.md «Сохранения»)). ChangePlayerStateToNormal и PreloadSound — пустые API. Grunt/brute используют уже существующий EnemyGrunt, новых механик врага карта не добавляет.
 
 Общие изменения синтаксиса: string &in / string & → string; десятичные литералы → float с f; существующие статические callback-имена → nameof, динамические/пустые/необъявленные остаются строками. Порядок вызовов, исходные литералы, ветви и комментарии сохранены. API/инвентарь/импортёр в этой задаче не исправлялись. Статическая проверка нашла все имена API и совместимые сигнатуры; наличие объявления не означает реализованную механику.
 
@@ -98,7 +98,7 @@
 
 | API | Фактический статус |
 |---|---|
-| `AutoSave` | NotPorted / условная реализация |
+| `AutoSave` | ✓ (2026-10-17) |
 | `ChangePlayerStateToNormal` | пустая операция |
 | `PreloadSound` | пустая операция |
 

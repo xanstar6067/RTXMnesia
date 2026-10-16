@@ -7,10 +7,11 @@ namespace RTXMnesia.ScriptApi
     /// <summary>
     /// Game-wide state that outlives a map: global script variables (cLuxGlobalDataHandler), quest notes
     /// (cLuxJournal), given / blocked hints (cLuxHintHandler) and inventory items by name (cLuxInventory).
-    /// Reset for a new game (and when play mode starts). Saving comes with step 6.
+    /// Reset for a new game (and when play mode starts); a save file holds it (<see cref="CaptureSave"/>).
     /// </summary>
     public static class HplGame
     {
+        [Serializable]
         public class QuestNote
         {
             public string name;
@@ -19,6 +20,7 @@ namespace RTXMnesia.ScriptApi
             public bool active;
         }
 
+        [Serializable]
         public class Item
         {
             public string name;
@@ -30,6 +32,7 @@ namespace RTXMnesia.ScriptApi
             public int count = 1;
         }
 
+        [Serializable]
         public sealed class CombineCallback
         {
             public string name, itemA, itemB, function;
@@ -48,6 +51,7 @@ namespace RTXMnesia.ScriptApi
             if (first) InventoryScript.OnStart();
         }
 
+        [Serializable]
         public sealed class JournalEntry
         {
             public string type, textEntry, image;
@@ -228,6 +232,61 @@ namespace RTXMnesia.ScriptApi
             HplSavedMaps.Reset();
             HplMapChange.ClearPending();
             Ui.HplLoadScreen.ResetText();
+        }
+
+        // ------------------------------------------------------------------ save (step 6)
+
+        /// <summary>cLuxInventory_SaveData, cLuxJournal_SaveData, cLuxGlobalDataHandler_SaveData, cLuxHintHandler_SaveData.</summary>
+        public static void CaptureSave(Save.SaveGame save, HplMap map)
+        {
+            save.inventory = new Save.InventorySave
+            {
+                items = new List<Item>(Items),
+                combineCallbacks = new List<CombineCallback>(CombineCallbacks),
+                scriptStarted = InventoryScript != null,
+                disabled = map != null && map.Script != null && map.Script.InventoryDisabled,
+            };
+            save.journal = new Save.JournalSave
+            {
+                entries = new List<JournalEntry>(JournalEntries),
+                quests = new List<QuestNote>(Quests),
+                lastReadEntry = LastReadEntry != null ? JournalEntries.IndexOf(LastReadEntry) : -1,
+                showJournalOnDiaryPickup = ShowJournalOnDiaryPickup,
+            };
+            save.globalVars.Clear();
+            foreach (var pair in GlobalVars) save.globalVars.Add(new Save.SavedVar { name = pair.Key, value = pair.Value });
+            save.hintsGiven = new List<string>(HintsGiven);
+            save.hintsBlocked = new List<string>(HintsBlocked);
+        }
+
+        /// <summary>
+        /// The ToInventory / ToJournal / ToGlobalDataHandler / ToHintHandler part of loading a save, on a reset game. The
+        /// inventory script is loaded without its OnGameStart: its combine callbacks come from the save.
+        /// </summary>
+        public static void ApplySave(Save.SaveGame save, HplMap map)
+        {
+            Items.Clear();
+            Items.AddRange(save.inventory.items);
+            CombineCallbacks.Clear();
+            CombineCallbacks.AddRange(save.inventory.combineCallbacks);
+            if (save.inventory.scriptStarted && !map.Campaign.IsJustine)
+            {
+                InventoryScript = new Levels.InventoryScript { Map = map };
+            }
+            if (map.Script != null) map.Script.InventoryDisabled = save.inventory.disabled;
+            JournalEntries.Clear();
+            JournalEntries.AddRange(save.journal.entries);
+            Quests.Clear();
+            Quests.AddRange(save.journal.quests);
+            int last = save.journal.lastReadEntry;
+            LastReadEntry = last >= 0 && last < JournalEntries.Count ? JournalEntries[last] : null;
+            ShowJournalOnDiaryPickup = save.journal.showJournalOnDiaryPickup;
+            GlobalVars.Clear();
+            foreach (var v in save.globalVars) GlobalVars[v.name] = v.value;
+            HintsGiven.Clear();
+            HintsGiven.UnionWith(save.hintsGiven);
+            HintsBlocked.Clear();
+            HintsBlocked.UnionWith(save.hintsBlocked);
         }
 
         /// <summary>cLuxGlobalDataHandler::GetVar: created empty on first use.</summary>

@@ -17,6 +17,10 @@ namespace RTXMnesia.EditorDev
             var root = new GameObject("Main menu checks") { hideFlags = HideFlags.HideAndDontSave };
             int checks = 0;
             void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); checks++; }
+            // An empty save folder: the title shows Continue / Load game only with saves.
+            string saves = Path.GetFullPath("Logs/MainMenuCheck/Saves");
+            if (Directory.Exists(saves)) Directory.Delete(saves, true);
+            RTXMnesia.Save.HplSaveHandler.FolderOverride = saves;
             try
             {
                 var map = root.AddComponent<HplMap>(); map.menuBackground = true;
@@ -40,17 +44,31 @@ namespace RTXMnesia.EditorDev
                 Check(ui.Choose(MenuControl.Cancel) && ui.Settings.mouseSensitivity == sensitivity, "Cancel on title screen applied draft preferences");
                 Check(ui.Choose(MenuControl.Quit) && ui.PendingConfirmation == MenuControl.ConfirmQuit, "Exit did not use its own confirmation"); ui.Choose(MenuControl.Cancel);
                 ui.Pause(); Check(ui.IsTitleScreen && !map.IsMenuPaused && Time.timeScale == 0.75f, "Title pause action changed world state");
+                // With a save: Continue / Start game / Load game / Options / Exit (cLuxMainMenu::CreateTopMenuGui).
+                string folder = RTXMnesia.Save.HplSaveHandler.Folder(map.Campaign);
+                Directory.CreateDirectory(folder);
+                File.WriteAllText(Path.Combine(folder, "AutoSave_DanielsRoom_2026_10_17_1_2_3_0.sav"), "{}");
+                ui.Choose(MenuControl.Options); ui.Choose(MenuControl.Cancel); // back to the list: the save check runs again
+                Check(ui.Menu.ButtonCount == 5 && ui.Menu.ControlAt(0) == MenuControl.Continue && ui.Menu.ControlAt(1) == MenuControl.NewGame &&
+                      ui.Menu.ControlAt(2) == MenuControl.LoadGame, "Title with a save is not Continue / New Game / Load Game / Options / Exit");
+                Check(ui.Choose(MenuControl.Continue) && ui.PendingConfirmation == MenuControl.ConfirmContinue && !ui.IsTransitioning, "Continue bypassed its confirmation");
+                ui.Choose(MenuControl.Cancel);
+                Check(ui.Choose(MenuControl.LoadGame) && ui.Menu.ControlAt(0) == MenuControl.LoadSlot && !ui.IsTransitioning, "Load game did not list the save");
+                Check(ui.Choose(MenuControl.LoadOk) && !ui.ConfirmingQuit, "Load game confirmed with nothing selected");
+                ui.Choose(MenuControl.Cancel);
+                Check(ui.Menu.ControlAt(0) == MenuControl.Continue, "Cancel did not return from the load window");
                 var scenes = EditorBuildSettings.scenes;
                 Check(scenes.Length >= 2 && scenes[0].enabled && scenes[0].path == HplGameUi.MainMenuScene && scenes[1].enabled && scenes[1].path == HplGameUi.FirstLevelScene, "Build scene order does not start at title menu / include the first map");
                 var globalScenes = EditorBuildSettings.globalScenes;
                 Check(globalScenes.Length >= 2 && globalScenes[0].path == HplGameUi.MainMenuScene && globalScenes[1].path == HplGameUi.FirstLevelScene, "Shared scene list still points at SampleScene");
                 Check(File.Exists(HplGameUi.MainMenuScene) && File.Exists(HplGameUi.FirstLevelScene), "Required scene missing");
-                string report = $"PASS: {checks} main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).";
+                string report = $"PASS: {checks} main menu model checks (localization, controls, confirmation, preferences, live world, continue / load game, build scene order).";
                 Directory.CreateDirectory("Logs/MainMenuCheck"); File.WriteAllText("Logs/MainMenuCheck/Tests.txt", report); Debug.Log(report);
             }
             finally
             {
                 UnityEngine.Object.DestroyImmediate(root); Time.timeScale = scale; Cursor.lockState = cursorLock; Cursor.visible = cursorVisible;
+                RTXMnesia.Save.HplSaveHandler.FolderOverride = null;
                 HplGame.Reset();
             }
         }

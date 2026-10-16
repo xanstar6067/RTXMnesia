@@ -477,6 +477,71 @@ namespace RTXMnesia.Enemies
             else Object.DestroyImmediate(_queryShape.gameObject);
         }
 
+        /// <summary>
+        /// iLuxEnemy::SaveToSaveData beyond the plain fields (saved with every entity): the body, the patrol nodes by id,
+        /// the sound state, the current animation, the mover and the path.
+        /// </summary>
+        public Save.EnemySave CaptureSave()
+        {
+            var save = new Save.EnemySave
+            {
+                feet = Body != null ? Body.FeetPosition : GameObject.transform.position,
+                yaw = _hplYaw,
+                soundState = (int)SoundState,
+                mover = Save.HplFieldBag.Capture(Mover, typeof(EnemyMover)),
+            };
+            foreach (var p in PatrolNodes)
+                save.patrol.Add(new Save.SavedPatrolNode { nodeId = p.node.Id, waitTime = p.waitTime, animation = p.animation, loopAnimation = p.loopAnimation });
+            if (CurrentAnimation != null)
+            {
+                save.animation = CurrentAnimation.Name;
+                save.animationTime = CurrentAnimation.TimePosition;
+                save.animationLoop = CurrentAnimation.Loop;
+            }
+            Pathfinder?.Save(save);
+            return save;
+        }
+
+        /// <summary>iLuxEnemy::LoadFromSaveData + SetupSaveData, after the plain fields: the state is set, not entered.</summary>
+        public void RestoreSave(Save.EnemySave save)
+        {
+            if (Body != null)
+            {
+                Body.StopMovement();
+                Body.SetFeetPosition(save.feet);
+            }
+            SetHplYaw(save.yaw);
+            _entityYPositions.Clear();
+            ChangeSoundState((EnemySoundState)save.soundState);
+            Save.HplFieldBag.Restore(Mover, typeof(EnemyMover), save.mover);
+
+            PatrolNodes.Clear();
+            var container = Pathfinder?.NodeContainer;
+            if (container != null)
+                foreach (var p in save.patrol)
+                {
+                    var node = container.GetNodeFromId(p.nodeId);
+                    if (node == null)
+                    {
+                        HplLog.Error($"Could not find patrol node id: {p.nodeId} for '{Name}'!");
+                        continue;
+                    }
+                    PatrolNodes.Add(new EnemyPatrolNode { node = node, waitTime = p.waitTime, animation = p.animation, loopAnimation = p.loopAnimation });
+                }
+
+            CurrentAnimation = null;
+            var anim = Animation != null && save.animation != "" ? Animation.Get(save.animation) : null;
+            if (anim != null)
+            {
+                anim.SetActive(true);
+                anim.Weight = 1f;
+                anim.Loop = save.animationLoop;
+                anim.SetTimePosition(save.animationTime);
+                CurrentAnimation = anim;
+            }
+            Pathfinder?.Load(save);
+        }
+
         public override Transform AttachTransform => Model != null ? Model.transform : GameObject.transform;
 
         /// <summary>The HPL2 yaw of the body.</summary>

@@ -127,13 +127,13 @@
 |---|---|---|
 | `AddAttachedPropToProp` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:275` |
 | `AttachBodyToStickyArea` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:369` |
-| `AutoSave` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.General.cs:119` |
+| `AutoSave` | ✓ (2026-10-17, сохранения перенесены (CLAUDE.md «Сохранения»)) | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.General.cs` |
 | `InteractConnectPropWithRope` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:488` |
 | `PreloadSound` | empty | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Effects.cs:75` |
 | `RemoveAttachedPropFromProp` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:278` |
 | `SetNPCAwake` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:373` |
 
-Grunt/brute и WaterLurker уже имеют ИИ в актуальном движке; скриптовая активация сама по себе не является проверкой всех состояний ИИ. AutoSave остаётся заглушкой. Пустой PreloadSound не проверяет ресурсы и не загружает их заранее.
+Grunt/brute и WaterLurker уже имеют ИИ в актуальном движке; скриптовая активация сама по себе не является проверкой всех состояний ИИ. AutoSave с 2026-10-17 пишет автосохранение (CLAUDE.md «Сохранения»). Пустой PreloadSound не проверяет ресурсы и не загружает их заранее.
 
 ## Импорт
 

@@ -38,6 +38,10 @@ namespace RTXMnesia.Dev
         IEnumerator Run()
         {
             Directory.CreateDirectory(Folder);
+            // Saves of this run in their own empty folder (the title shows Continue / Load game only with saves).
+            string saves = Path.Combine(Folder, "Saves");
+            if (Directory.Exists(saves)) Directory.Delete(saves, true);
+            RTXMnesia.Save.HplSaveHandler.FolderOverride = saves;
             yield return new WaitForSecondsRealtime(1.2f);
             var map = HplMap.Current;
             var title = map.GetComponent<HplMainMenu>(); var ui = title.Ui;
@@ -82,7 +86,39 @@ namespace RTXMnesia.Dev
             while (SceneManager.GetActiveScene().path != HplGameUi.FirstLevelScene && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
             yield return null; yield return null;
             Check(SceneManager.GetActiveScene().path == HplGameUi.FirstLevelScene && HplMap.Current.player != null && !HplGame.GlobalVars.ContainsKey("second_game") && HplGame.Items.Count == 0 && HplGame.JournalEntries.Count == 0 && Time.timeScale == 1, "Second new game did not start cleanly");
-            string report = $"PASS: {_checks} Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots {Folder}";
+
+            // Exit and save → Continue (cLuxMainMenu eLuxMainMenuExit_QuitAndSave, then ContinueGame → AutoLoad).
+            map = HplMap.Current;
+            yield return new WaitForSecondsRealtime(2f);
+            HplGame.SetGlobalVar("saved_progress", "7"); map.SetVar("saved_local", "3"); map.player.health = 61f;
+            Vector3 savedFeet = map.player.Body.FeetPosition;
+            ui = map.GameUi; ui.Pause(); yield return new WaitForSecondsRealtime(1.1f);
+            Check(ui.Choose(MenuControl.ExitAndSave) && ui.PendingConfirmation == MenuControl.ConfirmExitAndSave, "In-game menu has no confirmed exit and save");
+            CaptureSetup(map.PlayerCamera, ui.Menu.Canvas);
+            yield return new WaitForSecondsRealtime(0.2f); Capture("ExitAndSaveConfirmation.png"); CaptureCleanup();
+            ui.Choose(MenuControl.ConfirmExitAndSave);
+            Check(RTXMnesia.Save.HplSaveHandler.SaveFileExists(map.Campaign), "Exit and save wrote no save");
+            deadline = Time.realtimeSinceStartupAsDouble + 45;
+            while (SceneManager.GetActiveScene().path != HplGameUi.MainMenuScene && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+            yield return null; yield return null;
+            map = HplMap.Current; ui = map.GetComponent<HplMainMenu>().Ui;
+            Check(ui.Menu.ControlAt(0) == MenuControl.Continue && ui.Menu.ControlAt(2) == MenuControl.LoadGame, "Title after saving has no Continue / Load game");
+            CaptureSetup(map.PlayerCamera, ui.Menu.Canvas); yield return new WaitForSecondsRealtime(1.2f); Capture("MainMenuContinue.png");
+            Check(ui.Choose(MenuControl.LoadGame) && ui.Menu.ControlAt(0) == MenuControl.LoadSlot, "Load game window lists no save");
+            ui.Choose(MenuControl.LoadSlot);
+            yield return new WaitForSecondsRealtime(0.2f); Capture("LoadGame.png"); ui.Choose(MenuControl.Cancel); CaptureCleanup();
+            Check(ui.Choose(MenuControl.Continue) && ui.PendingConfirmation == MenuControl.ConfirmContinue, "Continue confirmation missing");
+            ui.Choose(MenuControl.ConfirmContinue);
+            deadline = Time.realtimeSinceStartupAsDouble + 45;
+            while (SceneManager.GetActiveScene().path != HplGameUi.FirstLevelScene && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+            yield return null; yield return null;
+            map = HplMap.Current;
+            Check(map != null && map.player != null && SceneManager.GetActiveScene().path == HplGameUi.FirstLevelScene, "Continue did not load the saved map");
+            Check(HplGame.GetGlobalVar("saved_progress") == "7" && map.GetVar("saved_local") == "3", "Continue lost global / local variables");
+            Check(Mathf.Abs(map.player.health - 61f) < 1f && Vector3.Distance(map.player.Body.FeetPosition, savedFeet) < 0.1f,
+                  $"Continue lost the player (health {map.player.health:0}, at {map.player.Body.FeetPosition} vs {savedFeet})");
+            Check(Time.timeScale == 1 && !map.IsMenuPaused && !RTXMnesia.Save.HplSaveHandler.LoadPending, "Loaded game is paused or the save still pending");
+            string report = $"PASS: {_checks} Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game, exit and save, continue, load game); screenshots {Folder}";
             File.WriteAllText(Path.Combine(Folder, "PlayTests.txt"), report); Debug.Log(report);
         }
         void CaptureSetup(Camera camera, Canvas canvas)
@@ -109,7 +145,7 @@ namespace RTXMnesia.Dev
         }
         void Finish(int code)
         {
-            CaptureCleanup(); UnityEditor.SessionState.SetInt("RTXMnesia.MainMenuPreview.ExitCode", code); UnityEditor.EditorApplication.isPlaying = false;
+            CaptureCleanup(); RTXMnesia.Save.HplSaveHandler.FolderOverride = null; UnityEditor.SessionState.SetInt("RTXMnesia.MainMenuPreview.ExitCode", code); UnityEditor.EditorApplication.isPlaying = false;
         }
     }
 }

@@ -116,7 +116,8 @@ namespace RTXMnesia.ScriptApi
 
         protected void StartDemoEnd() { }
 
-        protected void AutoSave() => NotPorted(nameof(AutoSave), "saving (step 6)");
+        /// <summary>cLuxScriptHandler::AutoSave → cLuxSaveHandler::AutoSave.</summary>
+        protected void AutoSave() => RTXMnesia.Save.HplSaveHandler.AutoSave(Map);
 
         /// <summary>cLuxMap::SetCheckPoint + the death hint (cLuxPlayerDeath::SetHint).</summary>
         protected void CheckPoint(string asName, string asStartPos, string asCallback, string asDeathHintCat, string asDeathHintEntry)

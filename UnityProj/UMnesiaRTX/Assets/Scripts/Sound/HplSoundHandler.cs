@@ -430,6 +430,42 @@ namespace RTXMnesia.Sound
                     _entries.Add(e == null ? null : new Entry { Val = e.Val, Dest = e.Dest, Speed = e.Speed, Types = e.Types, DestroyAtDest = e.DestroyAtDest });
             }
 
+            /// <summary>cLuxEffectHandler_SoundMul_SaveData::FromEntry for every index.</summary>
+            public List<RTXMnesia.Save.SoundMulSave> Save()
+            {
+                var list = new List<RTXMnesia.Save.SoundMulSave>();
+                foreach (var e in _entries)
+                    list.Add(e == null ? new RTXMnesia.Save.SoundMulSave()
+                        : new RTXMnesia.Save.SoundMulSave { active = true, val = e.Val, dest = e.Dest, speed = e.Speed, types = (int)e.Types, destroyAtDest = e.DestroyAtDest });
+                return list;
+            }
+
+            /// <summary>
+            /// cLuxEffectHandler_SoundMul_SaveData::ToEntry: commentary (5) and debug menu (6) entries are skipped as in
+            /// HPL2, and here also flashback (1), death (2) and insanity collapse (4): those player states are not
+            /// restored, so their entries would keep the world quiet.
+            /// </summary>
+            public void Load(List<RTXMnesia.Save.SoundMulSave> saved)
+            {
+                if (saved == null) return;
+                for (int i = 0; i < saved.Count; i++)
+                {
+                    if (i == 1 || i == 2 || i == 4 || i == 5 || i == 6) continue;
+                    var s = saved[i];
+                    if (!s.active)
+                    {
+                        DestroyEntry(i);
+                        continue;
+                    }
+                    var e = GetEntry(i, true);
+                    e.Val = s.val;
+                    e.Dest = s.dest;
+                    e.Speed = s.speed;
+                    e.Types = (SoundEntryType)s.types;
+                    e.DestroyAtDest = s.destroyAtDest;
+                }
+            }
+
             public Entry GetEntry(int index, bool forceCreation)
             {
                 if (index >= _entries.Count)

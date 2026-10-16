@@ -56,7 +56,7 @@ namespace RTXMnesia.ScriptApi
 
         // ------------------------------------------------------------------ inventory (items by name)
 
-        public bool InventoryDisabled { get; private set; }
+        public bool InventoryDisabled { get; internal set; }
 
         protected void ExitInventory() => Map.GameUi?.CloseInventory();
 

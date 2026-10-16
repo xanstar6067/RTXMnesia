@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using RTXMnesia.Save;
 using RTXMnesia.ScriptApi;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -13,12 +15,18 @@ namespace RTXMnesia.Ui
         public MenuControl PendingConfirmation { get; private set; } = MenuControl.ConfirmQuit;
         public bool ConfirmingQuit { get; private set; }
         public bool ShowingOptions { get; private set; }
+        /// <summary>The load game window (cLuxMainMenu_LoadGame) is open.</summary>
+        public bool ShowingLoad { get; private set; }
+        public IReadOnlyList<string> SaveFiles => _saveFiles;
+        public int SelectedSave => _selectedSave;
         public HplUserSettings DraftSettings { get; private set; }
 
         readonly HplGameUi _ui;
         readonly HplMap _map;
         readonly HplPauseMenu _menu;
         int _selected, _optionsTab;
+        readonly List<string> _saveFiles = new(), _saveLabels = new();
+        int _selectedSave = -1;
         MenuControl? _dragSlider;
 
         public HplMenuScreen(HplGameUi ui, HplPauseMenu menu)
@@ -33,6 +41,7 @@ namespace RTXMnesia.Ui
         {
             Reset();
             _selected = 0;
+            if (_ui.IsTitleScreen) _menu.HasSave = HplSaveHandler.SaveFileExists(_map.Campaign);
             _menu.SetVisible(true);
             Refresh();
         }
@@ -41,6 +50,7 @@ namespace RTXMnesia.Ui
         {
             ConfirmingQuit = false;
             ShowingOptions = false;
+            ShowingLoad = false;
             DraftSettings = null;
             _dragSlider = null;
         }
@@ -48,12 +58,31 @@ namespace RTXMnesia.Ui
         /// <summary>cLuxMainMenu::ExitPressed: closes a window, or the menu itself in game.</summary>
         public void Escape()
         {
-            if (ConfirmingQuit || ShowingOptions) Show();
+            // A confirmation of the load window goes back to the window, as its pop up does.
+            if (ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad) OpenLoadGame(_selectedSave);
+            else if (ConfirmingQuit || ShowingOptions || ShowingLoad) Show();
             else if (!_ui.IsTitleScreen) _ui.BeginClose();
         }
 
         public void Refresh() => _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
-            _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation);
+            _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad ? _saveLabels : null, _selectedSave);
+
+        /// <summary>cLuxMainMenu_LoadGame::OnSetActive → PopulateSavedGameList.</summary>
+        public void OpenLoadGame(int select = -1)
+        {
+            Reset();
+            ShowingLoad = true;
+            _saveFiles.Clear();
+            _saveLabels.Clear();
+            foreach (string file in HplSaveHandler.ListSaves(_map.Campaign))
+            {
+                _saveFiles.Add(file);
+                _saveLabels.Add(HplSaveHandler.GetProperSaveName(file, (cat, entry) => _map.hud.TryTranslate(cat, entry, out var text) ? text : entry));
+            }
+            _selectedSave = select >= 0 && select < _saveFiles.Count ? select : -1;
+            _selected = 0;
+            Refresh();
+        }
 
         public void Update(Keyboard keyboard)
         {
@@ -137,14 +166,48 @@ namespace RTXMnesia.Ui
                 case MenuControl.Quit:
                 case MenuControl.NewGame:
                 case MenuControl.ReturnTitle:
-                    PendingConfirmation = control == MenuControl.NewGame ? MenuControl.ConfirmNewGame
-                        : control == MenuControl.ReturnTitle ? MenuControl.ConfirmReturnTitle : MenuControl.ConfirmQuit;
+                case MenuControl.Continue:
+                case MenuControl.ExitAndSave:
+                    PendingConfirmation = control switch
+                    {
+                        MenuControl.NewGame => MenuControl.ConfirmNewGame,
+                        MenuControl.ReturnTitle => MenuControl.ConfirmReturnTitle,
+                        MenuControl.Continue => MenuControl.ConfirmContinue,
+                        MenuControl.ExitAndSave => MenuControl.ConfirmExitAndSave,
+                        _ => MenuControl.ConfirmQuit,
+                    };
                     ConfirmingQuit = true;
                     _selected = 1;
                     break;
                 case MenuControl.ConfirmNewGame: LoadScene(_map.Campaign.FirstScene, true); break;
                 case MenuControl.ConfirmReturnTitle: LoadScene(_map.Campaign.MenuScene, false); break;
-                case MenuControl.Cancel: Show(); break;
+                // eLuxMainMenuExit_ContinueGame → cLuxSaveHandler::AutoLoad: the newest save.
+                case MenuControl.ConfirmContinue: LoadSave(HplSaveHandler.GetNewestSaveFile(_map.Campaign)); break;
+                // eLuxMainMenuExit_QuitAndSave: auto save, then back to the title screen.
+                case MenuControl.ConfirmExitAndSave:
+                    HplSaveHandler.AutoSave(_map);
+                    LoadScene(_map.Campaign.MenuScene, false);
+                    break;
+                case MenuControl.LoadGame: OpenLoadGame(); break;
+                case MenuControl.LoadSlot:
+                    int row = _menu.DataAt(index);
+                    // A click on the selected row again loads it (the list's double click).
+                    if (row == _selectedSave && direction == 0) goto case MenuControl.LoadOk;
+                    _selectedSave = row;
+                    break;
+                case MenuControl.LoadOk:
+                    // cLuxMainMenu_LoadGame::PressOK: nothing selected → the warning stays in the window.
+                    if (_selectedSave < 0 || _selectedSave >= _saveFiles.Count) break;
+                    ShowingLoad = false;
+                    PendingConfirmation = MenuControl.ConfirmLoad;
+                    ConfirmingQuit = true;
+                    _selected = 1;
+                    break;
+                case MenuControl.ConfirmLoad: LoadSave(_saveFiles[_selectedSave]); break;
+                case MenuControl.Cancel:
+                    if (PendingConfirmation == MenuControl.ConfirmLoad && ConfirmingQuit) OpenLoadGame(_selectedSave);
+                    else Show();
+                    break;
                 case MenuControl.Apply:
                     _ui.Settings = DraftSettings.Copy();
                     _ui.Settings.Apply(_map);
@@ -167,6 +230,8 @@ namespace RTXMnesia.Ui
                 case MenuControl.SensitivityLess: DraftSettings.mouseSensitivity = Mathf.Clamp(DraftSettings.mouseSensitivity + 0.1f * less, 0.2f, 5f); break;
                 case MenuControl.SensitivityMore: DraftSettings.mouseSensitivity = Mathf.Clamp(DraftSettings.mouseSensitivity + 0.1f * more, 0.2f, 5f); break;
                 case MenuControl.ConfirmQuit:
+                    // cLuxMainMenu::OnQuit with a map loaded: auto save first (a dead player is not saved).
+                    if (!_ui.IsTitleScreen && _map.player != null && !_map.player.IsDead) HplSaveHandler.AutoSave(_map);
 #if UNITY_EDITOR
                     UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -181,6 +246,29 @@ namespace RTXMnesia.Ui
         void LoadScene(string path, bool newGame)
         {
             if (!_ui.BeginSceneLoad(path, newGame)) Show();
+        }
+
+        /// <summary>
+        /// cLuxMainMenu_LoadGame::LoadGame / AutoLoad: the save waits for its map scene (HplMap takes it instead of
+        /// OnStart / OnEnter); an unreadable file or a map not in the build leaves the menu as it was.
+        /// </summary>
+        void LoadSave(string file)
+        {
+            var save = file != null ? HplSaveHandler.ReadFile(file) : null;
+            string scene = save != null ? HplMapChange.FindScene(save.mapFile) : null;
+            if (save != null && scene == null)
+                Debug.LogError($"[RTXMnesia] Could not load the saved map '{save.mapFile}': no scene in the build (import the map, then Import > Main menu and build scenes)");
+            if (scene == null)
+            {
+                Show();
+                return;
+            }
+            HplSaveHandler.BeginLoad(save);
+            if (!_ui.BeginSceneLoad(scene, false))
+            {
+                HplSaveHandler.ClearPending();
+                Show();
+            }
         }
     }
 }

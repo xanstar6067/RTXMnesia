@@ -178,6 +178,7 @@ namespace RTXMnesia.Player
         /// cLuxPlayer::OnMapLeave resets the FOV / aspect / roll fades and the state (Normal); the script settings,
         /// health, sanity, oil, lantern, crouching and head offsets stay.
         /// </summary>
+        [Serializable]
         public sealed class Carry
         {
             public float moveSpeedMul, runSpeedMul, jumpForceMul, lookSpeedMul;
@@ -235,6 +236,37 @@ namespace RTXMnesia.Player
             if (Death != null) Death.PermaDeathSound = c.permaDeathSound ?? "";
         }
 
+        // cLuxPlayer_SaveData beyond the carry: the event speeds, the script's FOV / aspect / roll fades, terror, water.
+        static readonly string[] SavedFields =
+        {
+            nameof(eventMoveSpeedMul), nameof(eventRunSpeedMul),
+            nameof(_fovMul), nameof(_fovMulGoal), nameof(_fovMulSpeed), nameof(_aspectMul), nameof(_aspectMulGoal), nameof(_aspectMulSpeed),
+            nameof(_roll), nameof(_rollGoal), nameof(_rollSpeedMul), nameof(_rollMaxSpeed),
+            "<Terror>k__BackingField", "<IsInWater>k__BackingField", "<WaterSpeedMul>k__BackingField", "<WaterStepSound>k__BackingField",
+        };
+
+        /// <summary>cLuxPlayer_SaveData::FromPlayer.</summary>
+        public Save.PlayerSave CaptureSave() => new()
+        {
+            carry = CaptureCarry(),
+            feet = Body.FeetPosition,
+            yaw = _yaw,
+            pitch = _pitch,
+            active = active,
+            fields = Save.HplFieldBag.CaptureNamed(this, SavedFields),
+        };
+
+        /// <summary>cLuxPlayer_SaveData::ToPlayer: the state is Normal (the original's TODO for the move mode too).</summary>
+        public void ApplySave(Save.PlayerSave save)
+        {
+            ApplyCarry(save.carry);
+            active = save.active;
+            PlaceAt(save.feet, save.yaw);
+            _pitch = Mathf.Clamp(save.pitch, _pitchMin, _pitchMax);
+            Save.HplFieldBag.RestoreNamed(this, save.fields);
+            UpdateCameraTransform(1f);
+        }
+
         /// <summary>cLuxPlayer::DoAction: the state first; if it lets the action through, the lantern key toggles the lantern.</summary>
         public void DoAction(PlayerAction action, bool pressed)
         {
@@ -256,6 +288,7 @@ namespace RTXMnesia.Player
         /// <summary>Step sound request: type and walk/run/sneak (sounds come with the sound system).</summary>
         public event Action<FootSound, string> FootSounded;
 
+        [Serializable]
         public struct HeadOffset
         {
             public bool moving;

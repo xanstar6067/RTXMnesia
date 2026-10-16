@@ -104,7 +104,7 @@
 - Конкатенации float в отладочных строках — Str(float), G6/invariant.
 - ResetPortalCountDown снимает TimerPortalCountDownFlash, а фактический таймер называется PortalCountDownFlash. EndingSetup также содержит исходные несовпадающие имена снимаемых таймеров. Эти ошибки не исправлены.
 - Отсутствующий monolith01_2 и остановка ещё не созданных mono_sound1/2 остаются предупреждениями оригинальных обращений. OnEnter создаёт preloadhead как в источнике.
-- PlayPropAnimation, SetNPCFollowPlayer, AutoSave и StartCredits — NotPorted; ChangePlayerStateToNormal и PreloadSound — пустые. Поэтому срабатывание всей цепочки/запроса титров не означает работающие анимации Александра или титры.
+- PlayPropAnimation, SetNPCFollowPlayer и StartCredits — NotPorted (AutoSave с 2026-10-17 работает: сохранения перенесены (CLAUDE.md «Сохранения»)); ChangePlayerStateToNormal и PreloadSound — пустые. Поэтому срабатывание всей цепочки/запроса титров не означает работающие анимации Александра или титры.
 - Проверки головных областей задают WhatHeadArea перед использованием головы, чтобы динамический agrippa_head_obj появился в исходной точке _Place. При ручной имитации наклона колонны одноразовый collide callback снимается отдельно: прямой call сам его не расходует.
 
 Общие изменения синтаксиса: string &in / string & → string; десятичные литералы → float с f; существующие статические callback-имена → nameof, динамические/пустые/необъявленные остаются строками. Порядок вызовов, исходные литералы, ветви и комментарии сохранены. API/инвентарь/импортёр в этой задаче не исправлялись. Статическая проверка нашла все имена API и совместимые сигнатуры; наличие объявления не означает реализованную механику.
@@ -124,7 +124,7 @@
 
 | API | Фактический статус |
 |---|---|
-| `AutoSave` | NotPorted / условная реализация |
+| `AutoSave` | ✓ (2026-10-17) |
 | `ChangePlayerStateToNormal` | пустая операция |
 | `PlayPropAnimation` | NotPorted / условная реализация |
 | `PreloadSound` | пустая операция |

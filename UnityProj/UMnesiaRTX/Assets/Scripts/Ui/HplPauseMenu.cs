@@ -13,6 +13,7 @@ namespace RTXMnesia.Ui
         Subtitles, Hints, Crosshair, Fullscreen, VSync, VolumeLess, VolumeMore,
         SensitivityLess, SensitivityMore, InvertMouse, SmoothMouse,
         VolumeSlider, SensitivitySlider, NewGame, ReturnTitle, ConfirmNewGame, ConfirmReturnTitle,
+        Continue, ConfirmContinue, LoadGame, LoadSlot, LoadOk, ConfirmLoad, ExitAndSave, ConfirmExitAndSave,
     }
 
     /// <summary>In-game cLuxMainMenu: menu.cfg layout and gui_main_menu.skin on the same Canvas system as the HUD.</summary>
@@ -27,6 +28,7 @@ namespace RTXMnesia.Ui
         readonly bool _titleScreen;
         readonly List<RawImage> _pieces = new();
         readonly List<(Rect rect, MenuControl control)> _buttons = new();
+        readonly List<int> _buttonData = new();
         readonly List<(Rect rect, MenuControl control)> _sliders = new();
         int _pieceIndex, _selected;
         float _opacity;
@@ -35,6 +37,10 @@ namespace RTXMnesia.Ui
         public bool HasCursor => _cursor.texture != Texture2D.whiteTexture;
         public Canvas Canvas => _root.GetComponent<Canvas>();
         public MenuControl ControlAt(int index) => _buttons[index].control;
+        /// <summary>The save row of a <see cref="MenuControl.LoadSlot"/> button.</summary>
+        public int DataAt(int index) => _buttonData[index];
+        /// <summary>Title screen: Continue and Load game are shown (cLuxSaveHandler::SaveFileExists, checked when the menu opens).</summary>
+        public bool HasSave { get; set; }
 
         public HplPauseMenu(HplMap map, Transform parent, bool titleScreen = false)
         {
@@ -117,18 +123,20 @@ namespace RTXMnesia.Ui
             return Mathf.Clamp01((VirtualPoint(position).x - slider.rect.x) / slider.rect.width);
         }
 
-        public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer, MenuControl confirmation = MenuControl.ConfirmQuit)
+        public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer,
+                            MenuControl confirmation = MenuControl.ConfirmQuit, IReadOnlyList<string> saves = null, int selectedSave = -1)
         {
             _loadFade.color = Color.clear; _loadingText.Clear();
             _menuText.Clear();
             _guiText.Clear();
             _buttons.Clear();
+            _buttonData.Clear();
             _sliders.Clear();
             _pieceIndex = 0;
             _selected = selected;
             _opacity = opacity;
             _shade.color = new Color(0, 0, 0, _titleScreen ? 0 : 0.5f * opacity);
-            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options;
+            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options && saves == null;
             if (_logo.enabled)
             {
                 float width = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
@@ -140,6 +148,7 @@ namespace RTXMnesia.Ui
             }
             if (confirmQuit) Confirmation(confirmation);
             else if (options) Options(tab, settings);
+            else if (saves != null) LoadGame(saves, selectedSave);
             else Main();
             for (int i = _pieceIndex; i < _pieces.Count; i++) _pieces[i].enabled = false;
             if (HasCursor)
@@ -165,17 +174,37 @@ namespace RTXMnesia.Ui
             size = Vector2.Scale(size, new Vector2(800, 600));
             Vector2 pos = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", _titleScreen ? "TopMenuStartRelativePos" : "TopMenuStartRelativePosInGame", _titleScreen ? new Vector2(0.8f, 0.325f) : Vector2.one * 0.5f) : Vector2.one * 0.5f;
             pos = Vector2.Scale(pos, new Vector2(800, 600));
-            string[] labels = _titleScreen
-                ? new[] { T("MainMenu", "Start Game", "Новая игра"), T("MainMenu", "Options", "Настройки"), T("MainMenu", "Exit", "Выход") }
-                : new[] { T("MainMenu", "Back To Game", "Вернуться в игру"), T("MainMenu", "Options", "Настройки"), T("MainMenu", "ExitToMainMenu", "В главное меню"), T("MainMenu", "Exit", "Выход") };
-            var controls = _titleScreen ? new[] { MenuControl.NewGame, MenuControl.Options, MenuControl.Quit }
-                : new[] { MenuControl.Resume, MenuControl.Options, MenuControl.ReturnTitle, MenuControl.Quit };
+            // cLuxMainMenu::CreateTopMenuGui: Continue / Load game with a save on the title screen, Exit and save in
+            // game while the player lives; Exit stays in game too (like closing the window, it auto saves as OnQuit).
+            var labels = new List<string>();
+            var controls = new List<MenuControl>();
+            void Add(string key, string fallback, MenuControl control)
+            {
+                labels.Add(T("MainMenu", key, fallback));
+                controls.Add(control);
+            }
+            if (_titleScreen)
+            {
+                if (HasSave) Add("Continue", "Продолжить", MenuControl.Continue);
+                Add("Start Game", "Новая игра", MenuControl.NewGame);
+                if (HasSave) Add("Load Game", "Загрузить игру", MenuControl.LoadGame);
+                Add("Options", "Настройки", MenuControl.Options);
+                Add("Exit", "Выход", MenuControl.Quit);
+            }
+            else
+            {
+                Add("Back To Game", "Вернуться в игру", MenuControl.Resume);
+                Add("Options", "Настройки", MenuControl.Options);
+                Add("ExitToMainMenu", "В главное меню", MenuControl.ReturnTitle);
+                if (_map.player == null || !_map.player.IsDead) Add("ExitAndSave", "Сохранить и выйти", MenuControl.ExitAndSave);
+                Add("Exit", "Выход", MenuControl.Quit);
+            }
             float maxWidth = 0;
             foreach (var label in labels) maxWidth = Mathf.Max(maxWidth, _menuText.font != null ? _menuText.font.GetLength(size, label) : 0);
             float virtualWidth = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
             if (_titleScreen) pos.x = pos.x / 800 * virtualWidth - (virtualWidth - 800) * 0.5f;
             size *= Mathf.Clamp(maxWidth > 0 ? virtualWidth * 0.35f / maxWidth : 1, 0.7f, 1);
-            for (int i = 0; i < labels.Length; i++)
+            for (int i = 0; i < labels.Count; i++)
             {
                 float y = pos.y + i * size.y * 1.3f;
                 float width = _menuText.font != null ? _menuText.font.GetLength(size, labels[i]) : 300;
@@ -187,13 +216,39 @@ namespace RTXMnesia.Ui
         {
             Window(new Rect(165, 205, 470, 215));
             var size = Vector2.one * 18;
-            var question = action == MenuControl.ConfirmNewGame ? T("MainMenu", "Start a new game?", "Начать новую игру?")
-                : action == MenuControl.ConfirmReturnTitle ? T("MainMenu", "Sure you want to exit to main menu?", "Выйти в главное меню?")
-                : T("MainMenu", "Sure you want to quit?", "Выйти из игры?");
+            var question = action switch
+            {
+                MenuControl.ConfirmNewGame => T("MainMenu", "Start a new game?", "Начать новую игру?"),
+                MenuControl.ConfirmReturnTitle => T("MainMenu", "Sure you want to exit to main menu?", "Выйти в главное меню?"),
+                MenuControl.ConfirmContinue => T("MainMenu", "Continue old game?", "Продолжить прошлую игру?"),
+                MenuControl.ConfirmExitAndSave => T("MainMenu", "Sure you want to exit and save?", "Сохранить и выйти в главное меню?"),
+                MenuControl.ConfirmLoad => T("LoadGame", "LoadGameMessage", "Загрузить сохранённую игру?"),
+                _ => T("MainMenu", "Sure you want to quit?", "Выйти из игры?"),
+            };
             var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(410, size, question) : new List<string> { question };
             for (int i = 0; i < rows.Count; i++) Draw(_guiText, rows[i], new Vector2(400, 235 + i * 22), size, Color.white, HplFontAlign.Center);
-            Button(new Rect(260, 365, 120, 28), T("MainMenu", "Yes", "Да"), action);
-            Button(new Rect(420, 365, 120, 28), T("MainMenu", "No", "Нет"), MenuControl.Cancel);
+            bool okCancel = action == MenuControl.ConfirmLoad;
+            Button(new Rect(260, 365, 120, 28), okCancel ? T("Global", "OK", "OK") : T("MainMenu", "Yes", "Да"), action);
+            Button(new Rect(420, 365, 120, 28), okCancel ? T("Global", "Cancel", "Отмена") : T("MainMenu", "No", "Нет"), MenuControl.Cancel);
+        }
+
+        /// <summary>cLuxMainMenu_LoadGame: the saves, newest first; a click selects, OK loads after a confirmation.</summary>
+        void LoadGame(IReadOnlyList<string> saves, int selectedSave)
+        {
+            Window(new Rect(90, 70, 620, 460));
+            Draw(_guiText, T("LoadGame", "LoadGameTitle", "Загрузить игру"), new Vector2(125, 50), Vector2.one * 25, Color.white);
+            var size = Vector2.one * 16;
+            for (int i = 0; i < saves.Count && i < 20; i++)
+            {
+                Rect rect = new(110, 90 + i * 19, 580, 18);
+                if (i == selectedSave) Piece(null, rect, new Color(1, 1, 1, 0.15f));
+                Button(rect, saves[i], MenuControl.LoadSlot, null, size, HplFontAlign.Left);
+                _buttonData[_buttonData.Count - 1] = i;
+            }
+            if (saves.Count == 0)
+                Draw(_guiText, T("LoadGame", "NoGame", "Нет игры для загрузки"), new Vector2(400, 200), Vector2.one * 18, Color.white, HplFontAlign.Center);
+            Button(new Rect(500, 485, 80, 30), T("Global", "OK", "OK"), MenuControl.LoadOk);
+            Button(new Rect(590, 485, 95, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
         }
 
         void Options(int tab, HplUserSettings settings)
@@ -254,6 +309,7 @@ namespace RTXMnesia.Ui
         {
             int index = _buttons.Count;
             _buttons.Add((rect, action));
+            _buttonData.Add(-1);
             if (size == default) size = Vector2.one * 18;
             Draw(layer != null ? layer : _guiText, label, new Vector2(align == HplFontAlign.Left ? rect.x : rect.center.x, rect.y), size, index == _selected ? Highlight : Color.white, align);
         }

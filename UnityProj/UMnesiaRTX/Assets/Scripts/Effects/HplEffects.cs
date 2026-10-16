@@ -160,6 +160,45 @@ namespace RTXMnesia.Effects
             ScreenShake.CopyFrom(carry.ScreenShake);
         }
 
+        /// <summary>
+        /// cLuxEffectHandler_SaveData::FromEffectHandler: fade, image trail, sepia, radial blur (and the flash), the voice
+        /// lines not played yet with the over callback, and the global sound volume / speed entries.
+        /// </summary>
+        public Save.EffectsSave CaptureSave()
+        {
+            var save = new Save.EffectsSave
+            {
+                fade = Save.HplFieldBag.Capture(Fade, typeof(Effect)),
+                flash = Save.HplFieldBag.Capture(Flash, typeof(Effect)),
+                imageTrail = Save.HplFieldBag.Capture(ImageTrail, typeof(Effect)),
+                sepia = Save.HplFieldBag.Capture(Sepia, typeof(Effect)),
+                radialBlur = Save.HplFieldBag.Capture(RadialBlur, typeof(Effect)),
+            };
+            PlayVoice.Save(save);
+            if (Map != null && Map.sound != null)
+            {
+                save.globalVolume = Map.sound.GlobalVolume.Save();
+                save.globalSpeed = Map.sound.GlobalSpeed.Save();
+            }
+            return save;
+        }
+
+        /// <summary>cLuxEffectHandler_SaveData::ToEffectHandler.</summary>
+        public void ApplySave(Save.EffectsSave save)
+        {
+            Save.HplFieldBag.Restore(Fade, typeof(Effect), save.fade);
+            Save.HplFieldBag.Restore(Flash, typeof(Effect), save.flash);
+            Save.HplFieldBag.Restore(ImageTrail, typeof(Effect), save.imageTrail);
+            Save.HplFieldBag.Restore(Sepia, typeof(Effect), save.sepia);
+            Save.HplFieldBag.Restore(RadialBlur, typeof(Effect), save.radialBlur);
+            PlayVoice.Load(save);
+            if (Map != null && Map.sound != null)
+            {
+                Map.sound.GlobalVolume.Load(save.globalVolume);
+                Map.sound.GlobalSpeed.Load(save.globalSpeed);
+            }
+        }
+
         /// <summary>cLuxEffectHandler::Reset (new game, map change).</summary>
         public void ResetAll()
         {
@@ -611,6 +650,33 @@ namespace RTXMnesia.Effects
             }
 
             public void SetOverCallback(string function) => _overCallback = function ?? "";
+
+            /// <summary>cLuxEffectHandler_SaveData: the lines not played yet (the playing one is not saved), the over callback.</summary>
+            public void Save(RTXMnesia.Save.EffectsSave save)
+            {
+                save.voiceActive = Active;
+                save.voiceOverCallback = _overCallback;
+                save.voices.Clear();
+                foreach (var v in _voices)
+                    save.voices.Add(new RTXMnesia.Save.VoiceSave
+                    {
+                        voiceFile = v.voiceFile, effectFile = v.effectFile, text = v.text, usePosition = v.usePosition,
+                        position = v.position, minDistance = v.minDistance, maxDistance = v.maxDistance,
+                    });
+            }
+
+            public void Load(RTXMnesia.Save.EffectsSave save)
+            {
+                Active = save.voiceActive;
+                _overCallback = save.voiceOverCallback ?? "";
+                _voices.Clear();
+                foreach (var v in save.voices)
+                    _voices.Enqueue(new VoiceData
+                    {
+                        voiceFile = v.voiceFile, effectFile = v.effectFile ?? "", text = v.text ?? "", usePosition = v.usePosition,
+                        position = v.position, minDistance = v.minDistance, maxDistance = v.maxDistance,
+                    });
+            }
 
             public void SetInventoryPaused(bool paused)
             {

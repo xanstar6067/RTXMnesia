@@ -194,7 +194,7 @@
 | API | Фактический статус |
 |---|---|
 | `AddAttachedPropToProp` | NotPorted / условная реализация |
-| `AutoSave` | NotPorted / условная реализация |
+| `AutoSave` | ✓ (2026-10-17) |
 | `ChangePlayerStateToNormal` | пустая операция |
 | `DetachFromStickyArea` | NotPorted / условная реализация |
 | `InteractConnectPropWithRope` | NotPorted / условная реализация |

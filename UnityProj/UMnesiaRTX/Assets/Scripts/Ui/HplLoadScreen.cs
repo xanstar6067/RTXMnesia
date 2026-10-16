@@ -42,6 +42,20 @@ namespace RTXMnesia.Ui
             s_textRandomNum = s_prevTextNumBitFlags = 0;
         }
 
+        /// <summary>cLuxLoadScreenHandler_SaveData::FromLoadScreenHandler.</summary>
+        public static Save.LoadScreenSave CaptureSave() => new()
+        {
+            textCat = s_textCat, textEntry = s_textEntry, textImage = s_textImage,
+            textRandomNum = s_textRandomNum, prevTextNumBitFlags = s_prevTextNumBitFlags,
+        };
+
+        /// <summary>cLuxLoadScreenHandler_SaveData::ToLoadScreenHandler.</summary>
+        public static void ApplySave(Save.LoadScreenSave save)
+        {
+            SetupLoadText(save.textCat, save.textEntry, save.textRandomNum, save.textImage);
+            s_prevTextNumBitFlags = save.prevTextNumBitFlags;
+        }
+
         public static HplLoadScreen Current { get; private set; }
 
         /// <summary>The screen covers the game (loading, or the text after loading): the map does not update.</summary>

@@ -35,13 +35,13 @@
 | `CollideAreaCollideSeenDoor` (:637) | `CollideAreaCollideSeenDoor` | готов | |
 | `InteractLockedDoor` (:643), `TimerDoorMessageOnAgain` (:652) | те же имена | готов | `PlayerInteractCallback` двери `Door_3` в карте |
 | `OnStart` (:659) | `OldArchives.OnStart` | готов | |
-| `OnEnter` (:723) | `OldArchives.OnEnter` | готов | `ClearSavedMaps` очищает посещённые карты; `AutoSave` — шаг 6 |
+| `OnEnter` (:723) | `OldArchives.OnEnter` | готов | `ClearSavedMaps` очищает посещённые карты; `AutoSave` пишет автосохранение (с 2026-10-17) |
 | `OnLeave` (:746) | `OldArchives.OnLeave` | готов | пустая |
 
 ## Отличия от оригинала
 
 - Синтаксис AngelScript переведён на C# по правилам из README (`(int)RandFloat`, `||`, литералы `f`, `nameof`).
-- `AutoSave` пропускается с предупреждением: сохранения — шаг 6.
+- `AutoSave` с 2026-10-17 пишет автосохранение: сохранения перенесены (CLAUDE.md «Сохранения»); строки `skipped` ниже — из прогонов до этого.
 - `SetPropActiveAndFade` включает и выключает тараканов (`CritterBug`) сразу, без затухания модели и без поведения жуков: жуки (`cLuxCritter_Bug`) — шаг 6.
 - `01_idle.snt` у `AreaGrunt` — только звук; врагов на этой карте нет.
 

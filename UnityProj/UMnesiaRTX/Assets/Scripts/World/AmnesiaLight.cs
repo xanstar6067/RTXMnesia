@@ -189,6 +189,7 @@ namespace RTXMnesia.World
         public void StopFading() => _fadeTime = 0f;
 
         /// <summary>cEngineLight_SaveData (map cache) for a light of the map.</summary>
+        [System.Serializable]
         public sealed class SaveData
         {
             public bool visible, flickering, flickerFade;

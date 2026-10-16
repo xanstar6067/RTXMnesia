@@ -72,7 +72,7 @@
 | `ScriptDebugOn` | 15 | 36 | ✓ | `bool ScriptDebugOn()` |
 | `SetRadialBlurStartDist` | 14 | 59 | ✓ | `void SetRadialBlurStartDist(float afStartDist)` |
 | `SetLocalVarString` | 14 | 19 | ✓ | `void SetLocalVarString(string &in asName, string &in asVal)` |
-| `AutoSave` | 14 | 31 | — | `void AutoSave()` |
+| `AutoSave` | 14 | 31 | ✓ | `void AutoSave()` |
 | `SetEntityInteractionDisabled` | 13 | 19 | ✓ | `void SetEntityInteractionDisabled(string& asName, bool abDisabled)` |
 | `BlockHint` | 13 | 13 | ✓ | `void BlockHint(string &in asName)` |
 | `AddEffectVoice` | 13 | 36 | ✓ | `void AddEffectVoice(string &in asVoiceFile, string &in asEffectFile, string &in asTextCat, string &in asTextEntry, bool abUsePostion,  string &in asPosEnitity, float afMinDistance, float afMaxDistance)` |

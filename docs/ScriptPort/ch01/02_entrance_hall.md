@@ -33,14 +33,14 @@
 | `InteractLargeGate02` (:428), `TimerSlimeGateOn` (:434) | те же имена | готов | |
 | `CollideDirectionHint` (:444), `TimerScream` (:467) | те же имена | готов | глобальная `BeenToLab` |
 | `OnStart` (:485) | `EntranceHall.OnStart` | готов | `ClearSavedMaps` в конце |
-| `OnEnter` (:545) | `EntranceHall.OnEnter` | готов | `AutoSave` — шаг 6 |
+| `OnEnter` (:545) | `EntranceHall.OnEnter` | готов | `AutoSave` пишет автосохранение (с 2026-10-17) |
 | `OnLeave` (:595) | `EntranceHall.OnLeave` | готов | |
 
 ## Отличия от оригинала
 
 - Синтаксис AngelScript переведён на C# по правилам из README (`(int)RandFloat`, литералы `f`, `nameof`, `string[]` → `new[] { … }`).
 - Строка + float в отладочных сообщениях: AngelScript печатает 6 значащих цифр, порт — `G6` в инвариантной культуре.
-- `AutoSave` пропускается с предупреждением: сохранения — шаг 6.
+- `AutoSave` с 2026-10-17 пишет автосохранение: сохранения перенесены (CLAUDE.md «Сохранения»); строки `skipped` ниже — из прогонов до этого.
 - `SetPropActiveAndFade` включает слизь сразу, без затухания модели.
 - `GiveSanityDamage` / `GiveSanityBoost*` меняют рассудок, но эффектов безумия ещё нет: шаг 6 (этап C).
 

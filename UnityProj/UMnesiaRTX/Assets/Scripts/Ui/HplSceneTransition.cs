@@ -65,6 +65,7 @@ namespace RTXMnesia.Ui
             catch (System.Exception exception) { Debug.LogException(exception); }
             if (operation == null)
             {
+                RTXMnesia.Save.HplSaveHandler.ClearPending();
                 _map.enabled = true;
                 _map.sound?.SetMenuPaused(!_ui.IsTitleScreen);
                 Time.timeScale = _ui.IsTitleScreen ? 1 : 0;

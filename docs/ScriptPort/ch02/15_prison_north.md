@@ -126,11 +126,11 @@
 
 | Ограниченный API | Фактический статус | Ссылка |
 |---|---|---|
-| `AutoSave` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.General.cs:119` |
+| `AutoSave` | ✓ (2026-10-17, сохранения перенесены (CLAUDE.md «Сохранения»)) | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.General.cs` |
 | `PreloadSound` | empty | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Effects.cs:75` |
 | `SetInsanitySetEnabled` | ✓ (события безумия перенесены (CLAUDE.md «События безумия»); 2026-10-17) | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Effects.cs` |
 
-Grunt/brute и WaterLurker уже имеют ИИ в актуальном движке; скриптовая активация сама по себе не является проверкой всех состояний ИИ. AutoSave остаётся заглушкой. `SetInsanitySetEnabled` с 2026-10-17 работает: включает набор `Ch02` (бормотание Даниэля главы 2) и выключает `Ch01`; строки `skipped` ниже — из прогонов до этого. Пустой PreloadSound не проверяет ресурсы и не загружает их заранее.
+Grunt/brute и WaterLurker уже имеют ИИ в актуальном движке; скриптовая активация сама по себе не является проверкой всех состояний ИИ. AutoSave с 2026-10-17 пишет автосохранение (CLAUDE.md «Сохранения»). `SetInsanitySetEnabled` с 2026-10-17 работает: включает набор `Ch02` (бормотание Даниэля главы 2) и выключает `Ch01`; строки `skipped` ниже — из прогонов до этого. Пустой PreloadSound не проверяет ресурсы и не загружает их заранее.
 
 ## Импорт
 

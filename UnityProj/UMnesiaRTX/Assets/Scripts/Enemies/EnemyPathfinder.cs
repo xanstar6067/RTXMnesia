@@ -109,6 +109,30 @@ namespace RTXMnesia.Enemies
 
         public void OnUpdate(float timeStep) => UpdateMoving();
 
+        /// <summary>cLuxEnemyPathfinder_SaveData::FromPathfinder.</summary>
+        internal void Save(RTXMnesia.Save.EnemySave save)
+        {
+            save.pathMoving = IsMoving;
+            save.pathGoal = _moveGoalPos;
+            save.pathNodes.Clear();
+            foreach (var node in _pathNodes) save.pathNodes.Add(node.Id);
+        }
+
+        /// <summary>cLuxEnemyPathfinder_SaveData::ToPathfinder + SetupPathfinder: unknown node ids are skipped.</summary>
+        internal void Load(RTXMnesia.Save.EnemySave save)
+        {
+            IsMoving = save.pathMoving;
+            _moveGoalPos = save.pathGoal;
+            _pathNodes.Clear();
+            _pathNodeDistances.Clear();
+            if (NodeContainer == null) return;
+            foreach (int id in save.pathNodes)
+            {
+                var node = NodeContainer.GetNodeFromId(id);
+                if (node != null) _pathNodes.Add(node);
+            }
+        }
+
         /// <summary>The node walked to now, or the goal.</summary>
         public Vector3 GetNextGoalPos() => _pathNodes.Count == 0 ? _moveGoalPos : _pathNodes[_pathNodes.Count - 1].Position;
 
