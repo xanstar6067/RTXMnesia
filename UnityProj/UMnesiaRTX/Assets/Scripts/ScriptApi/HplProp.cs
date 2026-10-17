@@ -131,6 +131,7 @@ namespace RTXMnesia.ScriptApi
             _moveStopSound = VarString("StaticMoveStopSound", "");
             _moveLoopSound = VarString("StaticMoveLoopSound", "");
 
+            SetupAnimation();
             LoadVariables();
             if (MaxFocusDistance <= 0f) MaxFocusDistance = ConfigFloat(DefaultFocusDistanceKey);
 
@@ -404,6 +405,7 @@ namespace RTXMnesia.ScriptApi
             UpdateMoving(timeStep);
             UpdateCheckIfOutsidePlayer();
             UpdateEffectFading(timeStep);
+            UpdateAnimation();
             for (int i = 0; i < InteractConnections.Count; i++)
             {
                 InteractConnections[i].Update(timeStep);
@@ -413,6 +415,110 @@ namespace RTXMnesia.ScriptApi
         }
 
         protected virtual void UpdatePropSpecific(float timeStep) { }
+
+        // ------------------------------------------------------------------ animations
+
+        /// <summary>The mesh entity's animations (cMeshEntity), null for a prop without them.</summary>
+        public Enemies.HplMeshAnimation Animation { get; private set; }
+        public GameObject AnimatedModel { get; private set; }
+        int _currentNonLoopAnimIndex = -1;
+        string _animCallback = "";
+
+        /// <summary>
+        /// cEntityLoader_Object plays the first animation looped (Play(0, true, true)); iLuxPropLoader::LoadProperties
+        /// then starts it at a random time (RandomizeAnimationStart, default true). The skinned model under the entity
+        /// is posed with the clips of its .ent (Import > Enemies converts every animated entity).
+        /// </summary>
+        void SetupAnimation()
+        {
+            var data = Enemies.HplEnemyAssets.Instance != null ? Enemies.HplEnemyAssets.Instance.GetEnemy(Component.file) : null;
+            if (data == null || data.animations.Count == 0) return;
+            var skinned = GameObject.GetComponentInChildren<SkinnedMeshRenderer>(true);
+            if (skinned == null) return;
+            Transform t = skinned.transform;
+            while (t.parent != null && t.parent != GameObject.transform) t = t.parent;
+            var animation = new Enemies.HplMeshAnimation(t.gameObject, data);
+            if (animation.States.Count == 0) return;
+            AnimatedModel = t.gameObject;
+            Animation = animation;
+            Animation.Play(0, true, true);
+            if (VarBool("RandomizeAnimationStart", true))
+            {
+                var first = Animation.States[0];
+                first.SetTimePosition(HplMath.RandRectf(0f, first.Length));
+            }
+            Map?.RegisterAnimatedProp(this);
+        }
+
+        /// <summary>iLuxProp::PlayAnimation: a fade to the animation; a non-looping one calls back when it is over.</summary>
+        public void PlayAnimation(string name, float fadeTime, bool loop, string callback)
+        {
+            int index = Animation != null ? Animation.IndexOf(name) : -1;
+            if (index < 0)
+            {
+                HplLog.Error($"Could not find animation '{name}' for entity '{Name}'");
+                return;
+            }
+            Animation.PlayFadeTo(index, loop, fadeTime);
+            _currentNonLoopAnimIndex = loop ? -1 : index;
+            _animCallback = loop ? "" : callback ?? "";
+        }
+
+        /// <summary>cEngineMeshEntity_SaveData::FromMeshEntity: the animation states.</summary>
+        public void CaptureAnimations(List<Save.SavedAnimationState> list)
+        {
+            list.Clear();
+            if (Animation == null) return;
+            foreach (var s in Animation.States)
+                list.Add(new Save.SavedAnimationState
+                {
+                    active = s.IsActive, loop = s.Loop, weight = s.Weight, fadeStep = s.FadeStep, timePosition = s.TimePosition, speed = s.Speed,
+                });
+        }
+
+        /// <summary>cEngineMeshEntity_SaveData::ToMeshEntity: only when the count matches ("something is wrong" otherwise).</summary>
+        public void RestoreAnimations(List<Save.SavedAnimationState> list)
+        {
+            if (Animation == null || list == null || list.Count != Animation.States.Count) return;
+            for (int i = 0; i < list.Count; i++)
+            {
+                var a = list[i];
+                Animation.States[i].Restore(a.active, a.loop, a.weight, a.fadeStep, a.timePosition, a.speed);
+            }
+        }
+
+        /// <summary>The non-looping animation playing (iLuxProp::mlCurrentNonLoopAnimIndex ≥ 0).</summary>
+        protected bool NonLoopAnimationPlaying => _currentNonLoopAnimIndex >= 0;
+
+        /// <summary>iLuxProp::UpdateAnimation.</summary>
+        void UpdateAnimation()
+        {
+            if (_currentNonLoopAnimIndex < 0 || Animation == null) return;
+            if (!Animation.States[_currentNonLoopAnimIndex].IsOver) return;
+            _currentNonLoopAnimIndex = -1;
+            if (_animCallback != "") Map.RunScript(_animCallback, Name);
+        }
+
+        /// <summary>cWorld::UpdateEntities: the mesh entity's animations and their events (after the physics).</summary>
+        internal void StepMesh(float timeStep)
+        {
+            if (!Active || Animation == null) return;
+            Animation.Update(timeStep, OnAnimationEvent);
+            AfterAnimationPose();
+        }
+
+        /// <summary>After the skeleton was posed this step (cNode3D pre / post transforms of bones).</summary>
+        protected virtual void AfterAnimationPose() { }
+
+        void OnAnimationEvent(Enemies.HplAnimationState state, Enemies.HplEnemyAssets.AnimationEvent e)
+        {
+            // cMeshEntity::HandleAnimationEvent: only PlaySound does something.
+            if (string.IsNullOrEmpty(e.value) || e.type != "PlaySound" || Map.sound == null) return;
+            var sound = Map.sound.CreateSoundEntity("AnimEvent", e.value, true);
+            if (sound == null) return;
+            sound.IsSaved = false;
+            sound.Parent = Animation.SoundNode;
+        }
 
         // ------------------------------------------------------------------ interact connections
 

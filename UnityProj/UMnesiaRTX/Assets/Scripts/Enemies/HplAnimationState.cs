@@ -37,6 +37,18 @@ namespace RTXMnesia.Enemies
         }
 
         public bool IsFading => _fadeStep != 0f;
+        public float FadeStep => _fadeStep;
+
+        /// <summary>cEngineAnimationState_SaveData::ToAnim.</summary>
+        public void Restore(bool active, bool loop, float weight, float fadeStep, float timePosition, float speed)
+        {
+            SetActive(active);
+            Loop = loop;
+            Weight = weight;
+            _fadeStep = fadeStep;
+            SetTimePosition(timePosition);
+            Speed = speed;
+        }
         public bool IsOver => !Loop && TimePosition >= Length;
 
         public void SetActive(bool active)
@@ -131,6 +143,43 @@ namespace RTXMnesia.Enemies
         }
 
         public HplAnimationState Get(string name) => name != null && _byName.TryGetValue(name, out var s) ? s : null;
+
+        /// <summary>cMeshEntity::GetAnimationStateIndex (−1 when missing).</summary>
+        public int IndexOf(string name)
+        {
+            var state = Get(name);
+            return state != null ? _states.IndexOf(state) : -1;
+        }
+
+        /// <summary>cMeshEntity::Play: from the start at full weight, the others stopped first if asked.</summary>
+        public void Play(int index, bool loop, bool stopPrev)
+        {
+            if (stopPrev) Stop();
+            if (index < 0 || index >= _states.Count) return;
+            var state = _states[index];
+            state.SetActive(true);
+            state.SetTimePosition(0f);
+            state.Loop = loop;
+            state.Weight = 1f;
+        }
+
+        /// <summary>cMeshEntity::PlayFadeTo: the active states fade out, this one fades in from the start.</summary>
+        public void PlayFadeTo(int index, bool loop, float time)
+        {
+            foreach (var s in _states) if (s.IsActive) s.FadeOut(time);
+            var state = _states[index];
+            if (!state.IsActive) state.Weight = 0f;
+            state.SetActive(true);
+            state.SetTimePosition(0f);
+            state.Loop = loop;
+            state.FadeIn(time);
+        }
+
+        /// <summary>cMeshEntity::Stop.</summary>
+        public void Stop()
+        {
+            foreach (var s in _states) s.SetActive(false);
+        }
 
         /// <summary>One logic step: pose, advance, events. <paramref name="onEvent"/> gets the events that passed.</summary>
         public void Update(float timeStep, System.Action<HplAnimationState, HplEnemyAssets.AnimationEvent> onEvent)

@@ -22,7 +22,8 @@ namespace RTXMnesia.Props
                 case "Lever": return new PropLever(entity);
                 case "Wheel": return new PropWheel(entity);
                 case "MoveObject": return new PropMoveObject(entity);
-                case "Photocell": case "Chest": case "Button": case "OilBarrel": case "EmotionStone": case "NPC":
+                case "NPC": return new PropNPC(entity);
+                case "Photocell": case "Chest": case "Button": case "OilBarrel": case "EmotionStone":
                 case "MultiSlider": case "CritterBug": case "CritterSpider":
                     return new PropGeneric(entity, HplEntityType.Prop);
                 case "Enemy_ManPig": // the grunt and the water lurker are made by HplMap

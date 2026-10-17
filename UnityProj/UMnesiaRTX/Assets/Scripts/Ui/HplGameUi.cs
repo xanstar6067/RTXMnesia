@@ -78,7 +78,7 @@ namespace RTXMnesia.Ui
         void Update()
         {
             // The load screen between maps takes the input (cLuxInputHandler LoadScreen state).
-            if (_map == null || Menu == null || IsTransitioning || HplLoadScreen.Active) return;
+            if (_map == null || Menu == null || IsTransitioning || HplLoadScreen.Active || HplCredits.Active) return;
             if (!IsTitleScreen && (_map.player == null || !_map.player.readDevices)) return;
             var keyboard = Keyboard.current;
             if (keyboard != null && RouteKeys(keyboard)) return;
@@ -241,6 +241,8 @@ namespace RTXMnesia.Ui
 
         void OnApplicationFocus(bool focused)
         {
+            // The credits pause their music themselves (cLuxCredits::AppLostInputFocus).
+            if (HplCredits.Active) return;
             if (IsTitleScreen || ReadingUiOpen)
             {
                 // The title world and an open inventory / journal stay as they are, but an unfocused

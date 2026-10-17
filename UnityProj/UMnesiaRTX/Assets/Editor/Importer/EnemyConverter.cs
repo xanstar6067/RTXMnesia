@@ -49,6 +49,22 @@ namespace RTXMnesia.Importer
                 catch (Exception ex) { log.Error($"{AmnesiaPaths.ToSourceRelative(ent)}: {ex.Message}"); }
             }
 
+            // The other entities with animations (NPC, Object, critters): the same data for the props' mesh animations
+            // (cEntityLoader_Object plays the first one).
+            string entitiesRoot = Path.Combine(AmnesiaPaths.SourceRoot, "entities");
+            foreach (string ent in Directory.EnumerateFiles(entitiesRoot, "*.ent", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            {
+                if (ent.StartsWith(enemyRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                string text = File.ReadAllText(ent);
+                if (!text.Contains("<Animations") || !text.Contains("<Animation ")) continue;
+                try
+                {
+                    var animated = ConvertEnemy(index, ent, log);
+                    if (animated != null && animated.animations.Count > 0) assets.enemies.Add(animated);
+                }
+                catch (Exception ex) { log.Error($"{AmnesiaPaths.ToSourceRelative(ent)}: {ex.Message}"); }
+            }
+
             assets.nodeFiles.Clear();
             string mapsRoot = Path.Combine(AmnesiaPaths.SourceRoot, "maps");
             foreach (string file in Directory.EnumerateFiles(mapsRoot, "*.nodes", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))

@@ -109,10 +109,12 @@ namespace RTXMnesia.ScriptApi
 
         // ------------------------------------------------------------------ game flow
 
+        /// <summary>cLuxScriptHandler::StartCredits: cLuxCredits::Setup and the Credits container (<see cref="Ui.HplCredits"/>).</summary>
         protected void StartCredits(string asMusic, bool abLoopMusic, string asTextCat, string asTextEntry, int alEndNum) =>
-            NotPorted(nameof(StartCredits), "credits (step 6, menus)");
+            Ui.HplCredits.Start(Map, asMusic, abLoopMusic, asTextCat, asTextEntry, alEndNum);
 
-        protected void AddKeyPart(int alKeyPart) => NotPorted(nameof(AddKeyPart), "credits (step 6, menus)");
+        /// <summary>cLuxCredits::AddKeyPart: kept for the credits, whose check of the parts is commented out in HPL2.</summary>
+        protected void AddKeyPart(int alKeyPart) => Ui.HplCredits.AddKeyPart(alKeyPart);
 
         protected void StartDemoEnd() { }
 

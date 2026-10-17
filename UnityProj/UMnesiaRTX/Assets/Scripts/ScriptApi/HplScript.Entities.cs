@@ -391,9 +391,15 @@ namespace RTXMnesia.ScriptApi
             area?.Sticky?.DetachBody();
         }
 
-        protected void SetNPCAwake(string asName, bool abAwake, bool abEffects) => NotPorted(nameof(SetNPCAwake), NeedsEnemies);
+        protected void SetNPCAwake(string asName, bool abAwake, bool abEffects)
+        {
+            foreach (var p in GetProps(asName, "NPC")) ((Props.PropNPC)p).SetAwake(abAwake, abEffects);
+        }
 
-        protected void SetNPCFollowPlayer(string asName, bool abX) => NotPorted(nameof(SetNPCFollowPlayer), NeedsEnemies);
+        protected void SetNPCFollowPlayer(string asName, bool abX)
+        {
+            foreach (var p in GetProps(asName, "NPC")) ((Props.PropNPC)p).FollowPlayer = abX;
+        }
 
         protected void SetPropHealth(string asName, float afHealth)
         {
@@ -412,8 +418,10 @@ namespace RTXMnesia.ScriptApi
             foreach (var p in GetProps(asName)) p.ResetProperties();
         }
 
-        protected void PlayPropAnimation(string asProp, string asAnimation, float afFadeTime, bool abLoop, string asCallback) =>
-            NotPorted(nameof(PlayPropAnimation), "prop animations");
+        protected void PlayPropAnimation(string asProp, string asAnimation, float afFadeTime, bool abLoop, string asCallback)
+        {
+            foreach (var p in GetProps(asProp)) p.PlayAnimation(asAnimation, afFadeTime, abLoop, asCallback);
+        }
 
         protected void SetMoveObjectState(string asName, float afState)
         {

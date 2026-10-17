@@ -255,6 +255,7 @@ namespace RTXMnesia.ScriptApi
                     });
                 foreach (var joint in prop.Joints)
                     f.joints.Add(new SavedJoint { minAngle = joint.MinAngle, maxAngle = joint.MaxAngle, broken = joint.Broken });
+                prop.CaptureAnimations(f.animations);
             }
             else if (e is Enemies.HplEnemy enemy)
             {
@@ -497,6 +498,7 @@ namespace RTXMnesia.ScriptApi
             }
             prop.SetEffectsActive(f.effectsActive, false);
             if (prop is PropLamp lamp) lamp.SetLit(f.lit, false);
+            prop.RestoreAnimations(f.animations);
             prop.AfterStateRestore();
         }
 

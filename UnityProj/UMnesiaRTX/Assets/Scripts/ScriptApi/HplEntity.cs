@@ -235,6 +235,17 @@ namespace RTXMnesia.ScriptApi
         /// <summary>iLuxEntity::CanInteract with the focused body (null for areas).</summary>
         public virtual bool CanInteract(Dynamics.HplPhysicsBody body) => false;
 
+        /// <summary>iLuxEntity::CollidesWithPlayer: the entity (its first body; an area) touches the player's current shape.</summary>
+        internal bool CollidesWithPlayer()
+        {
+            var body = Map.player != null ? Map.player.Body : null;
+            if (body == null || body.Shapes.Count == 0) return false;
+            _playerShape[0] = body.Shapes[body.ActiveSize];
+            return HplCollision.BodiesCollide(GetBodyColliders(0), _playerShape);
+        }
+
+        static readonly Collider[] _playerShape = new Collider[1];
+
         /// <summary>iLuxEntity::OnInteract; the position is the focus point in HPL2 space.</summary>
         public virtual bool OnInteract(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos) => false;
 
@@ -581,16 +592,6 @@ namespace RTXMnesia.ScriptApi
             Map.player.Flashback.Start(_flashbackFile, _flashbackCallback);
         }
 
-        /// <summary>iLuxEntity::CollidesWithPlayer: the area touches the player's current shape.</summary>
-        bool CollidesWithPlayer()
-        {
-            var body = Map.player != null ? Map.player.Body : null;
-            if (body == null || body.Shapes.Count == 0) return false;
-            _playerShape[0] = body.Shapes[body.ActiveSize];
-            return HplCollision.BodiesCollide(GetBodyColliders(0), _playerShape);
-        }
-
-        static readonly Collider[] _playerShape = new Collider[1];
 
         /// <summary>
         /// cLuxArea_SlimeDamage::OnUpdate: at random intervals, if the player touches the area: damage (blood splat),

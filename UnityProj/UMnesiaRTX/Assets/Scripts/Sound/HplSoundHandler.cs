@@ -113,6 +113,18 @@ namespace RTXMnesia.Sound
             Music.Update(timeStep);
         }
 
+        /// <summary>
+        /// The engine modules alone, while a container without the game modules is current (the credits): sound entries
+        /// and the engine music; the world's sound entities and cLuxMusicHandler are not updated.
+        /// </summary>
+        public void StepEngine(float timeStep)
+        {
+            if (MenuPaused) return;
+            EnsureMusic();
+            UpdateEntries(timeStep);
+            Music.UpdateEngine(timeStep);
+        }
+
         /// <summary>Map change: the left map's entries go on fading (FadeOutAll) while the next scene loads.</summary>
         public void StepWorldFade(float timeStep)
         {

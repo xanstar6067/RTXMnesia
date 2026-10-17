@@ -57,7 +57,7 @@ namespace RTXMnesia.ScriptApi
         public Dynamics.HplPhysicsWorld PhysicsWorld { get; private set; }
         public Particles.HplParticleWorld ParticleWorld { get; private set; }
         public HplGameUi GameUi { get; private set; }
-        public bool IsMenuPaused => (GameUi != null && GameUi.IsPaused) || HplLoadScreen.Active;
+        public bool IsMenuPaused => (GameUi != null && GameUi.IsPaused) || HplLoadScreen.Active || HplCredits.Active;
         /// <summary>cLuxMapHandler map change: fading out to change map, or left (frozen while the next map loads).</summary>
         public bool IsChangingMap => _mapChange.active || _leaving;
         /// <summary>cLuxMap::GetName: the map file name without extension, lower case.</summary>
@@ -84,6 +84,13 @@ namespace RTXMnesia.ScriptApi
 
         readonly List<HplEntity> _entities = new();
         readonly List<RTXMnesia.Enemies.HplEnemy> _enemies = new();
+        readonly List<HplProp> _animatedProps = new();
+
+        /// <summary>A prop with mesh animations: posed after the physics like the enemies (cWorld::UpdateEntities).</summary>
+        internal void RegisterAnimatedProp(HplProp prop)
+        {
+            if (!_animatedProps.Contains(prop)) _animatedProps.Add(prop);
+        }
         // cWorld temp AI nodes (PathNode areas: name, id, HPL2 position) and the node containers by name.
         readonly List<(string name, int id, Vector3 hplPos)> _pathNodes = new();
         readonly Dictionary<string, RTXMnesia.Enemies.AINodeContainer> _nodeContainers = new(StringComparer.Ordinal);
@@ -505,6 +512,7 @@ namespace RTXMnesia.ScriptApi
             if (IsMenuPaused || _leaving) return;
             PhysicsWorld.AfterSimulate(timeStep);
             for (int i = 0; i < _enemies.Count; i++) _enemies[i].StepMesh(timeStep);
+            for (int i = 0; i < _animatedProps.Count; i++) _animatedProps[i].StepMesh(timeStep);
             ParticleWorld.Update(timeStep);
             for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
             sound.Step(timeStep);
@@ -693,6 +701,7 @@ namespace RTXMnesia.ScriptApi
                 }
                 _entities.Remove(entity);
                 if (entity is RTXMnesia.Enemies.HplEnemy removedEnemy) _enemies.Remove(removedEnemy);
+                if (entity is HplProp removedProp) _animatedProps.Remove(removedProp);
                 string key = entity.Name.ToLowerInvariant();
                 if (_entitiesByName.TryGetValue(key, out var e) && e == entity) _entitiesByName.Remove(key);
                 foreach (var body in entity.Bodies) if (_bodies.TryGetValue(body.Name, out var b) && b == body) _bodies.Remove(body.Name);

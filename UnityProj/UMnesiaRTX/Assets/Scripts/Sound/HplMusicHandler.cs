@@ -280,6 +280,15 @@ namespace RTXMnesia.Sound
 
         // ------------------------------------------------------------------ cMusicHandler
 
+        /// <summary>cMusicHandler::Play called directly (the credits): no priorities, no game volume.</summary>
+        public void PlayDirect(string file, float volume, float fadeStepSize, bool loop, bool resume) => PlaySong(file, volume, fadeStepSize, loop, resume);
+
+        /// <summary>cMusicHandler::Stop called directly (the credits).</summary>
+        public void StopDirect(float fadeStepSize) => StopSong(fadeStepSize);
+
+        /// <summary>The engine part only (cMusicHandler::Update): songs and fades, while cLuxMusicHandler is not updated.</summary>
+        public void UpdateEngine(float timeStep) => UpdateSongs(timeStep);
+
         bool PlaySong(string file, float volume, float fadeStepSize, bool loop, bool resume)
         {
             bool playing = _mainSong != null && _mainSong.File == file;

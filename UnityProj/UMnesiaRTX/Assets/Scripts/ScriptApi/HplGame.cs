@@ -232,6 +232,7 @@ namespace RTXMnesia.ScriptApi
             HplSavedMaps.Reset();
             HplMapChange.ClearPending();
             Ui.HplLoadScreen.ResetText();
+            Ui.HplCredits.ResetKeyParts();
         }
 
         // ------------------------------------------------------------------ save (step 6)

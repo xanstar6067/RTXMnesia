@@ -195,6 +195,15 @@ namespace RTXMnesia.Save
         public EnemySave enemy = new();
         public SavedRope rope = new();
         public SavedSticky sticky = new();
+        public List<SavedAnimationState> animations = new();
+    }
+
+    /// <summary>cEngineAnimationState_SaveData: a mesh animation state of a prop (cEngineMeshEntity_SaveData::mvAnimations).</summary>
+    [Serializable]
+    public sealed class SavedAnimationState
+    {
+        public bool active, loop;
+        public float weight, fadeStep, timePosition, speed;
     }
 
     /// <summary>cEngineSound_SaveData.</summary>
