@@ -225,7 +225,7 @@ namespace RTXMnesia.Props
             ConnectionStateChange(CurrentState);
             string sound = CurrentState == 1 ? _maxLimitSound : CurrentState == -1 ? _minLimitSound : "";
             if (effects && sound != "") PlaySoundAt("LeverSound", sound, _hinge.PivotPoint);
-            // Interact connections (ropes, move objects): with the connection port.
+            InteractConnectionLimit(CurrentState);
         }
     }
 }

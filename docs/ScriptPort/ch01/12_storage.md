@@ -302,3 +302,7 @@ PASS: 14 Play-mode main menu checks (startup, live background / music, options, 
 ?? docs/ScriptPort/ch01/13_machine_room.md
 ?? docs/ScriptPort/ch01/14_elevator.md
 ```
+
+## Верёвки и липкие зоны
+
+- 2026-10-17: восемь цепей `Rope01..08` с авто-движением (до MaxTotalLength и обратно) работают (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»); после загрузки сохранения их макс. скорость — 1 м/с, как в HPL2 (`cEngineRope_SaveData::ToRope`).

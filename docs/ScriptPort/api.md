@@ -136,7 +136,7 @@
 | `SetEntityCallbackFunc` | 2 | 2 | ~ | `void SetEntityCallbackFunc(string &in asName, string &in asCallback)` |
 | `SetEnemyDisabled` | 2 | 3 | ✓ | `void SetEnemyDisabled(string &in asName, bool abDisabled)` |
 | `SetDeathHint` | 2 | 2 | ✓ | `void SetDeathHint(string &in asTextCategory, string &in asTextEntry)` |
-| `InteractConnectPropWithRope` | 2 | 9 | — | `void InteractConnectPropWithRope(string &in asName, string& asLeverName, string& asPropName, bool abInteractOnly, float afSpeedMul,float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed)` |
+| `InteractConnectPropWithRope` | 2 | 9 | ✓ | `void InteractConnectPropWithRope(string &in asName, string& asLeverName, string& asPropName, bool abInteractOnly, float afSpeedMul,float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed)` |
 | `GetEntitiesCollide` | 2 | 2 | ✓ | `bool GetEntitiesCollide(string &in asEntityA, string &in asEntityB)` |
 | `CreateEntityAtArea` | 2 | 5 | ✓ | `void CreateEntityAtArea(string &in asEntityName, string &in asEntityFile, string &in asAreaName, bool abFullGameSave)` |
 | `ChangeMap` | 2 | 7 | ✓ | `void ChangeMap(string &in asMapName, string &in asStartPos, string &in asStartSound, string &in asEndSound)` |
@@ -148,7 +148,7 @@
 | `ReturnOpenJournal` | 1 | 3 | ✓ | `void ReturnOpenJournal(bool abOpenJournal)` |
 | `RemoveHint` | 1 | 1 | ✓ | `void RemoveHint(string &in asName)` |
 | `QuestIsCompleted` | 1 | 2 | ✓ | `bool QuestIsCompleted(string &in asName)` |
-| `InteractConnectPropWithMoveObject` | 1 | 4 | — | `void InteractConnectPropWithMoveObject(string &in asName, string &in asPropName, string &in asMoveObjectName, bool abInteractOnly,bool abInvert, int alStatesUsed)` |
+| `InteractConnectPropWithMoveObject` | 1 | 4 | ✓ | `void InteractConnectPropWithMoveObject(string &in asName, string &in asPropName, string &in asMoveObjectName, bool abInteractOnly,bool abInvert, int alStatesUsed)` |
 | `GiveItem` | 1 | 17 | ✓ | `void GiveItem(string &in asName, string &in asType, string &in asSubTypeName, string &in asImageName, float afAmount)` |
 | `GetPlayerLampOil` | 1 | 1 | ✓ | `float GetPlayerLampOil()` |
 | `GetLeverState` | 1 | 5 | ✓ | `int GetLeverState(string &in asName)` |
@@ -192,10 +192,10 @@
 | `Print` | 1 | ✓ | `void Print(string &in asString)` |
 | `GetSwingDoorState` | 1 | ✓ | `int GetSwingDoorState(string &in asName)` |
 | `GetPlayerHealth` | 1 | ✓ | `float GetPlayerHealth()` |
-| `DetachFromStickyArea` | 1 | — | `void DetachFromStickyArea(string &in asAreaName)` |
+| `DetachFromStickyArea` | 1 | ✓ | `void DetachFromStickyArea(string &in asAreaName)` |
 | `DestroyDataCache` | 1 | — | `void DestroyDataCache()` |
 | `CreateDataCache` | 1 | — | `void CreateDataCache()` |
-| `AttachBodyToStickyArea` | 1 | — | `void AttachBodyToStickyArea(string& asAreaName, string& asBody)` |
+| `AttachBodyToStickyArea` | 1 | ✓ | `void AttachBodyToStickyArea(string& asAreaName, string& asBody)` |
 
 ## Общий скрипт инвентаря
 
@@ -213,6 +213,10 @@ GiveItemFromFile читает определения `.ent` из генерир�
 ## Смена карты и фонарь
 
 `ChangeMap` — ✓: переход как в `cLuxMapHandler::ChangeMap` / `CheckMapChange` (затемнение 1.5 с, OnLeave, сохранение карты, экран загрузки, затухание мировых звуков, загрузка сцены карты, восстановление сохранённой карты, OnStart при первом посещении и OnEnter, FadeIn 2 с); игрок, эффекты, музыка и глобальные громкость / скорость звука переходят в новую карту. Состояние посещённой карты — `HplSavedMaps` (порт `cLuxSavedGameMap`): локальные переменные, таймеры, use-item коллбэки, коллбэки столкновений игрока и сущностей, свет, звуки и системы частиц из скрипта, связи сущностей (коллбэки взгляда / взаимодействия / состояния, соединения), отключённые сущности, запертые двери и двери уровня, подобранные предметы, разбитые контейнеры, погашенные лампы, сущности FullGameSave (MoveObject, созданные скриптом) целиком. `ClearSavedMaps` — ✓. `FadeLightTo` / `SetLightVisible` работают и с box-светом (`cLightBox`, `HplBoxLightPass`). `SetupLoadScreen` — ✓: экран загрузки `cLuxLoadScreenHandler` с текстом `LoadingText` и картинкой. `SetLanternActive`, `SetLanternDisabled`, `GetLanternActive`, `SetLanternLitCallback` — ✓: порт `cLuxPlayerLantern` с моделью фонаря в руке (`cLuxPlayerHands`, `cLuxHandObject_LightSource`).
+
+## Верёвки, связи, липкие зоны
+
+`InteractConnectPropWithRope` / `InteractConnectPropWithMoveObject` — ✓: порт `cLuxInteractConnection_Rope` / `_MoveObject` (мин. скорость −|x|, макс. |x|). Верёвки областей Rope работают сами (`cLuxRope`); `CreateRope` пуст, как в оригинале (тело функции закомментировано). `AttachBodyToStickyArea`, `DetachFromStickyArea`, а также не вызываемые картами `AttachPropToStickyArea` и `SetAllowStickyAreaAttachment` — ✓ (`cLuxArea_Sticky`). Области SlimeDamage наносят урон сами. Подробности — CLAUDE.md «Верёвки, связи, липкие зоны, слизь».
 
 ## Журнал
 

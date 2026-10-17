@@ -67,7 +67,7 @@
 
 - `17_control_room.hps:59`: Сохранён локальный vPuzzleNames из трёх элементов. Перед первым доступом добавлен выход при недопустимом FirstPuzzleSolved, повторяющий прерывание AngelScript после предшествующих действий.
 - `17_control_room.hps:167`: Значения четырёх массивов поршня, сложение и все исходные состояния рычагов сохранены. fMove в именах/сообщениях форматируется через Str/G6.
-- `17_control_room.hps:252`: Ручной StickyAttachPipe в диагностике проверяет логику счётчиков; физическое прикрепление труб и взаимодействие колёс с верёвкой остаются ограничениями движка.
+- `17_control_room.hps:252`: Ручной StickyAttachPipe в диагностике проверяет логику счётчиков; с 2026-10-17 прикрепление труб липкими зонами, цепи (`Rope0N_Left/Right`) и связи колёс с ними и вентилей с MoveObject работают (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»); полный проход этих загадок здесь не прогонялся.
 - `17_control_room.hps:368`: Окончание трёх загадок устанавливает глобальный флаг работы моста в хабе 16.
 
 ## API движка
@@ -77,8 +77,8 @@
 | Ограниченный API | Фактический статус | Ссылка |
 |---|---|---|
 | `AutoSave` | ✓ (2026-10-17, сохранения перенесены (CLAUDE.md «Сохранения»)) | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.General.cs` |
-| `InteractConnectPropWithMoveObject` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:492` |
-| `InteractConnectPropWithRope` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:488` |
+| `InteractConnectPropWithMoveObject` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
+| `InteractConnectPropWithRope` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `PreloadSound` | empty | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Effects.cs:75` |
 
 Grunt/brute и WaterLurker уже имеют ИИ в актуальном движке; скриптовая активация сама по себе не является проверкой всех состояний ИИ. AutoSave с 2026-10-17 пишет автосохранение (CLAUDE.md «Сохранения»). Пустой PreloadSound не проверяет ресурсы и не загружает их заранее.

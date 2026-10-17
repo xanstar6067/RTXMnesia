@@ -147,7 +147,7 @@
 - `03_dungeon.hps:10`: На первом исходном чтении gvPoundDoorNames при неверном индексе добавлен return: AngelScript прерывает вызов при array abort. Предыдущие эффекты сохранены. Такие же выходы в PlayerInteractSlideDoor и LeverHelper_Close; в Timer_Pounding — перед gvPoundSuffix. PoundingIntensity читается один раз.
 - `03_dungeon.hps (см. таблицу функций)`: OnStart регистрирует имя отсутствующей исходной функции. Точная строка оставлена; фиктивная функция не добавлялась.
 - `03_dungeon.hps:1567`: Источник не создаёт именованную sound entity water; PreloadSound("L03_water") не создаёт её. Предупреждение остановки сохранено.
-- `03_dungeon.hps:858`: Sticky и физическая шестерня не реализованы полностью: ручное продолжение callback — только проверка скрипта, не работающий ремонт механизма.
+- `03_dungeon.hps:858`: с 2026-10-17 Sticky работает (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»): шестерня прикрепляется сама и вызывает callback; ручное продолжение callback в этой диагностике — только проверка скрипта.
 - `03_dungeon.hps:467`: PlayerInteractSlideDoor создаёт таймер с пустым callback; после двух секунд исходный пустой вызов записан как WARNING [Script] ERROR.
 - `03_dungeon.hps:684`: Имя присутствует в .map (ID=2851), импортировано с тем же регистром и путём. .ent имеет EntityType=StaticProp: PropFactory не создаёт script entity, HplMap.Build добавляет только физические тела, lookup не находит имя. Оригинальный LuxStaticProp.cpp:35–37 также создаёт static entity. Это тип/lookup, не потерянный меш.
 - `03_dungeon.hps:1494`: После специальных веток TimerDeathNoises всегда передаёт имя таймера как звуковой ресурс: AreaCharTalk_1/2/3 и StopMusic не .snt, а L03_attack отсутствует в звуковом банке. Исходный fall-through сохранён; отсутствующие сообщения не скрывались.
@@ -181,7 +181,7 @@
 | `GiveItemFromFile` | 1 | `GiveItemFromFile(string asName, string asFileName)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Journal.cs:75`) |
 | `GiveSanityBoost` | 1 | `GiveSanityBoost()` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Player.cs:57`) |
 | `HasItem` | 1 | `HasItem(string asName)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Journal.cs:87`) |
-| `InteractConnectPropWithMoveObject` | 2 | `InteractConnectPropWithMoveObject(string asName, string asPropName, string asMoveObjectName, bool abInteractOnly,                                                          bool abInvert, int alStatesUsed)` — NotPorted (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:492`) |
+| `InteractConnectPropWithMoveObject` | 2 | `InteractConnectPropWithMoveObject(string asName, string asPropName, string asMoveObjectName, bool abInteractOnly,                                                          bool abInvert, int alStatesUsed)` — ✓ с 2026-10-17 (CLAUDE.md «Верёвки, связи, липкие зоны, слизь») |
 | `PlayMusic` | 2 | `PlayMusic(string asMusicFile, bool abLoop, float afVolume, float afFadeTime, int alPrio, bool abResume)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:137`) |
 | `PlaySoundAtEntity` | 23 | `PlaySoundAtEntity(string asSoundName, string asSoundFile, string asEntity, float afFadeSpeed, bool abSaveSound)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:87`) |
 | `PreloadSound` | 18 | `PreloadSound(string asSoundFile)` — empty (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:80`) |

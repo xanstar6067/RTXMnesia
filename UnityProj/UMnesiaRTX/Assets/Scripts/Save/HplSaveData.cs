@@ -69,13 +69,55 @@ namespace RTXMnesia.Save
         public int states;
     }
 
-    /// <summary>cLuxSavedGameEntity: an entity's collide callbacks and connections, by entity key.</summary>
+    /// <summary>iLuxInteractConnection_SaveData (Rope: the rope's name and motor speeds; MoveObject: its name).</summary>
+    [Serializable]
+    public sealed class SavedInteractConnection
+    {
+        public string type, name, target;
+        public bool interactionOnly, invert;
+        public int statesUsed;
+        public float speedMul, minSpeed, maxSpeed;
+    }
+
+    /// <summary>cLuxSavedGameEntity: an entity's collide callbacks, connections and a prop's interact connections, by entity key.</summary>
     [Serializable]
     public sealed class SavedEntityLinks
     {
         public string key;
         public List<SavedCollideCallback> collideCallbacks = new();
         public List<SavedConnection> connections = new();
+        public List<SavedInteractConnection> interactConnections = new();
+    }
+
+    /// <summary>cEngineVerletParticle_SaveData (HPL2 space).</summary>
+    [Serializable]
+    public sealed class SavedRopeParticle
+    {
+        public Vector3 position, prevPosition, smoothPosition;
+        public float invMass;
+    }
+
+    /// <summary>cEngineRope_SaveData: the physics rope of a rope entity.</summary>
+    [Serializable]
+    public sealed class SavedRope
+    {
+        public bool created;
+        public float totalLength, minTotalLength, maxTotalLength, segmentLength, damping, strength, stiffness;
+        public int maxIterations;
+        public bool motorActive, autoMove;
+        public float motorWantedLength, motorSpeedMul, motorMinSpeed, motorMaxSpeed, autoMoveSpeed, autoMoveAcc, autoMoveMaxSpeed;
+        public string startBody = "", endBody = "";
+        public Vector3 startBodyLocalPos, endBodyLocalPos;
+        public List<SavedRopeParticle> particles = new();
+    }
+
+    /// <summary>cLuxArea_Sticky_SaveData: the attached prop body (by names) and its saved mass / gravity.</summary>
+    [Serializable]
+    public sealed class SavedSticky
+    {
+        public string attachedEntity = "", attachedBody = "";
+        public float attachedBodyMass, setMtxTime;
+        public bool attachedBodyGravity, attachedEntityFullGameSaved;
     }
 
     /// <summary>cLuxSavedGameEntityFunc: a look / interact / callback / state change function by entity key.</summary>
@@ -151,6 +193,8 @@ namespace RTXMnesia.Save
         public List<SavedField> fields = new();
         public bool isEnemy;
         public EnemySave enemy = new();
+        public SavedRope rope = new();
+        public SavedSticky sticky = new();
     }
 
     /// <summary>cEngineSound_SaveData.</summary>

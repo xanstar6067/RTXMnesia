@@ -73,6 +73,8 @@ namespace RTXMnesia.Player
         public virtual bool OnJump(bool pressed) => true;
         public virtual FocusCrosshair? GetCrosshair() => FocusCrosshair.Default;
         public virtual void OnDestroyEntity(HplEntity entity) { }
+        /// <summary>iLuxPlayerState::OnAttachBodyToStickyArea: a sticky area takes a body.</summary>
+        public virtual void OnAttachBodyToStickyArea(HplPhysicsBody body) { }
         /// <summary>Debug line for the simulation log.</summary>
         public virtual string Describe() => Type.ToString();
         /// <summary>iLuxPlayerState::AllowLantern (false only on a ladder).</summary>

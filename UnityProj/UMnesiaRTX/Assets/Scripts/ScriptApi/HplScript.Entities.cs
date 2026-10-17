@@ -10,7 +10,6 @@ namespace RTXMnesia.ScriptApi
     // man pig (step 6).
     public abstract partial class HplScript
     {
-        const string NeedsConnections = "interact connections";
         const string NeedsEnemies = "NPCs and the man pig (step 6)";
 
         // ------------------------------------------------------------------ lights
@@ -362,13 +361,35 @@ namespace RTXMnesia.ScriptApi
 
         protected void SetButtonSwitchedOn(string asName, bool abSwitchedOn, bool abEffects) => NotPorted(nameof(SetButtonSwitchedOn), "buttons");
 
-        protected void SetAllowStickyAreaAttachment(bool abX) => NotPorted(nameof(SetAllowStickyAreaAttachment), "sticky areas");
+        /// <summary>cLuxArea_Sticky::SetAllowAttachment: called from an attach function, lets the body attach.</summary>
+        protected void SetAllowStickyAreaAttachment(bool abX) => HplStickyArea.AllowAttachment = abX;
 
-        protected void AttachPropToStickyArea(string asAreaName, string asProp) => NotPorted(nameof(AttachPropToStickyArea), "sticky areas");
+        protected void AttachPropToStickyArea(string asAreaName, string asProp)
+        {
+            var area = GetEntity(asAreaName, HplEntityType.Area, "Sticky") as HplArea;
+            var prop = GetEntity(asProp, HplEntityType.Prop) as HplProp;
+            if (prop == null || area?.Sticky == null) return;
+            area.Sticky.AttachBody(prop.MainBody);
+        }
 
-        protected void AttachBodyToStickyArea(string asAreaName, string asBody) => NotPorted(nameof(AttachBodyToStickyArea), "sticky areas");
+        protected void AttachBodyToStickyArea(string asAreaName, string asBody)
+        {
+            var area = GetEntity(asAreaName, HplEntityType.Area, "Sticky") as HplArea;
+            if (area?.Sticky == null) return;
+            var body = Map.GetBody(asBody)?.Physics;
+            if (body == null)
+            {
+                HplLog.Error($"Could not find body '{asBody}'");
+                return;
+            }
+            area.Sticky.AttachBody(body);
+        }
 
-        protected void DetachFromStickyArea(string asAreaName) => NotPorted(nameof(DetachFromStickyArea), "sticky areas");
+        protected void DetachFromStickyArea(string asAreaName)
+        {
+            var area = GetEntity(asAreaName, HplEntityType.Area, "Sticky") as HplArea;
+            area?.Sticky?.DetachBody();
+        }
 
         protected void SetNPCAwake(string asName, bool abAwake, bool abEffects) => NotPorted(nameof(SetNPCAwake), NeedsEnemies);
 
@@ -485,13 +506,28 @@ namespace RTXMnesia.ScriptApi
 
         // ------------------------------------------------------------------ connections
 
+        /// <summary>The prop's turns / limits run the rope's motor (min speed −|x|, max speed |x|).</summary>
         protected void InteractConnectPropWithRope(string asName, string asPropName, string asRopeName, bool abInteractOnly, float afSpeedMul,
-                                                   float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed) =>
-            NotPorted(nameof(InteractConnectPropWithRope), NeedsConnections);
+                                                   float afMinSpeed, float afMaxSpeed, bool abInvert, int alStatesUsed)
+        {
+            if (GetEntity(asPropName, HplEntityType.Prop) is not HplProp prop) return;
+            var rope = Map.PhysicsWorld.GetRope(asRopeName);
+            if (rope == null)
+            {
+                HplLog.Error($"Could not find rope '{asRopeName}'!");
+                return;
+            }
+            prop.InteractConnections.Add(new HplInteractConnectionRope(asName, prop, rope, afSpeedMul, -Mathf.Abs(afMinSpeed), Mathf.Abs(afMaxSpeed),
+                                                                       abInvert, alStatesUsed) { InteractionOnly = abInteractOnly });
+        }
 
         protected void InteractConnectPropWithMoveObject(string asName, string asPropName, string asMoveObjectName, bool abInteractOnly,
-                                                         bool abInvert, int alStatesUsed) =>
-            NotPorted(nameof(InteractConnectPropWithMoveObject), NeedsConnections);
+                                                         bool abInvert, int alStatesUsed)
+        {
+            if (GetEntity(asPropName, HplEntityType.Prop) is not HplProp prop) return;
+            if (GetEntity(asMoveObjectName, HplEntityType.Prop, "MoveObject") is not Props.PropMoveObject moveObject) return;
+            prop.InteractConnections.Add(new HplInteractConnectionMoveObject(asName, prop, moveObject, abInvert, alStatesUsed) { InteractionOnly = abInteractOnly });
+        }
 
         /// <summary>State changes of the main entity (levers, wheels, ...) reach the connected one from step 4.3.</summary>
         protected void ConnectEntities(string asName, string asMainEntity, string asConnectEntity, bool abInvertStateSent, int alStatesUsed,

@@ -451,18 +451,27 @@ namespace RTXMnesia.ScriptApi
     {
         public readonly AmnesiaArea Component;
         public string AreaType => Component.areaType;
-        public override HplEntityType Type => AreaType == "Rope" ? HplEntityType.Rope : HplEntityType.Area;
+        public override HplEntityType Type => HplEntityType.Area;
 
         bool _itemInteraction;
         readonly bool _insanityAutoDisable;
         readonly float _insanityCheckTimeMin, _insanityCheckTimeMax;
         float _insanityCheckCount;
         readonly string _flashbackFile, _flashbackCallback;
-        readonly Collider[] _flashbackPlayerShape;
         float _flashbackCheckCollisionCount;
 
         /// <summary>The liquid of a Liquid area (cLuxArea_Liquid), else null.</summary>
         public HplLiquidArea Liquid { get; }
+
+        /// <summary>The sticky part of a Sticky area (cLuxArea_Sticky), else null.</summary>
+        public HplStickyArea Sticky { get; }
+
+        // cLuxArea_SlimeDamage
+        readonly float _slimeMinCheckAttackTime, _slimeMaxCheckAttackTime;
+        readonly bool _slimeDisableAfterAttack;
+        readonly string _slimeCallback = "", _slimeAttackSound = "", _slimeAttackPS = "";
+        readonly float _slimeMinAttackDamage, _slimeMaxAttackDamage, _slimeScreenShakeAmount;
+        float _slimeCheckCollisionCount;
 
         public HplArea(AmnesiaArea area, Hpl.HplConfig gameConfig, Hpl.HplSurfaces surfaces = null) : base(area.gameObject, area.hplId)
         {
@@ -487,7 +496,6 @@ namespace RTXMnesia.ScriptApi
                 // cLuxAreaLoader_Flashback::LoadVariables.
                 _flashbackFile = area.GetVariable("FlashbackFile") ?? "";
                 _flashbackCallback = area.GetVariable("Callback") ?? "";
-                _flashbackPlayerShape = new Collider[1];
             }
             else if (AreaType == "Ladder")
             {
@@ -500,6 +508,27 @@ namespace RTXMnesia.ScriptApi
                 LadderMinY = area.transform.position.y - area.size.y / 2f;
             }
             else if (AreaType == "Liquid") Liquid = new HplLiquidArea(this, area, surfaces);
+            else if (AreaType == "Sticky") Sticky = new HplStickyArea(this, area);
+            else if (AreaType == "SlimeDamage")
+            {
+                // cLuxAreaLoader_SlimeDamage::LoadVariables. The maps name the type variable "mlSlimeType", the loader
+                // reads "SlimeType": always type 0 (the only one in game.cfg).
+                int slimeType = Hpl.HplMath.Atoi(area.GetVariable("SlimeType") ?? "0");
+                _slimeMinCheckAttackTime = Hpl.HplMath.Atof(area.GetVariable("MinCheckAttackTime") ?? "0");
+                _slimeMaxCheckAttackTime = Hpl.HplMath.Atof(area.GetVariable("MaxCheckAttackTime") ?? "0");
+                _slimeDisableAfterAttack = area.GetVariable("DisableAfterAttack") == "true";
+                _slimeCallback = area.GetVariable("Callback") ?? "";
+                _slimeCheckCollisionCount = Hpl.HplMath.RandRectf(_slimeMinCheckAttackTime, _slimeMaxCheckAttackTime);
+                string prefix = "SlimeType" + slimeType;
+                if (gameConfig != null)
+                {
+                    _slimeAttackSound = gameConfig.GetString("Slime", prefix + "_AttackSound", "");
+                    _slimeAttackPS = gameConfig.GetString("Slime", prefix + "_AttackPS", "");
+                    _slimeMinAttackDamage = gameConfig.GetFloat("Slime", prefix + "_MinAttackDamage", 0f);
+                    _slimeMaxAttackDamage = gameConfig.GetFloat("Slime", prefix + "_MaxAttackDamage", 0f);
+                    _slimeScreenShakeAmount = gameConfig.GetFloat("Slime", prefix + "_ScreenShakeAmount", 0f);
+                }
+            }
             else if (AreaType == "Insanity")
             {
                 // cLuxAreaLoader_Insanity / cLuxArea_Insanity: the maximum is read with the original's key typo
@@ -532,18 +561,59 @@ namespace RTXMnesia.ScriptApi
                 UpdateInsanity(timeStep);
                 return;
             }
+            if (Sticky != null)
+            {
+                Sticky.Update(timeStep);
+                return;
+            }
+            if (AreaType == "SlimeDamage")
+            {
+                UpdateSlimeDamage(timeStep);
+                return;
+            }
             if (AreaType != "Flashback" || timeStep < Time.fixedDeltaTime * 0.8f) return;
             _flashbackCheckCollisionCount -= timeStep;
             if (_flashbackCheckCollisionCount > 0f) return;
             _flashbackCheckCollisionCount = 0.1f;
 
-            var player = Map.player;
-            var body = player != null ? player.Body : null;
-            if (body == null || body.Shapes.Count == 0) return;
-            _flashbackPlayerShape[0] = body.Shapes[body.ActiveSize];
-            if (!HplCollision.BodiesCollide(GetBodyColliders(0), _flashbackPlayerShape)) return;
+            if (!CollidesWithPlayer()) return;
             SetActive(false);
-            player.Flashback.Start(_flashbackFile, _flashbackCallback);
+            Map.player.Flashback.Start(_flashbackFile, _flashbackCallback);
+        }
+
+        /// <summary>iLuxEntity::CollidesWithPlayer: the area touches the player's current shape.</summary>
+        bool CollidesWithPlayer()
+        {
+            var body = Map.player != null ? Map.player.Body : null;
+            if (body == null || body.Shapes.Count == 0) return false;
+            _playerShape[0] = body.Shapes[body.ActiveSize];
+            return HplCollision.BodiesCollide(GetBodyColliders(0), _playerShape);
+        }
+
+        static readonly Collider[] _playerShape = new Collider[1];
+
+        /// <summary>
+        /// cLuxArea_SlimeDamage::OnUpdate: at random intervals, if the player touches the area: damage (blood splat),
+        /// the attack sound and particle system, a screen shake, the callback (area), and off with DisableAfterAttack.
+        /// </summary>
+        void UpdateSlimeDamage(float timeStep)
+        {
+            _slimeCheckCollisionCount -= timeStep;
+            if (_slimeCheckCollisionCount > 0f) return;
+            _slimeCheckCollisionCount = Hpl.HplMath.RandRectf(_slimeMinCheckAttackTime, _slimeMaxCheckAttackTime);
+
+            if (!CollidesWithPlayer()) return;
+            float damage = Hpl.HplMath.RandRectf(_slimeMinAttackDamage, _slimeMaxAttackDamage);
+            Map.player.GiveDamage(damage, 1, RTXMnesia.Player.DamageType.BloodSplat, true, false);
+            PlaySound("SlimeAttack", _slimeAttackSound, true, false);
+            if (_slimeAttackPS != "" && Map.ParticleWorld != null)
+            {
+                var ps = Map.ParticleWorld.Create("SlimeAttack", _slimeAttackPS);
+                if (ps != null) ps.LocalMatrix = Matrix4x4.Translate(GameObject.transform.position);
+            }
+            Map.effects?.ScreenShake.Start(_slimeScreenShakeAmount, 0.5f, 0.1f, 0.3f);
+            if (_slimeCallback != "") Map.RunScript(_slimeCallback, Name);
+            if (_slimeDisableAfterAttack) SetActive(false);
         }
 
         /// <summary>
@@ -556,18 +626,13 @@ namespace RTXMnesia.ScriptApi
             if (_insanityCheckCount > 0f) return;
             _insanityCheckCount = Hpl.HplMath.RandRectf(_insanityCheckTimeMin, _insanityCheckTimeMax);
 
-            var body = Map.player != null ? Map.player.Body : null;
-            if (body == null || body.Shapes.Count == 0) return;
-            _insanityPlayerShape[0] = body.Shapes[body.ActiveSize];
-            if (!HplCollision.BodiesCollide(GetBodyColliders(0), _insanityPlayerShape)) return;
+            if (!CollidesWithPlayer()) return;
             if (!Effects.HplInsanity.NewEventIsPossible(Map)) return;
             if (_insanityAutoDisable) SetActive(false);
             Effects.HplInsanity.StartEvent(Map);
         }
 
-        static readonly Collider[] _insanityPlayerShape = new Collider[1];
-
-        // cLuxArea_Script and cLuxArea_Ladder; other areas (signs, examine, ropes) are not ported yet.
+        // cLuxArea_Script and cLuxArea_Ladder; other areas (signs, examine) are not ported yet.
         public override bool CanInteract(Dynamics.HplPhysicsBody body) =>
             AreaType == "Ladder" || AreaType == "Script" && (_itemInteraction || InteractCallback != "");
 

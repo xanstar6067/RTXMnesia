@@ -63,7 +63,7 @@
 
 | API `NotPorted` | Сообщение `skipped, needs` | Последствие |
 |---|---|---|
-| `InteractConnectPropWithMoveObject` | `interact connections` | колесо не передаёт движение вторым воротам; вызов и параметры сохранены |
+| `InteractConnectPropWithMoveObject` | ✓ с 2026-10-17 | вентиль `valve_iron_1` поднимает решётку `castle_portcullis_2`, пока его крутят (только при взаимодействии; `RopeStickySlimeTests`: 60 % поворота → состояние 0.60) |
 | `AutoSave` | — | с 2026-10-17 пишет автосохранение: сохранения перенесены (CLAUDE.md «Сохранения») |
 
 Дополнительные ограничения и наблюдения:

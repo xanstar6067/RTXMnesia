@@ -33,6 +33,12 @@ namespace RTXMnesia.Player
             if (entity == CurrentProp) Player.States.ChangeState(PreviousState);
         }
 
+        /// <summary>iLuxPlayerState_Interact::OnAttachBodyToStickyArea: a body of the held prop is taken, let go.</summary>
+        public override void OnAttachBodyToStickyArea(HplPhysicsBody body)
+        {
+            if (CurrentProp != null && CurrentProp.PhysicsBodies.Contains(body)) Player.States.ChangeState(PreviousState);
+        }
+
         public override FocusCrosshair? GetCrosshair() => null;
 
         public override string Describe() => $"{Type} {CurrentProp?.Name}/{CurrentBody?.Name}";

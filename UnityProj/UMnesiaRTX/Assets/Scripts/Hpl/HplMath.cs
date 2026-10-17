@@ -23,6 +23,13 @@ namespace RTXMnesia.Hpl
         /// <summary>cMath::RandRectl: rand() % (max − min + 1) + min.</summary>
         public static int RandRectl(int min, int max) => Rand() % (max - min + 1) + min;
 
+        /// <summary>cMath::Modulus: |a| − |b|·floor(|a / b|).</summary>
+        public static float Modulus(float dividend, float divisor)
+        {
+            float num = MathF.Floor(MathF.Abs(dividend / divisor));
+            return MathF.Abs(dividend) - MathF.Abs(divisor) * num;
+        }
+
         /// <summary>atoi: optional sign and leading digits, anything else stops the number ("0.5" → 0).</summary>
         public static int Atoi(string s)
         {

@@ -257,3 +257,7 @@ PASS: 14 Play-mode main menu checks (startup, live background / music, options, 
 ?? UnityProj/UMnesiaRTX/Assets/Scripts/Levels/Ch01/WineCellar.cs.meta
 ?? docs/ScriptPort/ch01/05_wine_cellar.md
 ```
+
+## Верёвки и липкие зоны
+
+- 2026-10-17: шесть цепей `Rope01..06` (концы на `invisible_body_N`) и липкая область лестницы `StickyArea_1` (`CollideStickLadder`) работают (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»).

@@ -355,6 +355,24 @@ namespace RTXMnesia.EditorDev
                                          $"at {s.WorldPosition:F1} {Vector3.Distance(s.WorldPosition, snd.ListenerPosition):0.0} m");
                             continue;
                         }
+                        case "ropes":
+                        {
+                            // ropes: the map's ropes (length, particles, motor, ends) and what the sticky areas hold.
+                            if (map == null) { log.Warn("ropes needs an HplMap"); continue; }
+                            foreach (var rope in map.Ropes)
+                            {
+                                var r = rope.Physics;
+                                if (r == null) { log.Info($"t={time,6:0.00}   rope {rope.Name}: not created"); continue; }
+                                log.Info($"t={time,6:0.00}   rope {rope.Name}: length {r.TotalLength:0.00} ({r.MinTotalLength:0.00}..{r.MaxTotalLength:0.00}) " +
+                                         $"particles {r.Particles.Count} {(r.IsSleeping ? "sleeping " : "")}motor {(r.MotorActive ? $"→ {r.MotorWantedLength:0.00}" : "off")} " +
+                                         $"auto {(r.AutoMoveActive ? $"{r.AutoMoveSpeed:0.00} m/s" : "off")} start {r.AttachedStartBody?.Name ?? "-"} end {r.AttachedEndBody?.Name ?? "-"}");
+                            }
+                            foreach (var e in map.Entities)
+                                if (e is RTXMnesia.ScriptApi.HplArea { Sticky: { } sticky })
+                                    log.Info($"t={time,6:0.00}   sticky {e.Name}{(e.Active ? "" : " (off)")}: {sticky.AttachedBody?.Name ?? "-"}{(sticky.AttachedBody != null && !sticky.CanDetach ? " (posing / fixed)" : "")}");
+                            Step(1);
+                            break;
+                        }
                         case "particles":
                         {
                             // particles: the running particle systems, their particles per emitter and state.

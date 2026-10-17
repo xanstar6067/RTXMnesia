@@ -301,3 +301,7 @@ PASS: 14 Play-mode main menu checks (startup, live background / music, options, 
 ?? docs/ScriptPort/ch02/24_torture_choir_east.md
 ?? docs/ScriptPort/ch02/24_torture_choir_west.md
 ```
+
+## Верёвки и липкие зоны
+
+- 2026-10-17: 30 свисающих цепей `Rope01_*` (без тел на концах) работают (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»).

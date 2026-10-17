@@ -148,7 +148,8 @@ namespace RTXMnesia.ScriptApi
                     continue;
                 }
 
-                if (e.CollideCallbacks.Any || e.Connections.Count > 0) s.links.Add(SaveLinks(e, key));
+                if (e.CollideCallbacks.Any || e.Connections.Count > 0 || e is HplProp { InteractConnections: { Count: > 0 } })
+                    s.links.Add(SaveLinks(e, key));
                 if (e.LookAtCallback != "") s.look.Add(new SavedEntityFunc { key = key, function = e.LookAtCallback, autoRemove = e.LookAtCallbackRemove });
                 if (e.InteractCallback != "") s.interact.Add(new SavedEntityFunc { key = key, function = e.InteractCallback, autoRemove = e.InteractCallbackRemove });
                 if (e.CallbackFunc != "") s.callback.Add(new SavedEntityFunc { key = key, function = e.CallbackFunc });
@@ -205,6 +206,8 @@ namespace RTXMnesia.ScriptApi
             var links = new SavedEntityLinks { key = key, collideCallbacks = ExportCallbacks(e.CollideCallbacks) };
             foreach (var (name, entity, invert, states, callback) in e.Connections)
                 if (entity != null) links.connections.Add(new SavedConnection { name = name, entity = entity.Name, invert = invert, states = states, callback = callback });
+            if (e is HplProp prop)
+                foreach (var c in prop.InteractConnections) links.interactConnections.Add(c.CaptureSave());
             return links;
         }
 
@@ -259,6 +262,8 @@ namespace RTXMnesia.ScriptApi
                 f.file = enemy.FileName ?? "";
                 f.enemy = enemy.CaptureSave();
             }
+            else if (e is HplRope rope) f.rope = rope.CaptureSave();
+            else if (e is HplArea { Sticky: { } sticky }) f.sticky = sticky.CaptureSave();
             return f;
         }
 
@@ -426,6 +431,13 @@ namespace RTXMnesia.ScriptApi
 
             // Entities setup.
             foreach (var (e, data) in loaded) LoadFull(map, e, data);
+            // After the props: a sticky area makes its attached body static again; the ropes (cLuxSavedMap: after
+            // the entities) take their saved particles and bodies.
+            foreach (var (e, data) in loaded)
+            {
+                if (e is HplArea { Sticky: { } sticky } && data.sticky != null) sticky.RestoreSave(data.sticky);
+                if (e is HplRope rope && s.full) rope.RestoreSave(data.rope, map.transform);
+            }
         }
 
         static void LoadLinks(HplMap map, HplEntity e, SavedEntityLinks links)
@@ -437,6 +449,14 @@ namespace RTXMnesia.ScriptApi
             {
                 var other = map.GetEntityByName(c.entity);
                 if (other != null) e.Connections.Add((c.name, other, c.invert, c.states, c.callback));
+            }
+            if (e is not HplProp prop) return;
+            prop.InteractConnections.Clear();
+            if (links.interactConnections == null) return;
+            foreach (var saved in links.interactConnections)
+            {
+                var c = HplInteractConnection.FromSave(map, prop, saved);
+                if (c != null) prop.InteractConnections.Add(c);
             }
         }
 

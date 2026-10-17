@@ -404,10 +404,41 @@ namespace RTXMnesia.ScriptApi
             UpdateMoving(timeStep);
             UpdateCheckIfOutsidePlayer();
             UpdateEffectFading(timeStep);
+            for (int i = 0; i < InteractConnections.Count; i++)
+            {
+                InteractConnections[i].Update(timeStep);
+                InteractConnections[i].UpdateProp(timeStep);
+            }
             UpdatePropSpecific(timeStep);
         }
 
         protected virtual void UpdatePropSpecific(float timeStep) { }
+
+        // ------------------------------------------------------------------ interact connections
+
+        /// <summary>iLuxProp::mvInteractConnections (InteractConnectPropWithRope / ...WithMoveObject).</summary>
+        public readonly List<HplInteractConnection> InteractConnections = new();
+
+        /// <summary>iLuxProp::InteractConnectionLimit: a lever / wheel state reaches the connections.</summary>
+        protected void InteractConnectionLimit(int state)
+        {
+            foreach (var c in InteractConnections)
+            {
+                if (c.InteractionOnly && !IsInteractedWith) continue;
+                c.OnLimit(state);
+            }
+        }
+
+        /// <summary>iLuxProp::InteractConnectionTurn: the turned share of the range reaches the connections.</summary>
+        protected void InteractConnectionTurn(float angle, float prevAngle, float minAngle, float maxAngle)
+        {
+            float t = (angle - minAngle) / (maxAngle - minAngle);
+            foreach (var c in InteractConnections)
+            {
+                if (c.InteractionOnly && !IsInteractedWith) continue;
+                c.OnTurn(angle - prevAngle, t);
+            }
+        }
 
         // ------------------------------------------------------------------ effects (lights, billboards, particles)
 

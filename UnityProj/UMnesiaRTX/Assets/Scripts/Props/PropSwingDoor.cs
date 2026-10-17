@@ -90,7 +90,7 @@ namespace RTXMnesia.Props
         public override InteractDataRotate GetMoveBaseData() => _data;
 
         public override bool CanInteract(HplPhysicsBody body) =>
-            body != null && !(body.IsStatic && !_canInteractWithStaticBody);
+            body != null && !(body.IsStatic && !_canInteractWithStaticBody && !Map.BodyIsInDetachableStickyArea(body));
 
         public override bool OnInteract(HplPhysicsBody body, Vector3 hplFocusPos)
         {
@@ -101,6 +101,7 @@ namespace RTXMnesia.Props
                 if (dynamic != null) body = dynamic;
             }
             if (_joints.Find(j => j.childBody == body) == null) HplLog.Error($"Could not find swing door data for body '{body.Name}'");
+            Map.DetachBodyFromStickyArea(body);
 
             if (Locked && _interactSoundCount <= 0f)
             {

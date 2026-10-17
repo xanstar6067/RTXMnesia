@@ -22,6 +22,8 @@ namespace RTXMnesia.Dynamics
 
         public readonly List<HplPhysicsBody> Bodies = new();
         public readonly List<HplJoint> Joints = new();
+        /// <summary>The verlet ropes (iPhysicsWorld::mlstRopes).</summary>
+        public readonly List<HplPhysicsRope> Ropes = new();
         readonly Dictionary<Rigidbody, HplPhysicsBody> _byRigidbody = new();
         readonly Dictionary<AmnesiaBody, HplPhysicsBody> _byData = new();
         readonly List<Collider> _characterShapes = new();
@@ -104,8 +106,24 @@ namespace RTXMnesia.Dynamics
             }
         }
 
+        /// <summary>iPhysicsWorld::CreateRope.</summary>
+        public HplPhysicsRope CreateRope(string name, Vector3 hplStart, Vector3 hplEnd)
+        {
+            var rope = new HplPhysicsRope(name, this, hplStart, hplEnd) { Sound = SurfaceSounds.Sound };
+            Ropes.Add(rope);
+            return rope;
+        }
+
+        /// <summary>iPhysicsWorld::GetRope: by name, exact.</summary>
+        public HplPhysicsRope GetRope(string name) => Ropes.Find(r => r.Name == name);
+
+        public HplPhysicsRope GetRopeFromUniqueId(int id) => Ropes.Find(r => r.UniqueId == id);
+
+        // iPhysicsWorld::Update: the ropes before the character and rigid bodies (they only add forces), and after
+        // the bodies' after-simulation update.
         public void BeforeSimulate(float timeStep)
         {
+            foreach (var rope in Ropes) rope.UpdateBeforeSimulate(timeStep);
             foreach (var body in Bodies) body.BeforeSimulate(timeStep);
             foreach (var joint in Joints) joint.BeforeSimulate();
             SurfaceSounds.BeforeSimulate();
@@ -126,6 +144,7 @@ namespace RTXMnesia.Dynamics
             foreach (var body in Bodies) body.AfterSimulate(timeStep);
             foreach (var joint in Joints) joint.UpdateSound();
             SurfaceSounds.AfterSimulate(timeStep);
+            foreach (var rope in Ropes) rope.UpdateAfterSimulate();
         }
 
         /// <summary>A whole step with an explicit simulation (edit mode, Physics.simulationMode = Script).</summary>
@@ -142,6 +161,8 @@ namespace RTXMnesia.Dynamics
             foreach (var body in new List<HplPhysicsBody>(bodies))
             {
                 foreach (var joint in new List<HplJoint>(body.Joints)) DestroyJoint(joint);
+                // ~iPhysicsBody: attached verlet containers let go of it.
+                foreach (var rope in Ropes) rope.RemoveAttachedBody(body);
                 SurfaceSounds.OnBodyRemoved(body);
                 Bodies.Remove(body);
                 _byRigidbody.Remove(body.Rigidbody);

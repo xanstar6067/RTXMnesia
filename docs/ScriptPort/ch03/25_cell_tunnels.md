@@ -196,8 +196,8 @@
 | `AddAttachedPropToProp` | NotPorted / условная реализация |
 | `AutoSave` | ✓ (2026-10-17) |
 | `ChangePlayerStateToNormal` | пустая операция |
-| `DetachFromStickyArea` | NotPorted / условная реализация |
-| `InteractConnectPropWithRope` | NotPorted / условная реализация |
+| `DetachFromStickyArea` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
+| `InteractConnectPropWithRope` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `PreloadParticleSystem` | пустая операция |
 | `PreloadSound` | пустая операция |
 | `RemoveAttachedPropFromProp` | NotPorted / условная реализация |

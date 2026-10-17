@@ -116,7 +116,7 @@
 - `21_torture_nave.hps`: Исходные local/global переменные не объединялись. Кость повышает глобальный IngredientCount; у хора яд повышает локальный счётчик.
 - `21_torture_nave.hps:632`: Сохранены разные имена квестов 20SafetyDoorClosed/21SafetyDoorClosed и исходные ключи переводов 20LeverNotWorking.
 - `21_torture_nave.hps:779`: AreaWellLookAt отсутствует в исходной .map; соответствующая попытка взгляда оставлена.
-- `21_torture_nave.hps:19`: SetNPCAwake, Sticky, attached props и связь колеса с верёвкой остаются NotPorted. Диагностическая выдача косточки не доказывает физическую работу верёвки.
+- `21_torture_nave.hps:19`: SetNPCAwake и attached props остаются NotPorted. Sticky и связь колеса с верёвкой работают с 2026-10-17 (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»); проход с косточкой на верёвке здесь не прогонялся.
 - `source/maps/main/ch02/21_torture_nave.map:4572`: candle_floor_4 ссылается на отсутствующий PointLight_40. Исходная ссылка сохранена.
 
 ## API движка
@@ -126,9 +126,9 @@
 | Ограниченный API | Фактический статус | Ссылка |
 |---|---|---|
 | `AddAttachedPropToProp` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:275` |
-| `AttachBodyToStickyArea` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:369` |
+| `AttachBodyToStickyArea` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `AutoSave` | ✓ (2026-10-17, сохранения перенесены (CLAUDE.md «Сохранения»)) | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.General.cs` |
-| `InteractConnectPropWithRope` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:488` |
+| `InteractConnectPropWithRope` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `PreloadSound` | empty | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Effects.cs:75` |
 | `RemoveAttachedPropFromProp` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:278` |
 | `SetNPCAwake` | NotPorted | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Entities.cs:373` |

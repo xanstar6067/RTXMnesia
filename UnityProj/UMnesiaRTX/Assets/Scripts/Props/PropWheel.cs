@@ -29,6 +29,10 @@ namespace RTXMnesia.Props
         readonly HplPid _rotatePid = new(10f, 0f, 0.5f, 10);
 
         public int CurrentState { get; private set; }
+        /// <summary>The wheel's own angle (mfAngle, accumulated over turns).</summary>
+        public float Angle => _angle;
+        public float MinLimit => _minLimit;
+        public float MaxLimit => _maxLimit;
         public int StuckState { get; private set; }
         public bool InteractionDisablesStuck;
 
@@ -199,6 +203,7 @@ namespace RTXMnesia.Props
                 spinVal = _hinge.GetAngle();
             }
 
+            // No limits: the rest is skipped (the connections too).
             if (_maxLimit == 0f && _minLimit == 0f) return;
             if (StuckState == 0)
             {
@@ -218,7 +223,7 @@ namespace RTXMnesia.Props
                     SetMinJointAngle(_minLimit);
                 }
             }
-            // Interact connections (ropes, move objects): with the connection port.
+            InteractConnectionTurn(_angle, _prevAngle, _minLimit, _maxLimit);
         }
 
         void UpdateCheckLimit()
@@ -305,6 +310,7 @@ namespace RTXMnesia.Props
                 ConnectionStateChange(-1);
             }
             if (effects && sound != "") PlaySoundAt("WheelSound", sound, _hinge.PivotPoint);
+            InteractConnectionLimit(CurrentState);
         }
 
         void ResetAutoMove()

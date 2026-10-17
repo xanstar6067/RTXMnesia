@@ -90,6 +90,9 @@ namespace RTXMnesia.ScriptApi
         readonly Dictionary<string, HplEntity> _entitiesByName = new(StringComparer.Ordinal);
         readonly Dictionary<string, AmnesiaArea> _playerStarts = new(StringComparer.Ordinal);
         readonly List<AmnesiaArea> _playerStartList = new();
+        readonly Dictionary<string, AmnesiaArea> _posNodes = new(StringComparer.Ordinal);
+        readonly List<HplRope> _ropes = new();
+        readonly List<HplStickyArea> _stickyAreas = new();
         readonly Dictionary<string, HplBody> _bodies = new(StringComparer.Ordinal);
         readonly Dictionary<string, AmnesiaLight> _lights = new(StringComparer.Ordinal);
         readonly List<AmnesiaLight> _lightList = new();
@@ -130,6 +133,7 @@ namespace RTXMnesia.ScriptApi
             ParticleWorld?.DestroyAll();
             Sound.HplSoundEntity.Started -= OnSoundEntityStarted;
             foreach (var enemy in _enemies) enemy.DestroyQueryShape();
+            foreach (var rope in _ropes) rope.DestroyGraphics();
             Dynamics.HplBuoyancy.ClearCache();
         }
 
@@ -214,6 +218,14 @@ namespace RTXMnesia.ScriptApi
                         _pathNodes.Add((area.name, area.hplId, HplSpace.Position(area.transform.position + new Vector3(0f, 0.05f, 0f))));
                         break;
                     case "PosNode":
+                        // cLuxAreaNodeLoader_PosNode: a named position (rope ends, script positions).
+                        _posNodes.TryAdd(area.name, area);
+                        break;
+                    case "Rope":
+                        // cLuxAreaRopeLoader: the rope entity (its physics rope after the world is loaded).
+                        var rope = new HplRope(area);
+                        AddEntity(rope);
+                        _ropes.Add(rope);
                         break;
                     default:
                         AddEntity(new HplArea(area, gameConfig, surfaces));
@@ -257,8 +269,9 @@ namespace RTXMnesia.ScriptApi
                 AddEntity(prop);
             }
             SetCharacterShapes();
-            // iLuxEnemy::AfterWorldLoad: the node containers.
+            // iLuxEntity::AfterWorldLoad: the enemies' node containers, the ropes.
             foreach (var enemy in _enemies) enemy.AfterWorldLoad();
+            foreach (var rope in _ropes) rope.AfterWorldLoad(transform);
 
             InitFog();
 
@@ -288,6 +301,7 @@ namespace RTXMnesia.ScriptApi
             // cLuxMap::AddEntity: names are looked up in lower case, the first entity of a name wins.
             _entitiesByName.TryAdd(entity.Name.ToLowerInvariant(), entity);
             foreach (var body in entity.Bodies) _bodies.TryAdd(body.Name, body);
+            if (entity is HplArea { Sticky: { } sticky }) _stickyAreas.Add(sticky);
         }
 
         /// <summary>cLuxMapHandler::SetCurrentMap: the player is at its start, then OnStart (first visit) and OnEnter run.</summary>
@@ -665,7 +679,17 @@ namespace RTXMnesia.ScriptApi
                 {
                     prop.BeforeDestruction();
                     prop.KillParticleSystems();
+                    foreach (var body in prop.PhysicsBodies)
+                        foreach (var sticky in _stickyAreas) sticky.OnBodyRemoved(body);
                     PhysicsWorld.RemoveBodies(prop.PhysicsBodies);
+                }
+                if (entity is HplArea { Sticky: { } removedSticky }) _stickyAreas.Remove(removedSticky);
+                if (entity is HplRope removedRope)
+                {
+                    // ~cLuxRope: the drawn and the physics rope go with it.
+                    removedRope.DestroyGraphics();
+                    PhysicsWorld.Ropes.Remove(removedRope.Physics);
+                    _ropes.Remove(removedRope);
                 }
                 _entities.Remove(entity);
                 if (entity is RTXMnesia.Enemies.HplEnemy removedEnemy) _enemies.Remove(removedEnemy);
@@ -931,6 +955,32 @@ namespace RTXMnesia.ScriptApi
         }
 
         public HplBody GetBody(string name) => name != null && _bodies.TryGetValue(name, out var b) ? b : null;
+
+        /// <summary>cLuxMap::GetPosNode.</summary>
+        public AmnesiaArea GetPosNode(string name) => name != null && _posNodes.TryGetValue(name, out var n) ? n : null;
+
+        public IReadOnlyList<HplRope> Ropes => _ropes;
+
+        /// <summary>cLuxMap::BodyIsInDetachableStickyArea: the body is held by a sticky area that lets it go.</summary>
+        public bool BodyIsInDetachableStickyArea(Dynamics.HplPhysicsBody body)
+        {
+            foreach (var sticky in _stickyAreas)
+                if (sticky.AttachedBody == body) return sticky.CanDetach;
+            return false;
+        }
+
+        /// <summary>cLuxMap::DetachBodyFromStickyArea: true if a sticky area holding the body let it go.</summary>
+        public bool DetachBodyFromStickyArea(Dynamics.HplPhysicsBody body)
+        {
+            foreach (var sticky in _stickyAreas)
+            {
+                if (sticky.AttachedBody != body) continue;
+                if (!sticky.CanDetach) return false;
+                sticky.DetachBody();
+                return true;
+            }
+            return false;
+        }
 
         public AmnesiaLight GetLight(string name) => name != null && _lights.TryGetValue(name, out var l) ? l : null;
 

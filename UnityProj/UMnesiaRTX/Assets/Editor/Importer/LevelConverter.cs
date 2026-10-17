@@ -1487,6 +1487,7 @@ namespace RTXMnesia.Importer
             HudEffectsConverter.Convert(_log);
             if (!_menuBackground) EnemyConverter.Convert(_index, _log);
             if (!_menuBackground) InsanityConverter.Convert(_index, _log);
+            if (!_menuBackground) RopeConverter.Convert(_index, _log, new[] { _mapAbsolute });
 
             var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
             sound.bank = SoundConverter.Convert(_log, map.language);

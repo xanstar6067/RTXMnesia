@@ -150,14 +150,15 @@ namespace RTXMnesia.Props
         {
             if (body == null) return false;
             if (ObjType == ObjectType.Grab && _grabSkipNonOuterBodies && body.Joints.Count >= 2) return false;
-            // Sticky areas: step 4.4 / 6.
-            if ((body.IsStatic && InteractCallback == "") || (ObjType == ObjectType.Static && InteractCallback == "")) return false;
+            if ((body.IsStatic && !Map.BodyIsInDetachableStickyArea(body) && InteractCallback == "") ||
+                (ObjType == ObjectType.Static && InteractCallback == "")) return false;
             return true;
         }
 
         public override bool OnInteract(HplPhysicsBody body, Vector3 hplFocusPos)
         {
             var interactBody = ExplicitMainBody ?? body;
+            Map.DetachBodyFromStickyArea(body);
             var hud = Map.hud;
             switch (ObjType)
             {
