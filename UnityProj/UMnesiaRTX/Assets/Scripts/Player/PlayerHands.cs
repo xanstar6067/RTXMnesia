@@ -221,8 +221,8 @@ namespace RTXMnesia.Player
                 var data = go.AddComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>();
                 data.affectDiffuse = mainData.affectDiffuse;
                 data.affectSpecular = mainData.affectSpecular;
-                data.shapeRadius = distance;
             }
+            copy.shapeRadius = distance;
             copy.lightUnit = main.lightUnit;
             HplLighting.SetLightLayers(copy, HplLighting.HandsLayerMask);
             o.HandLights.Add((main, copy, 2f * distance * distance / (reference * reference)));

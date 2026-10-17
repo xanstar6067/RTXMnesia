@@ -124,7 +124,7 @@ namespace RTXMnesia.Player
             _ambientLight.radius = _ambientLightRadius;
             _ambientLight.InitRuntime();
             _ambientLight.Apply(Color.clear, _ambientLightRadius);
-            if (go.TryGetComponent(out HDAdditionalLightData hd)) hd.shapeRadius = _ambientLightRadius;
+            light.shapeRadius = _ambientLightRadius;
             _ambientLight.onApplied = ScaleNearField;
         }
 

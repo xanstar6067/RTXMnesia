@@ -35,17 +35,95 @@ MonoBehaviour:
     m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/02_entrance_hall.unity
     m_guid: 274715e51a693ce49a0a41c9e2056ce8
   - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/03_archives.unity
+    m_guid: 67c4ebc02462e8b4fa3d6894dfb735de
+  - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/04_wine_cellar_lab.unity
     m_guid: ee0959ae5f995364eae3f0d8ec4841a5
   - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/05_wine_cellar.unity
     m_guid: ea45a92776c03984babd915bd35a38c6
   - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/06_distillery.unity
+    m_guid: 26b6e9d2f10785a41965af625a635ae5
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/07_archives_cellar.unity
+    m_guid: d37d3368b9d18264ebfffc42343c91db
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/08_cellar_maze.unity
+    m_guid: aed5c55a6823ff34e8c33b54784fd41b
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/09_back_hall.unity
+    m_guid: 7cf21419492fe8b44a509b7b777d6a14
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/10_daniels_room.unity
+    m_guid: 21d87a9b4940aa04d8b37dc3e75513c4
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/11_study.unity
+    m_guid: e8d32530b93562e46acae5979b921d7a
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/12_storage.unity
+    m_guid: 43659305a2448be429a45dec7db8484a
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/13_machine_room.unity
+    m_guid: 855d2b5199d0b0c41be4c5b0369a5393
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch01/14_elevator.unity
+    m_guid: 8ddb957c7f423e7449410ed86739cf27
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/15_prison_north.unity
+    m_guid: c1ddbb90c5d69414ebdbb25e56e24c90
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/15_prison_south.unity
+    m_guid: 714755355316bca498d78aa51fbe88dd
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/16_cistern_entrance.unity
+    m_guid: 6de66746096e55e4a8cd4f7036fdaff4
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/17_control_room.unity
+    m_guid: 5c48438a05034f84eb2a75e905be9aee
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/18_cistern.unity
+    m_guid: 9206d0b48627e9f4d8cb699d4935dfff
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/19_morgue.unity
+    m_guid: df2f82bd70745804fa9871cb73da1b2d
+  - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/20_sewer.unity
     m_guid: f7336c0165dd26d429820606a561a124
   - m_enabled: 1
-    m_path: Assets/AmnesiaImported/Levels/main_menu/ptest/ptest_menu.unity
-    m_guid: f5edd03594d92434a8551ed14e0b0bb7
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/21_torture_nave.unity
+    m_guid: f2d0a942dace8e44096804de557bb4e1
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/22_torture_chancel.unity
+    m_guid: 3b0ed4dcfd0027f4da1bcb2183af9a87
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/23_torture_transept.unity
+    m_guid: bb6c8bc42e1837f49956eb0a9c4ea65f
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/24_torture_choir_east.unity
+    m_guid: a406aa845e126ca408faf106fb9cc106
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/24_torture_choir_west.unity
+    m_guid: fc2c330282275e44a90bc88c85c6b91a
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch03/25_cell_tunnels.unity
+    m_guid: c6de700c3658fa247b3b4a06c0d09006
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch03/26_torture_nave_redux.unity
+    m_guid: b3a4448ddd90a4041abc15e3102ca26f
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch03/26_zimmerman_vision.unity
+    m_guid: 807be70c7e799a44a91d6bb74bfe7861
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch03/27_torture_chancel_redux.unity
+    m_guid: 662f62fa656f4fe4da02fb6e9b84db69
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch03/28_inner_sanctum.unity
+    m_guid: 1c5c1c6da3d3c8f4ea81baa774b0e24a
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/main/ch03/29_orb_chamber.unity
+    m_guid: 2cac022f09141cb4cad3c223b0aa1fcb
   - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/maps/ptest/01_cells.unity
     m_guid: e2320e543e4a8d842923d0e42d5c398b

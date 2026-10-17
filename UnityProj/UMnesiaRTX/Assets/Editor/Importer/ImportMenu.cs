@@ -259,10 +259,16 @@ namespace RTXMnesia.Importer
 
         internal static void RenderToFile(Camera camera, string file, Action<Texture2D> compose = null)
         {
+            UploadSceneTextures();
             var rt = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             camera.targetTexture = rt;
-            // Several frames so HDRP history (exposure, TAA) settles.
-            for (int i = 0; i < 30; i++) camera.Render();
+            // Several frames so HDRP history (exposure, TAA) settles; each one is finished before the next (no swap
+            // chain submits the work in batch mode).
+            for (int i = 0; i < 30; i++)
+            {
+                camera.Render();
+                UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0, 0, 1, 0, 1, 0, 1).WaitForCompletion();
+            }
 
             var previous = RenderTexture.active;
             RenderTexture.active = rt;
@@ -276,6 +282,34 @@ namespace RTXMnesia.Importer
             UnityEngine.Object.DestroyImmediate(image);
             rt.Release();
             Debug.Log($"[RTXMnesia] Rendered: {file}");
+        }
+
+        static readonly HashSet<Texture> UploadedTextures = new();
+
+        /// <summary>
+        /// Edit-mode renders upload a texture to the GPU lazily, in the command list of the first frame that draws
+        /// it. On 06_distillery the first frame of a view whose floors use pixel displacement (HDRP POM reading the
+        /// just uploaded _HeightMap) hung the GPU: DXGI_ERROR_DEVICE_HUNG (TDR), on D3D12 and D3D11, at any resolution.
+        /// Any earlier frame using the textures, or blits of the height maps alone, avoided it; Play mode does not hang.
+        /// So the textures of the loaded scenes' materials are uploaded with blits first.
+        /// </summary>
+        static void UploadSceneTextures()
+        {
+            RenderTexture tiny = null;
+            foreach (var renderer in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude))
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    if (material == null) continue;
+                    foreach (string name in material.GetTexturePropertyNames())
+                    {
+                        if (material.GetTexture(name) is not Texture2D texture || !UploadedTextures.Add(texture)) continue;
+                        tiny ??= new RenderTexture(4, 4, 0);
+                        Graphics.Blit(texture, tiny);
+                    }
+                }
+            if (tiny == null) return;
+            UnityEngine.Rendering.AsyncGPUReadback.Request(tiny).WaitForCompletion();
+            tiny.Release();
         }
 
         /// <param name="mapRelative">Map path relative to source/, e.g. maps/main/ch01/00_rainy_hall.map.</param>

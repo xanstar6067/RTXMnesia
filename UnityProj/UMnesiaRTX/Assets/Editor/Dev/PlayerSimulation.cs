@@ -277,6 +277,25 @@ namespace RTXMnesia.EditorDev
                             log.Info($"t={time,6:0.00}   lightsoff: {count} lights hidden");
                             continue;
                         }
+                        case "hide":
+                        {
+                            // hide lights|passes|volumes|<shader name part>: turn off the lights, custom passes, volumes
+                            // or the renderers using a matching shader (bisecting render problems).
+                            string what = p.Length > 1 ? p[1] : "";
+                            int count = 0;
+                            if (what == "lights")
+                                foreach (var l in UnityEngine.Object.FindObjectsByType<Light>(FindObjectsInactive.Exclude)) { l.enabled = false; count++; }
+                            else if (what == "passes")
+                                foreach (var pass in UnityEngine.Object.FindObjectsByType<UnityEngine.Rendering.HighDefinition.CustomPassVolume>(FindObjectsInactive.Exclude)) { pass.enabled = false; count++; }
+                            else if (what == "volumes")
+                                foreach (var vol in UnityEngine.Object.FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsInactive.Exclude)) { vol.enabled = false; count++; }
+                            else
+                                foreach (var r in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude))
+                                    if (r.enabled && Array.Exists(r.sharedMaterials, m => m != null && m.shader != null &&
+                                        m.shader.name.IndexOf(what, StringComparison.OrdinalIgnoreCase) >= 0)) { r.enabled = false; count++; }
+                            log.Info($"t={time,6:0.00}   hide {what}: {count}");
+                            continue;
+                        }
                         case "sanity":
                         {
                             // sanity [value]: set the sanity, then log the light level, darkness and sanity effects.

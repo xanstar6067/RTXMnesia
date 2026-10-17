@@ -264,7 +264,7 @@ namespace RTXMnesia.Player
         {
             _player = player;
             // Edit-mode simulation initializes the player before HplMap.Build; use its scene's context too.
-            foreach (var map in UnityEngine.Object.FindObjectsByType<HplMap>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var map in UnityEngine.Object.FindObjectsByType<HplMap>(FindObjectsInactive.Include))
                 if (map.gameObject.scene == player.gameObject.scene) { _permaDeath = map.Campaign.IsJustine; break; }
             _heightAddGoal = cfg.GetFloat("Player_General", "Death_HeightAdd", 0f);
             _heightAddGoalCrouch = cfg.GetFloat("Player_General", "Death_HeightAddCrouch", 0f);
