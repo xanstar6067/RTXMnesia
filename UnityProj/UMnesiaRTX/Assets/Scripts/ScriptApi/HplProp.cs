@@ -406,6 +406,7 @@ namespace RTXMnesia.ScriptApi
             UpdateCheckIfOutsidePlayer();
             UpdateEffectFading(timeStep);
             UpdateAnimation();
+            UpdateAttachedProps(false);
             for (int i = 0; i < InteractConnections.Count; i++)
             {
                 InteractConnections[i].Update(timeStep);
@@ -415,6 +416,109 @@ namespace RTXMnesia.ScriptApi
         }
 
         protected virtual void UpdatePropSpecific(float timeStep) { }
+
+        // ------------------------------------------------------------------ attached props
+
+        sealed class AttachedProp
+        {
+            public string name, file;
+            public Matrix4x4 offset;          // HPL2, relative to the parent's main body
+            public HplProp prop;
+            public Matrix4x4 bodyLocal;       // HPL2, the attached prop's first body in its entity (mvBodyExtraData[0])
+        }
+
+        readonly List<AttachedProp> _attachedProps = new();
+
+        /// <summary>iLuxProp::mpAttachmentParent.</summary>
+        public HplProp AttachmentParent { get; private set; }
+        public bool HasAttachedProp => _attachedProps.Count > 0;
+        public IEnumerable<HplProp> AttachedProps { get { foreach (var a in _attachedProps) yield return a.prop; } }
+
+        /// <summary>
+        /// iLuxProp::AddAndAttachProp: the .ent is created at the origin, not saved, its bodies static, colliding with
+        /// nothing and inactive, and it follows this prop's main body with the offset.
+        /// </summary>
+        public void AddAndAttachProp(string name, string file, Matrix4x4 hplOffset)
+        {
+            if (MainBody == null)
+            {
+                HplLog.Error($"Could not attach prop {Name} to {file} because it does not have a main body!");
+                return;
+            }
+            var entity = Map.CreateEntity(name, file, Vector3.zero, Quaternion.identity, Vector3.one);
+            if (entity is not HplProp prop || prop.Type != HplEntityType.Prop || prop.Name != name)
+            {
+                HplLog.Error($"Could not create attach entity '{file}' for prop '{Name}'");
+                return;
+            }
+            prop.IsSaved = false;
+            foreach (var body in prop.PhysicsBodies)
+            {
+                body.Mass = 0f;
+                body.Collide = false;
+                body.CollideCharacter = false;
+                body.Active = false;
+            }
+            // Created at the origin: the body's pose is its local transform in the entity.
+            Matrix4x4 bodyLocal = prop.PhysicsBodies.Count > 0 ? prop.PhysicsBodies[0].HplMatrix : Matrix4x4.identity;
+            _attachedProps.Add(new AttachedProp { name = name, file = file, offset = hplOffset, prop = prop, bodyLocal = bodyLocal });
+            prop.AttachmentParent = this;
+            UpdateAttachedProps(true);
+        }
+
+        /// <summary>iLuxProp::DestroyAttachedProp(name).</summary>
+        public bool DestroyAttachedProp(string name)
+        {
+            int i = _attachedProps.FindIndex(a => a.name == name);
+            if (i < 0) return false;
+            var attached = _attachedProps[i];
+            _attachedProps.RemoveAt(i);
+            attached.prop.AttachmentParent = null;
+            Map.DestroyEntity(attached.prop);
+            return true;
+        }
+
+        /// <summary>The prop's destruction (~iLuxProp): off its parent; its own attached props are destroyed.</summary>
+        internal void DestroyAttachments()
+        {
+            if (AttachmentParent != null)
+            {
+                AttachmentParent._attachedProps.RemoveAll(a => a.prop == this);
+                AttachmentParent = null;
+            }
+            foreach (var a in _attachedProps)
+            {
+                a.prop.AttachmentParent = null;
+                Map.DestroyEntity(a.prop);
+            }
+            _attachedProps.Clear();
+        }
+
+        /// <summary>iLuxProp::UpdateAttachedProps: body 0 = main body × offset × its local transform (not while the main body sleeps).</summary>
+        void UpdateAttachedProps(bool force)
+        {
+            if (_attachedProps.Count == 0) return;
+            if (!force && !MainBody.Enabled) return;
+            foreach (var a in _attachedProps)
+            {
+                if (a.prop.PhysicsBodies.Count == 0) continue;
+                a.prop.PhysicsBodies[0].SetHplMatrix(MainBody.HplMatrix * a.offset * a.bodyLocal);
+            }
+        }
+
+        /// <summary>iLuxProp_SaveData::mvAttachedProps.</summary>
+        public void CaptureAttachedProps(List<Save.SavedAttachedProp> list)
+        {
+            list.Clear();
+            foreach (var a in _attachedProps) list.Add(new Save.SavedAttachedProp { name = a.name, file = a.file, offset = a.offset });
+        }
+
+        /// <summary>iLuxProp::SetupSaveData: the attached props are made again.</summary>
+        public void RestoreAttachedProps(List<Save.SavedAttachedProp> list)
+        {
+            if (list == null) return;
+            foreach (var a in list) AddAndAttachProp(a.name, a.file, a.offset);
+        }
 
         // ------------------------------------------------------------------ animations
 

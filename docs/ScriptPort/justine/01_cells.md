@@ -122,7 +122,7 @@
 | `AddEffectVoice` | 16 | `AddEffectVoice(string asVoiceFile, string asEffectFile, string asTextCat, string asTextEntry, bool abUsePostion,                                       string asPosEnitity, float afMinDistance, float afMaxDistance)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:31`) |
 | `AddEnemyPatrolNode` | 10 | `AddEnemyPatrolNode(string asEnemyName, string asNodeName, float afWaitTime, string asAnimation)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:569`) |
 | `AddEntityCollideCallback` | 28 | `AddEntityCollideCallback(string asParentName, string asChildName, string asFunction, bool abDeleteOnCollide, int alStates)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:205`) |
-| `AddKeyPart` | 6 | `AddKeyPart(int alKeyPart)` — NotPorted (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:115`) |
+| `AddKeyPart` | 6 | `AddKeyPart(int alKeyPart)` — ✓ с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы») |
 | `AddLocalVarFloat` | 1 | `AddLocalVarFloat(string asName, float afVal)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:61`) |
 | `AddLocalVarInt` | 9 | `AddLocalVarInt(string asName, int alVal)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:58`) |
 | `AddPropImpulse` | 3 | `AddPropImpulse(string asName, float afX, float afY, float afZ, string asCoordSystem)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:424`) |
@@ -151,7 +151,7 @@
 | `MovePlayerHeadPos` | 6 | `MovePlayerHeadPos(float afX, float afY, float afZ, float afSpeed, float afSlowDownDist)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Player.cs:103`) |
 | `PlayGuiSound` | 21 | `PlayGuiSound(string asSoundFile, float afVolume)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:73`) |
 | `PlayMusic` | 9 | `PlayMusic(string asMusicFile, bool abLoop, float afVolume, float afFadeTime, int alPrio, bool abResume)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:137`) |
-| `PlayPropAnimation` | 1 | `PlayPropAnimation(string asProp, string asAnimation, float afFadeTime, bool abLoop, string asCallback)` — NotPorted (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:394`) |
+| `PlayPropAnimation` | 1 | `PlayPropAnimation(string asProp, string asAnimation, float afFadeTime, bool abLoop, string asCallback)` — ✓ с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы») |
 | `PlaySoundAtEntity` | 51 | `PlaySoundAtEntity(string asSoundName, string asSoundFile, string asEntity, float afFadeSpeed, bool abSaveSound)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:87`) |
 | `PreloadSound` | 33 | `PreloadSound(string asSoundFile)` — empty (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:80`) |
 | `RandFloat` | 17 | `RandFloat(float afMin, float afMax)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:26`) |

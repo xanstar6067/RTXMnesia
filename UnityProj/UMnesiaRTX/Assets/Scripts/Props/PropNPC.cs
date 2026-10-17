@@ -59,7 +59,8 @@ namespace RTXMnesia.Props
                 var root = AnimatedModel.transform;
                 for (int i = 0; i < names.Length; i++)
                 {
-                    var bone = FindBone(root, names[i]);
+                    var data = Enemies.HplEnemyAssets.Instance != null ? Enemies.HplEnemyAssets.Instance.GetEnemy(Component.file) : null;
+                    var bone = data != null ? data.FindNode(root, names[i]) : FindBone(root, names[i]);
                     if (bone == null)
                     {
                         HplLog.Error($"Move head Bone '{names[i]}' does not exist in '{Component.file}'!");

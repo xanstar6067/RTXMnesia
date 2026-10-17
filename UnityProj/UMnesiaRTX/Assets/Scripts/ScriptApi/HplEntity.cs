@@ -209,6 +209,9 @@ namespace RTXMnesia.ScriptApi
         public readonly int Id;
         public readonly GameObject GameObject;
         public HplMap Map { get; internal set; }
+
+        /// <summary>iLuxEntity::mbIsSaved: false for props attached to another prop (the parent saves them).</summary>
+        public bool IsSaved { get; set; } = true;
         public abstract HplEntityType Type { get; }
         public bool Active { get; private set; }
 

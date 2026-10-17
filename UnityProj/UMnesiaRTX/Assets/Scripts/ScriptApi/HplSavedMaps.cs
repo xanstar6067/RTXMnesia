@@ -135,6 +135,7 @@ namespace RTXMnesia.ScriptApi
 
             foreach (var e in map.Entities)
             {
+                if (!e.IsSaved) continue;
                 string key = Key(e);
                 // cLuxSavedMap: every saved entity that is not being destroyed.
                 if (full)
@@ -256,6 +257,7 @@ namespace RTXMnesia.ScriptApi
                 foreach (var joint in prop.Joints)
                     f.joints.Add(new SavedJoint { minAngle = joint.MinAngle, maxAngle = joint.MaxAngle, broken = joint.Broken });
                 prop.CaptureAnimations(f.animations);
+                prop.CaptureAttachedProps(f.attachedProps);
             }
             else if (e is Enemies.HplEnemy enemy)
             {
@@ -499,6 +501,7 @@ namespace RTXMnesia.ScriptApi
             prop.SetEffectsActive(f.effectsActive, false);
             if (prop is PropLamp lamp) lamp.SetLit(f.lit, false);
             prop.RestoreAnimations(f.animations);
+            prop.RestoreAttachedProps(f.attachedProps);
             prop.AfterStateRestore();
         }
 

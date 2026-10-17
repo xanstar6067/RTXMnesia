@@ -685,6 +685,7 @@ namespace RTXMnesia.ScriptApi
                 if (player != null && player.States != null) player.States.Current.OnDestroyEntity(entity);
                 if (entity is HplProp prop)
                 {
+                    prop.DestroyAttachments();
                     prop.BeforeDestruction();
                     prop.KillParticleSystems();
                     foreach (var body in prop.PhysicsBodies)

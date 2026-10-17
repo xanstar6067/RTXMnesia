@@ -161,7 +161,7 @@
 - `OnStart` регистрирует отсутствующий `CollideAreaGuardianDoor2Checkpoint`. Динамические `EventStep3`, `EventStep5` и другие необъявленные шаги также остаются как в оригинале: фиктивных обработчиков нет.
 - `AreaGuardianEffectsFloor_lump_1`, *lump_21_, *lump_26_, `wood_beam_3`, `barrel01_1`, `barrel01_2` отсутствуют в исходной карте и не создаются скриптом. Сброс обращается к ним. Для развилки 28–35 существуют зоны с суффиксами _1/_2; сброс записывает `CaveInUnblockedPath`, а чтение идёт из `CaveInPathUnblocked`. Исходное несовпадение сохранено.
 - StopSound/DestroyParticleSystem могут обращаться к уже завершённым или ещё не созданным записям (`slimeps`, `push`, `GuardianScream`, `GuardianEndFearFog`, `SlimeLoopOnPlayer`, `rumblex`). В диагностике это записано отдельно, без подмены логики.
-- `SetInsanitySetEnabled` с 2026-10-17 работает (события безумия перенесены (CLAUDE.md «События безумия»): набор `Ch03` включается, `Ch02` выключается; строка `skipped` ниже — из прогона до этого). `InteractConnectPropWithRope`, attached props, `DetachFromStickyArea`, `AutoSave`, `StartCredits` ещё NotPorted. Прямой вызов Sticky/rope callbacks в диагностике проверяет скрипт, а не физическое прикрепление/канат. `ChangePlayerStateToNormal`, PreloadSound/PreloadParticleSystem — пустые API. Grunt уже имеет ИИ, но прохождение всей погони игроком этим тестом не доказано.
+- `SetInsanitySetEnabled` с 2026-10-17 работает (события безумия перенесены (CLAUDE.md «События безумия»): набор `Ch03` включается, `Ch02` выключается; строка `skipped` ниже — из прогона до этого). `InteractConnectPropWithRope`, прикреплённые пропы, `DetachFromStickyArea`, `AutoSave` и `StartCredits` с 2026-10-17 работают (CLAUDE.md «Верёвки, связи, липкие зоны, слизь», «Сохранения», «Титры, NPC, анимации и прикреплённые пропы»); полный проход здесь не прогонялся. Прямой вызов Sticky/rope callbacks в диагностике проверяет скрипт, а не физическое прикрепление/канат. `ChangePlayerStateToNormal`, PreloadSound/PreloadParticleSystem — пустые API. Grunt уже имеет ИИ, но прохождение всей погони игроком этим тестом не доказано.
 
 ## Проверки карты
 
@@ -180,7 +180,7 @@
 
 Аудит не считается PASS. В 10 из 11 missing submesh найден SkinnedMeshRenderer с точным именем; servant_grunt присутствует как SkinnedMeshRenderer «servant_grunt 1» с GUID исходной модели. Проверка сериализованной сцены сохранена в Ch03_RendererReview.json.
 
-Дополнительный Ch03_Sim_25_alexander дошёл до AlexEndState=13 и StartCredits (заглушка, endNum=0 по исходному вызову); реальные титры не реализованы. Полный маршрут основной игры через главу 2 не проверен.
+Дополнительный Ch03_Sim_25_alexander дошёл до AlexEndState=13 и StartCredits (endNum=0 по исходному вызову); с 2026-10-17 титры работают (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы»), ведро на верёвке — прикреплённый проп. Полный маршрут основной игры через главу 2 не проверен.
 
 
 ## Итог проверок главы 3
@@ -193,16 +193,16 @@
 
 | API | Фактический статус |
 |---|---|
-| `AddAttachedPropToProp` | NotPorted / условная реализация |
+| `AddAttachedPropToProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
 | `AutoSave` | ✓ (2026-10-17) |
 | `ChangePlayerStateToNormal` | пустая операция |
 | `DetachFromStickyArea` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `InteractConnectPropWithRope` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `PreloadParticleSystem` | пустая операция |
 | `PreloadSound` | пустая операция |
-| `RemoveAttachedPropFromProp` | NotPorted / условная реализация |
+| `RemoveAttachedPropFromProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
 | `SetInsanitySetEnabled` | ✓ (2026-10-17) |
-| `StartCredits` | NotPorted / условная реализация |
+| `StartCredits` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
 
 Все отчёты далее — внутри `UnityProj/UMnesiaRTX/Logs/`, вне git. PlayerSimulation: `-batchmode -quit`, GPU, `-seed 1`, шаг 1/60; импорт/аудит — `-batchmode -nographics -quit`. Ни один отчёт с WARNING [Script] ERROR не трактуется как чистый скрипт только из-за 0 errors.
 

@@ -95,7 +95,7 @@
 | `AddEffectVoice` | 4 | `AddEffectVoice(string asVoiceFile, string asEffectFile, string asTextCat, string asTextEntry, bool abUsePostion,                                       string asPosEnitity, float afMinDistance, float afMaxDistance)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:31`) |
 | `AddEnemyPatrolNode` | 13 | `AddEnemyPatrolNode(string asEnemyName, string asNodeName, float afWaitTime, string asAnimation)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:569`) |
 | `AddEntityCollideCallback` | 11 | `AddEntityCollideCallback(string asParentName, string asChildName, string asFunction, bool abDeleteOnCollide, int alStates)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:205`) |
-| `AddKeyPart` | 6 | `AddKeyPart(int alKeyPart)` — NotPorted (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:115`) |
+| `AddKeyPart` | 6 | `AddKeyPart(int alKeyPart)` — ✓ с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы») |
 | `AddLocalVarFloat` | 3 | `AddLocalVarFloat(string asName, float afVal)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:61`) |
 | `AddLocalVarInt` | 5 | `AddLocalVarInt(string asName, int alVal)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:58`) |
 | `AddPropImpulse` | 1 | `AddPropImpulse(string asName, float afX, float afY, float afZ, string asCoordSystem)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:424`) |

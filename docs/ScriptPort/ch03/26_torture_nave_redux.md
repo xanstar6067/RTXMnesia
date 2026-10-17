@@ -174,13 +174,13 @@
 
 | API | Фактический статус |
 |---|---|
-| `AddAttachedPropToProp` | NotPorted / условная реализация |
+| `AddAttachedPropToProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
 | `AutoSave` | ✓ (2026-10-17) |
 | `CreateDataCache` | пустая операция |
 | `DestroyDataCache` | пустая операция |
 | `InteractConnectPropWithRope` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `PreloadSound` | пустая операция |
-| `RemoveAttachedPropFromProp` | NotPorted / условная реализация |
+| `RemoveAttachedPropFromProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
 
 Все отчёты далее — внутри `UnityProj/UMnesiaRTX/Logs/`, вне git. PlayerSimulation: `-batchmode -quit`, GPU, `-seed 1`, шаг 1/60; импорт/аудит — `-batchmode -nographics -quit`. Ни один отчёт с WARNING [Script] ERROR не трактуется как чистый скрипт только из-за 0 errors.
 

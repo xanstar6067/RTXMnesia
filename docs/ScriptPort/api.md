@@ -6,7 +6,7 @@
 
 ## Нужны для главы 1 (по частоте)
 
-Подготовка Justine (2026-10-17): `SetPlayerPermaDeathSound` — ✓, хранит выбранную .snt у игрока и переносит между картами. В режиме Justine смерть проигрывает её и завершает приложение без загрузки checkpoint; основной режим смерти сохранён. `StartCredits` и `AddKeyPart` остаются NotPorted. Проверки и границы: `justine/README.md`.
+Подготовка Justine (2026-10-17): `SetPlayerPermaDeathSound` — ✓, хранит выбранную .snt у игрока и переносит между картами. В режиме Justine смерть проигрывает её и завершает приложение без загрузки checkpoint; основной режим смерти сохранён. `StartCredits` и `AddKeyPart` — ✓ с 2026-10-17 (титры, CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы»). Проверки и границы: `justine/README.md`.
 
 | Функция | гл.1 | всего | Статус | Сигнатура |
 |---|---:|---:|:---:|---|
@@ -165,10 +165,10 @@
 |---|---:|:---:|---|
 | `CreateParticleSystemAtEntityExt` | 13 | ✓ | `void CreateParticleSystemAtEntityExt(	string &in asPSName, string &in asPSFile, string &in asEntity, bool abSavePS, float afR, float afG, float afB, float afA, bool abFadeAtDistance, float afFadeMinEnd, float afFadeMinStart, float afFadeMaxStart, float afFadeMaxEnd)` |
 | `GetPlayerSanity` | 10 | ✓ | `float GetPlayerSanity()` |
-| `RemoveAttachedPropFromProp` | 8 | — | `void RemoveAttachedPropFromProp(string& asPropName, string& asAttachName)` |
-| `AddAttachedPropToProp` | 8 | — | `void AddAttachedPropToProp(string& asPropName, string& asAttachName, string& asAttachFile, float fPosX, float fPosY, float fPosZ, float fRotX, float fRotY, float fRot)` |
+| `RemoveAttachedPropFromProp` | 8 | ✓ | `void RemoveAttachedPropFromProp(string& asPropName, string& asAttachName)` |
+| `AddAttachedPropToProp` | 8 | ✓ | `void AddAttachedPropToProp(string& asPropName, string& asAttachName, string& asAttachFile, float fPosX, float fPosY, float fPosZ, float fRotX, float fRotY, float fRot)` |
 | `SetEnemyDisableTriggers` | 6 | ✓ | `void SetEnemyDisableTriggers(string &in asName, bool abX)` |
-| `PlayPropAnimation` | 6 | — | `void PlayPropAnimation(string &in asProp, string &in asAnimation, float afFadeTime, bool abLoop, string &in asCallback)` |
+| `PlayPropAnimation` | 6 | ✓ | `void PlayPropAnimation(string &in asProp, string &in asAnimation, float afFadeTime, bool abLoop, string &in asCallback)` |
 | `GetPlayerSpeed` | 6 | ✓ | `float GetPlayerSpeed()` |
 | `UnlockAchievement` | 5 | — | `void UnlockAchievement(string &in asName)` |
 | `StopPropMovement` | 5 | ✓ | `void StopPropMovement(string &in asName)` |
@@ -176,17 +176,17 @@
 | `SetLightFlickerActive` | 5 | ✓ | `void SetLightFlickerActive(string& asLightName, bool abActive)` |
 | `ChangePlayerStateToNormal` | 5 | — | `void ChangePlayerStateToNormal()` |
 | `AddPlayerBodyForce` | 5 | ✓ | `void AddPlayerBodyForce(float afX, float afY, float afZ, bool abUseLocalCoords)` |
-| `StartCredits` | 4 | — | `void StartCredits(string &in asMusic, bool abLoopMusic, string &in asTextCat, string &in asTextEntry, int alEndNum)` |
+| `StartCredits` | 4 | ✓ | `void StartCredits(string &in asMusic, bool abLoopMusic, string &in asTextCat, string &in asTextEntry, int alEndNum)` |
 | `ShowEnemyPlayerPosition` | 4 | ✓ | `void ShowEnemyPlayerPosition(string &in asName)` |
 | `RemoveUseItemCallback` | 4 | ✓ | `void RemoveUseItemCallback(string &in asName)` |
 | `QuestIsAdded` | 4 | ✓ | `bool QuestIsAdded(string &in asName)` |
 | `GetPlayerYSpeed` | 4 | ✓ | `float GetPlayerYSpeed()` |
 | `GetFlashbackIsActive` | 4 | ✓ | `bool GetFlashbackIsActive()` |
-| `SetNPCFollowPlayer` | 3 | — | `void SetNPCFollowPlayer(string &in asName, bool abX)` |
+| `SetNPCFollowPlayer` | 3 | ✓ | `void SetNPCFollowPlayer(string &in asName, bool abX)` |
 | `GetEffectVoiceActive` | 3 | ✓ | `bool GetEffectVoiceActive()` |
 | `BreakJoint` | 2 | ✓ | `void BreakJoint(string &in asName)` |
 | `SetWheelInteractionDisablesStuck` | 1 | ✓ | `void SetWheelInteractionDisablesStuck(string &in asName, bool abX)` |
-| `SetNPCAwake` | 1 | — | `void SetNPCAwake(string &in asName, bool abAwake, bool abEffects)` |
+| `SetNPCAwake` | 1 | ✓ | `void SetNPCAwake(string &in asName, bool abAwake, bool abEffects)` |
 | `SetLeverInteractionDisablesStuck` | 1 | ✓ | `void SetLeverInteractionDisablesStuck(string &in asName, bool abX)` |
 | `SetEntityConnectionStateChangeCallback` | 1 | ~ | `void SetEntityConnectionStateChangeCallback(string& asName, string& asCallback)` |
 | `Print` | 1 | ✓ | `void Print(string &in asString)` |
@@ -217,6 +217,10 @@ GiveItemFromFile читает определения `.ent` из генерир�
 ## Верёвки, связи, липкие зоны
 
 `InteractConnectPropWithRope` / `InteractConnectPropWithMoveObject` — ✓: порт `cLuxInteractConnection_Rope` / `_MoveObject` (мин. скорость −|x|, макс. |x|). Верёвки областей Rope работают сами (`cLuxRope`); `CreateRope` пуст, как в оригинале (тело функции закомментировано). `AttachBodyToStickyArea`, `DetachFromStickyArea`, а также не вызываемые картами `AttachPropToStickyArea` и `SetAllowStickyAreaAttachment` — ✓ (`cLuxArea_Sticky`). Области SlimeDamage наносят урон сами. Подробности — CLAUDE.md «Верёвки, связи, липкие зоны, слизь».
+
+## Титры, NPC, анимации и прикреплённые пропы
+
+`StartCredits` — ✓: порт `cLuxCredits` (контейнер Credits: карта стоит, песня напрямую через `cMusicHandler`, прокрутка, «Конец» с кодом концовки, возврат в главное меню со сбросом игры). `AddKeyPart` — ✓: части ключа хранятся, их проверка в HPL2 закомментирована. `SetNPCAwake`, `SetNPCFollowPlayer` — ✓ (`cLuxProp_NPC`: пробуждение / сон, поворот головы к игроку в области). `PlayPropAnimation` — ✓ (`iLuxProp::PlayAnimation`, коллбэк неповторяющейся анимации). `AttachPropToProp`, `AddAttachedPropToProp` (устаревшая: передаёт fRotZ как z позиции — сохранено), `RemoveAttachedPropFromProp` — ✓ (`iLuxProp::AddAndAttachProp`). Подробности — CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы».
 
 ## Журнал
 

@@ -196,6 +196,15 @@ namespace RTXMnesia.Save
         public SavedRope rope = new();
         public SavedSticky sticky = new();
         public List<SavedAnimationState> animations = new();
+        public List<SavedAttachedProp> attachedProps = new();
+    }
+
+    /// <summary>cLuxProp_AttachedProp: a prop attached to this one (re-created when loading, as SetupSaveData does).</summary>
+    [Serializable]
+    public sealed class SavedAttachedProp
+    {
+        public string name, file;
+        public Matrix4x4 offset;   // HPL2
     }
 
     /// <summary>cEngineAnimationState_SaveData: a mesh animation state of a prop (cEngineMeshEntity_SaveData::mvAnimations).</summary>

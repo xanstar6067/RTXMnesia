@@ -54,12 +54,12 @@ namespace RTXMnesia.Importer
             string entitiesRoot = Path.Combine(AmnesiaPaths.SourceRoot, "entities");
             foreach (string ent in Directory.EnumerateFiles(entitiesRoot, "*.ent", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
             {
-                if (ent.StartsWith(enemyRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                if (Path.GetFullPath(ent).StartsWith(Path.GetFullPath(enemyRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
                 string text = File.ReadAllText(ent);
                 if (!text.Contains("<Animations") || !text.Contains("<Animation ")) continue;
                 try
                 {
-                    var animated = ConvertEnemy(index, ent, log);
+                    var animated = ConvertEnemy(index, ent, log, missingIsWarning: true);
                     if (animated != null && animated.animations.Count > 0) assets.enemies.Add(animated);
                 }
                 catch (Exception ex) { log.Error($"{AmnesiaPaths.ToSourceRelative(ent)}: {ex.Message}"); }
@@ -93,7 +93,38 @@ namespace RTXMnesia.Importer
             return assets;
         }
 
-        static HplEnemyAssets.Enemy ConvertEnemy(ResourceIndex index, string ent, ImportLog log)
+        /// <summary>
+        /// HPL2 names the bones by the Collada node id (cColladaNode::msId); Unity's import names the objects by the node
+        /// name, which may repeat (agrippa: ids CenterNeck_CenterHead and CenterNeck_CenterHead_CenterHead are both named
+        /// CenterHead). The path of names from the visual scene keeps the id → object link.
+        /// </summary>
+        static void ReadNodePaths(string dae, HplEnemyAssets.Enemy enemy)
+        {
+            enemy.nodeIds.Clear();
+            enemy.nodePaths.Clear();
+            var doc = new XmlDocument();
+            doc.Load(dae);
+            var scene = doc.GetElementsByTagName("visual_scene").OfType<XmlElement>().FirstOrDefault();
+            if (scene == null) return;
+            void Walk(XmlElement node, string parentPath)
+            {
+                string name = node.GetAttribute("name");
+                if (name == "") name = node.GetAttribute("id");
+                string path = parentPath == "" ? name : parentPath + "/" + name;
+                string id = node.GetAttribute("id");
+                if (id != "" && !enemy.nodeIds.Contains(id))
+                {
+                    enemy.nodeIds.Add(id);
+                    enemy.nodePaths.Add(path);
+                }
+                foreach (XmlElement child in node.ChildNodes.OfType<XmlElement>().Where(c => c.Name == "node")) Walk(child, path);
+            }
+            foreach (XmlElement top in scene.ChildNodes.OfType<XmlElement>().Where(c => c.Name == "node")) Walk(top, "");
+        }
+
+        /// <param name="missingIsWarning">Other entities: a missing animation file only warns (the critter spider's are
+        /// not in the game data; HPL2 skips them with a warning too).</param>
+        static HplEnemyAssets.Enemy ConvertEnemy(ResourceIndex index, string ent, ImportLog log, bool missingIsWarning = false)
         {
             var doc = new XmlDocument();
             doc.Load(ent);
@@ -110,6 +141,7 @@ namespace RTXMnesia.Importer
                 return enemy;
             }
             if (!ModelConverter.IsConverted(dae)) ModelConverter.ConvertModels(new[] { dae }, "Enemy model");
+            ReadNodePaths(dae, enemy);
             string animFolder = Path.GetDirectoryName(ModelConverter.AssetPathFor(dae)).Replace('\\', '/') + "/animations";
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(animFolder));
 
@@ -123,7 +155,8 @@ namespace RTXMnesia.Importer
                     : index.Find(file, ent);
                 if (source == null || !File.Exists(source))
                 {
-                    log.Error($"{AmnesiaPaths.ToSourceRelative(ent)}: animation file missing: {file}");
+                    string message = $"{AmnesiaPaths.ToSourceRelative(ent)}: animation file missing: {file}";
+                    if (missingIsWarning) log.Warn(message); else log.Error(message);
                     continue;
                 }
                 string asset = animFolder + "/" + Path.GetFileNameWithoutExtension(source) + ".dae";

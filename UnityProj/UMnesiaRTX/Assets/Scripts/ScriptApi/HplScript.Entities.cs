@@ -268,13 +268,30 @@ namespace RTXMnesia.ScriptApi
             foreach (var p in GetProps(asName)) p.StopMove();
         }
 
+        /// <summary>cLuxScriptHandler::AttachPropToProp: the offset is MatrixRotate(degrees, XYZ) with the position (HPL2).</summary>
         protected void AttachPropToProp(string asPropName, string asAttachName, string asAttachFile, float fPosX, float fPosY, float fPosZ,
-                                        float fRotX, float fRotY, float fRotZ) => NotPorted(nameof(AttachPropToProp), "attached props");
+                                        float fRotX, float fRotY, float fRotZ)
+        {
+            var offset = HplMatrix.SetTranslation(HplMatrix.RotateXYZ(new Vector3(fRotX, fRotY, fRotZ) * Mathf.Deg2Rad), new Vector3(fPosX, fPosY, fPosZ));
+            foreach (var p in GetProps(asPropName)) p.AddAndAttachProp(asAttachName, asAttachFile, offset);
+        }
 
+        /// <summary>
+        /// cLuxScriptHandler::AddAttachedPropToProp: deprecated, passes fRotZ as the z position (fPosZ is lost) - kept.
+        /// </summary>
         protected void AddAttachedPropToProp(string asPropName, string asAttachName, string asAttachFile, float fPosX, float fPosY, float fPosZ,
-                                             float fRotX, float fRotY, float fRotZ) => NotPorted(nameof(AddAttachedPropToProp), "attached props");
+                                             float fRotX, float fRotY, float fRotZ)
+        {
+            HplLog.Warn("AddAttachedPropToProp is deprectated, use AttachPropToProp instead!");
+            AttachPropToProp(asPropName, asAttachName, asAttachFile, fPosX, fPosY, fRotZ, fRotX, fRotY, fRotZ);
+        }
 
-        protected void RemoveAttachedPropFromProp(string asPropName, string asAttachName) => NotPorted(nameof(RemoveAttachedPropFromProp), "attached props");
+        protected void RemoveAttachedPropFromProp(string asPropName, string asAttachName)
+        {
+            foreach (var p in GetProps(asPropName))
+                if (!p.DestroyAttachedProp(asAttachName))
+                    HplLog.Error($"Could not find attached prop '{asPropName}' in '{asAttachName}'");
+        }
 
         protected void SetLampLit(string asName, bool abLit, bool abEffects)
         {

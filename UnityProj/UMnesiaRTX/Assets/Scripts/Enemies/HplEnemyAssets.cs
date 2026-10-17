@@ -40,6 +40,27 @@ namespace RTXMnesia.Enemies
             [Tooltip(".ent file name without extension, e.g. servant_grunt.")]
             public string name;
             public List<Animation> animations = new();
+            [Tooltip("Collada node ids (HPL2's bone names) and the paths of node names under the model (Unity's objects).")]
+            public List<string> nodeIds = new(), nodePaths = new();
+
+            /// <summary>The object of a bone by its HPL2 name (the Collada node id), else by object name.</summary>
+            public Transform FindNode(Transform model, string id)
+            {
+                int i = nodeIds.IndexOf(id);
+                var found = i >= 0 ? model.Find(nodePaths[i]) : null;
+                return found != null ? found : FindByName(model, id);
+            }
+
+            static Transform FindByName(Transform root, string name)
+            {
+                if (root.name == name) return root;
+                foreach (Transform child in root)
+                {
+                    var found = FindByName(child, name);
+                    if (found != null) return found;
+                }
+                return null;
+            }
         }
 
         [Serializable]

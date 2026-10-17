@@ -104,7 +104,7 @@
 - Конкатенации float в отладочных строках — Str(float), G6/invariant.
 - ResetPortalCountDown снимает TimerPortalCountDownFlash, а фактический таймер называется PortalCountDownFlash. EndingSetup также содержит исходные несовпадающие имена снимаемых таймеров. Эти ошибки не исправлены.
 - Отсутствующий monolith01_2 и остановка ещё не созданных mono_sound1/2 остаются предупреждениями оригинальных обращений. OnEnter создаёт preloadhead как в источнике.
-- PlayPropAnimation, SetNPCFollowPlayer и StartCredits — NotPorted (AutoSave с 2026-10-17 работает: сохранения перенесены (CLAUDE.md «Сохранения»)); ChangePlayerStateToNormal и PreloadSound — пустые. Поэтому срабатывание всей цепочки/запроса титров не означает работающие анимации Александра или титры.
+- PlayPropAnimation (Release / Death Александра), SetNPCFollowPlayer и StartCredits (три концовки, коды tyr299 / odn314 / lke271) работают с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы»); AutoSave с 2026-10-17 работает (CLAUDE.md «Сохранения»); ChangePlayerStateToNormal и PreloadSound — пустые. Полный проход концовок в Play здесь не прогонялся; титры проверены `CreditsPreview` (концовка Даниэля).
 - Проверки головных областей задают WhatHeadArea перед использованием головы, чтобы динамический agrippa_head_obj появился в исходной точке _Place. При ручной имитации наклона колонны одноразовый collide callback снимается отдельно: прямой call сам его не расходует.
 
 Общие изменения синтаксиса: string &in / string & → string; десятичные литералы → float с f; существующие статические callback-имена → nameof, динамические/пустые/необъявленные остаются строками. Порядок вызовов, исходные литералы, ветви и комментарии сохранены. API/инвентарь/импортёр в этой задаче не исправлялись. Статическая проверка нашла все имена API и совместимые сигнатуры; наличие объявления не означает реализованную механику.
@@ -126,10 +126,10 @@
 |---|---|
 | `AutoSave` | ✓ (2026-10-17) |
 | `ChangePlayerStateToNormal` | пустая операция |
-| `PlayPropAnimation` | NotPorted / условная реализация |
+| `PlayPropAnimation` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
 | `PreloadSound` | пустая операция |
-| `SetNPCFollowPlayer` | NotPorted / условная реализация |
-| `StartCredits` | NotPorted / условная реализация |
+| `SetNPCFollowPlayer` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
+| `StartCredits` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
 
 Все отчёты далее — внутри `UnityProj/UMnesiaRTX/Logs/`, вне git. PlayerSimulation: `-batchmode -quit`, GPU, `-seed 1`, шаг 1/60; импорт/аудит — `-batchmode -nographics -quit`. Ни один отчёт с WARNING [Script] ERROR не трактуется как чистый скрипт только из-за 0 errors.
 
