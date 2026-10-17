@@ -12,6 +12,39 @@ namespace RTXMnesia.Ui
         public float mouseSensitivity = 1f, masterVolume = 1f;
         public bool invertMouse, smoothMouse = true, subtitles = true, hints = true, crosshair = true;
         public bool fullscreen, vSync;
+        /// <summary>Display gamma (HPL2 Graphics Gamma, 0.3–2, SDL_SetGamma); drawn by HplScreenEffectsPass.</summary>
+        public float gamma = 1f;
+        public const float MinGamma = 0.3f, MaxGamma = 2f;
+
+        /// <summary>The applied gamma (also set by the pre menu before a map exists).</summary>
+        public static float Gamma { get; set; } = 1f;
+
+        /// <summary>The saved gamma without a map (pre menu at startup).</summary>
+        public static float SavedGamma()
+        {
+            try
+            {
+                if (!PlayerPrefs.HasKey(PrefsKey)) return 1f;
+                var s = new HplUserSettings();
+                JsonUtility.FromJsonOverwrite(PlayerPrefs.GetString(PrefsKey), s);
+                s.Validate();
+                return s.gamma;
+            }
+            catch (ArgumentException) { return 1f; }
+        }
+
+        /// <summary>Stores only the gamma (the pre menu's choice) in the saved settings.</summary>
+        public static void SaveGamma(float value)
+        {
+            var s = new HplUserSettings();
+            try
+            {
+                if (PlayerPrefs.HasKey(PrefsKey)) JsonUtility.FromJsonOverwrite(PlayerPrefs.GetString(PrefsKey), s);
+            }
+            catch (ArgumentException) { }
+            s.gamma = value;
+            s.Save();
+        }
 
         public HplUserSettings Copy() => (HplUserSettings)MemberwiseClone();
 
@@ -21,6 +54,7 @@ namespace RTXMnesia.Ui
                 ? 1f : Mathf.Clamp(mouseSensitivity, 0.2f, 5f);
             masterVolume = float.IsNaN(masterVolume) || float.IsInfinity(masterVolume)
                 ? 1f : Mathf.Clamp01(masterVolume);
+            gamma = float.IsNaN(gamma) || float.IsInfinity(gamma) || gamma <= 0f ? 1f : Mathf.Clamp(gamma, MinGamma, MaxGamma);
         }
 
         public static HplUserSettings Load(HplMap map)
@@ -54,6 +88,7 @@ namespace RTXMnesia.Ui
             map.hud.showHints = hints;
             map.hud.showCrossHair = crosshair;
             AudioListener.volume = masterVolume;
+            Gamma = gamma;
             QualitySettings.vSyncCount = vSync ? 1 : 0;
             if (!Application.isEditor && Screen.fullScreen != fullscreen)
                 Screen.fullScreenMode = fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;

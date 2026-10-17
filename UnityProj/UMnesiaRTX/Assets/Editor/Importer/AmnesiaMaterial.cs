@@ -27,6 +27,10 @@ namespace RTXMnesia.Importer
             Variables.TryGetValue(name, out var v) && float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float f)
                 ? f : fallback;
 
+        /// <summary>cResourceVarsObject::GetVarBool (cString::ToBool): missing → fallback, otherwise only "true" is true.</summary>
+        public bool Bool(string name, bool fallback) =>
+            Variables.TryGetValue(name, out var v) ? v.Equals("true", StringComparison.OrdinalIgnoreCase) : fallback;
+
         public static AmnesiaMaterial Load(string path)
         {
             var doc = new XmlDocument();

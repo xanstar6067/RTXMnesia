@@ -1485,6 +1485,7 @@ namespace RTXMnesia.Importer
             PostEffectsConverter.Convert(_log);
             FlashbackConverter.Convert(_log);
             HudEffectsConverter.Convert(_log);
+            if (_menuBackground) PreMenuConverter.Convert(_index, _log);
             if (!_menuBackground) EnemyConverter.Convert(_index, _log);
             if (!_menuBackground) InsanityConverter.Convert(_index, _log);
             if (!_menuBackground) RopeConverter.Convert(_index, _log, new[] { _mapAbsolute });

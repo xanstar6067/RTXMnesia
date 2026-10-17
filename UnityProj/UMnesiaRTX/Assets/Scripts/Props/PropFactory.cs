@@ -23,8 +23,10 @@ namespace RTXMnesia.Props
                 case "Wheel": return new PropWheel(entity);
                 case "MoveObject": return new PropMoveObject(entity);
                 case "NPC": return new PropNPC(entity);
-                case "Photocell": case "Chest": case "Button": case "OilBarrel": case "EmotionStone":
-                case "MultiSlider":
+                case "OilBarrel": return new PropOilBarrel(entity);
+                case "EmotionStone": return new PropEmotionStone(entity);
+                case "MultiSlider": return new PropMultiSlider(entity);
+                case "Photocell": case "Chest": case "Button":
                     return new PropGeneric(entity, HplEntityType.Prop);
                 case "CritterBug": return new PropCritterBug(entity);
                 case "CritterSpider": return new PropCritterSpider(entity);

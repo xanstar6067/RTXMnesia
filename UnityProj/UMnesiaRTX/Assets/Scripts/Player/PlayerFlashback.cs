@@ -60,7 +60,8 @@ namespace RTXMnesia.Player
             ScriptApi.HplMap.Current?.BroadcastEnemyMessage(Enemies.EnemyMessage.Reset, false, Vector3.zero, 0f);
             _flashDelay = 0.5f;
             _player.sound?.PlayGuiSoundData("flashback_flash", SoundEntryType.Gui);
-            // not ported: AddCompletionAmount; completion percentages are not implemented yet.
+            var map = ScriptApi.HplMap.Current;
+            if (map != null) map.AddCompletionAmount(map.hud != null && map.hud.Completion != null ? map.hud.Completion.FlashbackValue : 0, 2.5f);
             _flashbackStartCount = 1.5f;
             _flashbackFile = flashbackFile;
             _callback = callback;

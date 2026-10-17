@@ -20,6 +20,11 @@ namespace RTXMnesia.Ui
         public IReadOnlyList<string> SaveFiles => _saveFiles;
         public int SelectedSave => _selectedSave;
         public HplUserSettings DraftSettings { get; private set; }
+        /// <summary>The key config window (cLuxMainMenu_KeyConfig), opened from the input options; null: closed.</summary>
+        public HplKeyConfig KeyConfig => _keyConfig;
+        public bool ShowingKeyConfig => _keyConfig != null;
+        /// <summary>A key config slot waits for an input: the keys go to it, not to the game UI.</summary>
+        public bool CapturingInput => _keyConfig != null && _keyConfig.IsWaiting;
 
         readonly HplGameUi _ui;
         readonly HplMap _map;
@@ -28,6 +33,7 @@ namespace RTXMnesia.Ui
         readonly List<string> _saveFiles = new(), _saveLabels = new();
         int _selectedSave = -1;
         MenuControl? _dragSlider;
+        HplKeyConfig _keyConfig;
 
         public HplMenuScreen(HplGameUi ui, HplPauseMenu menu)
         {
@@ -53,11 +59,20 @@ namespace RTXMnesia.Ui
             ShowingLoad = false;
             DraftSettings = null;
             _dragSlider = null;
+            _keyConfig = null;
         }
 
         /// <summary>cLuxMainMenu::ExitPressed: closes a window, or the menu itself in game.</summary>
         public void Escape()
         {
+            if (ShowingKeyConfig)
+            {
+                // cLuxInputMenuEntry: Esc cancels the waiting input; the window's pop up closes; else back to options.
+                if (_keyConfig.IsWaiting) _keyConfig.CancelWaiting();
+                else if (ConfirmingQuit) ConfirmingQuit = false;
+                else CloseKeyConfig();
+                return;
+            }
             // A confirmation of the load window goes back to the window, as its pop up does.
             if (ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad) OpenLoadGame(_selectedSave);
             else if (ConfirmingQuit || ShowingOptions || ShowingLoad) Show();
@@ -65,7 +80,8 @@ namespace RTXMnesia.Ui
         }
 
         public void Refresh() => _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
-            _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad ? _saveLabels : null, _selectedSave);
+            _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad ? _saveLabels : null, _selectedSave,
+            _keyConfig);
 
         /// <summary>cLuxMainMenu_LoadGame::OnSetActive → PopulateSavedGameList.</summary>
         public void OpenLoadGame(int select = -1)
@@ -92,7 +108,18 @@ namespace RTXMnesia.Ui
             var mouse = Mouse.current;
             Refresh();
             if (_ui.IsClosing) return;
-            if (mouse != null && ShowingOptions) DragSlider(mouse);
+            // A slot waiting for an input takes the next key or mouse button (not the click that started it).
+            if (CapturingInput)
+            {
+                if (Time.frameCount > _keyConfig.WaitingFrame)
+                {
+                    string input = HplKeyBindings.PressedInput();
+                    if (input != null) _keyConfig.Assign(input);
+                }
+                Refresh();
+                return;
+            }
+            if (mouse != null && ShowingOptions && !ShowingKeyConfig) DragSlider(mouse);
             int hovered = mouse != null ? _menu.HitTest(mouse.position.ReadValue()) : -1;
             if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0f && hovered >= 0) _selected = hovered;
             if (keyboard != null)
@@ -103,6 +130,8 @@ namespace RTXMnesia.Ui
                 if (keyboard.tabKey.wasPressedThisFrame) _selected = (_selected + count + (keyboard.shiftKey.isPressed ? -1 : 1)) % count;
                 if (ShowingOptions && keyboard.leftArrowKey.wasPressedThisFrame) AdjustSelected(-1);
                 if (ShowingOptions && keyboard.rightArrowKey.wasPressedThisFrame) AdjustSelected(1);
+                // Within the button count of the window (the key config rows change with the category).
+                if (_selected >= _menu.ButtonCount) _selected = 0;
             }
             Refresh();
 
@@ -118,6 +147,8 @@ namespace RTXMnesia.Ui
             {
                 float value = _menu.SliderValue(_dragSlider.Value, mouse.position.ReadValue());
                 if (_dragSlider == MenuControl.VolumeSlider) DraftSettings.masterVolume = Mathf.Round(value * 100) / 100f;
+                else if (_dragSlider == MenuControl.GammaSlider)
+                    DraftSettings.gamma = Mathf.Round((HplUserSettings.MinGamma + value * (HplUserSettings.MaxGamma - HplUserSettings.MinGamma)) * 20f) / 20f;
                 else DraftSettings.mouseSensitivity = Mathf.Round((0.2f + value * 4.8f) * 10) / 10f;
             }
             if (!mouse.leftButton.isPressed) _dragSlider = null;
@@ -142,7 +173,13 @@ namespace RTXMnesia.Ui
 
         void AdjustSelected(int direction)
         {
+            if (_selected < 0 || _selected >= _menu.ButtonCount) return;
             var control = _menu.ControlAt(_selected);
+            if (control == MenuControl.KeyCategory)
+            {
+                Activate(_selected, direction);
+                return;
+            }
             if (control >= MenuControl.GameTab && control <= MenuControl.InputTab)
             {
                 _optionsTab = (_optionsTab + 4 + direction) % 4;
@@ -150,7 +187,8 @@ namespace RTXMnesia.Ui
                 _dragSlider = null;
                 Refresh();
             }
-            else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse) Activate(_selected, direction);
+            else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
+                     control == MenuControl.GammaLess || control == MenuControl.GammaMore) Activate(_selected, direction);
         }
 
         void Activate(int index, int direction = 0)
@@ -205,8 +243,47 @@ namespace RTXMnesia.Ui
                     break;
                 case MenuControl.ConfirmLoad: LoadSave(_saveFiles[_selectedSave]); break;
                 case MenuControl.Cancel:
-                    if (PendingConfirmation == MenuControl.ConfirmLoad && ConfirmingQuit) OpenLoadGame(_selectedSave);
+                    if (ShowingKeyConfig)
+                    {
+                        // A pop up of the key config window closes; the window's Cancel drops the draft.
+                        if (ConfirmingQuit) ConfirmingQuit = false;
+                        else CloseKeyConfig();
+                    }
+                    else if (PendingConfirmation == MenuControl.ConfirmLoad && ConfirmingQuit) OpenLoadGame(_selectedSave);
                     else Show();
+                    break;
+                case MenuControl.KeyConfig:
+                    _keyConfig = new HplKeyConfig();
+                    _keyConfig.Begin();
+                    _selected = 0;
+                    break;
+                case MenuControl.KeyCategory:
+                    _keyConfig.Category = (_keyConfig.Category + 3 + (direction < 0 ? -1 : 1)) % 3;
+                    _selected = 0;
+                    break;
+                case MenuControl.KeySlot:
+                {
+                    int data = _menu.DataAt(index);
+                    _keyConfig.StartWaiting(data / 2, data % 2, Time.frameCount);
+                    break;
+                }
+                case MenuControl.KeyDefaults:
+                case MenuControl.KeyOk when _keyConfig != null && _keyConfig.HasInvalidInputs:
+                    // cLuxMainMenu_KeyConfig::PressSetDefault / PressOK with invalid inputs: a warning pop up first.
+                    PendingConfirmation = control == MenuControl.KeyDefaults ? MenuControl.ConfirmKeyDefaults : MenuControl.ConfirmKeyInvalid;
+                    ConfirmingQuit = true;
+                    _selected = 0;
+                    break;
+                case MenuControl.ConfirmKeyDefaults:
+                    _keyConfig.SetDefaults();
+                    ConfirmingQuit = false;
+                    _selected = 0;
+                    break;
+                case MenuControl.KeyOk:
+                case MenuControl.ConfirmKeyInvalid:
+                    _keyConfig.Apply();
+                    ConfirmingQuit = false;
+                    CloseKeyConfig();
                     break;
                 case MenuControl.Apply:
                     _ui.Settings = DraftSettings.Copy();
@@ -229,6 +306,9 @@ namespace RTXMnesia.Ui
                 case MenuControl.VolumeMore: DraftSettings.masterVolume = Mathf.Clamp01(DraftSettings.masterVolume + 0.05f * more); break;
                 case MenuControl.SensitivityLess: DraftSettings.mouseSensitivity = Mathf.Clamp(DraftSettings.mouseSensitivity + 0.1f * less, 0.2f, 5f); break;
                 case MenuControl.SensitivityMore: DraftSettings.mouseSensitivity = Mathf.Clamp(DraftSettings.mouseSensitivity + 0.1f * more, 0.2f, 5f); break;
+                // cLuxMainMenu_Options: the gamma slider steps 0.05 between 0.3 and 2.
+                case MenuControl.GammaLess: DraftSettings.gamma = Mathf.Clamp(DraftSettings.gamma + 0.05f * less, HplUserSettings.MinGamma, HplUserSettings.MaxGamma); break;
+                case MenuControl.GammaMore: DraftSettings.gamma = Mathf.Clamp(DraftSettings.gamma + 0.05f * more, HplUserSettings.MinGamma, HplUserSettings.MaxGamma); break;
                 case MenuControl.ConfirmQuit:
                     // cLuxMainMenu::OnQuit with a map loaded: auto save first (a dead player is not saved).
                     if (!_ui.IsTitleScreen && _map.player != null && !_map.player.IsDead) HplSaveHandler.AutoSave(_map);
@@ -240,6 +320,13 @@ namespace RTXMnesia.Ui
                     break;
             }
             if (!_ui.IsTransitioning) Refresh();
+        }
+
+        /// <summary>cLuxMainMenu_KeyConfig::ExitPressed: back to the options window (its draft settings kept).</summary>
+        void CloseKeyConfig()
+        {
+            _keyConfig = null;
+            _selected = 3; // the input tab
         }
 
         /// <summary>A scene that cannot be loaded is a build setup error: logged, and the menu goes back to its list.</summary>

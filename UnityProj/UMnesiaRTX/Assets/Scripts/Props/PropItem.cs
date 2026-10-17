@@ -18,6 +18,9 @@ namespace RTXMnesia.Props
 
         public PropItem(AmnesiaEntity entity) : base(entity, HplEntityType.Prop) { }
 
+        /// <summary>cLuxProp_Item::GetItemType: the inventory item type name.</summary>
+        public string ItemType => _itemType;
+
         /// <summary>cLuxProp_Item::mlSpawnContainerID: the broken object it came out of ("" for a placed item).</summary>
         public string SpawnContainer = "";
 
@@ -108,6 +111,7 @@ namespace RTXMnesia.Props
 
         public bool Locked;
         public string LockedSound = "";
+        bool _showStats = true;
         public string MapFile => _mapFile;
 
         public PropLevelDoor(AmnesiaEntity entity) : base(entity, HplEntityType.Prop) { }
@@ -129,6 +133,7 @@ namespace RTXMnesia.Props
             LockedSound = InstanceString("LockedSound", "");
             _lockedTextCat = InstanceString("LockedTextCat", "");
             _lockedTextEntry = InstanceString("LockedTextEntry", "");
+            _showStats = InstanceBool("ShowStats", true);
         }
 
         public void SetLockedText(string cat, string entry)
@@ -162,6 +167,20 @@ namespace RTXMnesia.Props
 
         public override FocusCrosshair GetFocusCrosshair(HplPhysicsBody body, Vector3 hplFocusPos) => FocusCrosshair.LevelDoor;
 
-        public override string GetFocusText() => Map.hud.Translate("Levels", _textEntry) + "\n";
+        /// <summary>
+        /// cLuxProp_LevelDoor::GetFocusText: the name of the map; with ShowStats the completion of the target map from
+        /// its saved state ("N% Completed", 0 % before the first visit). Commented out by Frictional, shown here
+        /// with the completion counter (<see cref="RTXMnesia.Ui.HplCompletionCount.ShowCounter"/>).
+        /// </summary>
+        public override string GetFocusText()
+        {
+            string text = Map.hud.Translate("Levels", _textEntry) + "\n";
+            if (!_showStats || !RTXMnesia.Ui.HplCompletionCount.ShowCounter) return text;
+            int percent = 0;
+            var saved = HplSavedMaps.Get(HplMapChange.FileToMapName(_mapFile));
+            if (saved != null && saved.totalCompletionAmount > 0)
+                percent = (int)((float)saved.currentCompletionAmount / saved.totalCompletionAmount * 100f);
+            return text + percent + "% " + Map.hud.Translate("CompletionCount", "Completed");
+        }
     }
 }

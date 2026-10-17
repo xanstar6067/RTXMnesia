@@ -485,11 +485,13 @@ namespace RTXMnesia.Player
 
             // cLuxInputHandler::UpdateGamePlayerInput: a dead player's attack / interact / ignite / jump / crouch
             // keys only skip the death text; an inactive player gets no input at all.
+            // Inputs are the configured ones (HplKeyBindings: default_user_keys.cfg / the key config screen); a mouse
+            // button press does not count when it was the click that locked the mouse.
+            bool Pressed(string action) => Ui.HplKeyBindings.WasPressed(action) && (cursorWasLocked || !MouseBound(action));
             if (IsDead)
             {
                 held = default;
-                bool pressed = (keyboard != null && (keyboard.spaceKey.wasPressedThisFrame || keyboard.leftCtrlKey.wasPressedThisFrame)) ||
-                               (mouse != null && cursorWasLocked && (mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame));
+                bool pressed = Pressed("Jump") || Pressed("Crouch") || Pressed("Interact") || Pressed("Attack");
                 if (pressed) Death?.OnPressButton();
                 return;
             }
@@ -499,41 +501,49 @@ namespace RTXMnesia.Player
                 return;
             }
 
-            if (keyboard != null)
-            {
-                // Held keys are applied in the next fixed step; presses are actions now (as cLuxInputHandler).
-                held.forward = keyboard.wKey.isPressed;
-                held.backward = keyboard.sKey.isPressed;
-                held.right = keyboard.dKey.isPressed;
-                held.left = keyboard.aKey.isPressed;
-                held.leanRight = keyboard.eKey.isPressed;
-                held.leanLeft = keyboard.qKey.isPressed;
-                PressedMove |= held.forward || held.backward || held.right || held.left;
+            // Held inputs are applied in the next fixed step; presses are actions now (as cLuxInputHandler).
+            held.forward = Ui.HplKeyBindings.IsHeld("Forward");
+            held.backward = Ui.HplKeyBindings.IsHeld("Backward");
+            held.right = Ui.HplKeyBindings.IsHeld("Right");
+            held.left = Ui.HplKeyBindings.IsHeld("Left");
+            held.leanRight = Ui.HplKeyBindings.IsHeld("LeanRight");
+            held.leanLeft = Ui.HplKeyBindings.IsHeld("LeanLeft");
+            PressedMove |= held.forward || held.backward || held.right || held.left;
 
-                if (keyboard.leftShiftKey.isPressed != PressingRun) Run(keyboard.leftShiftKey.isPressed);
-                if (keyboard.spaceKey.wasPressedThisFrame) Jump(true);
-                if (!keyboard.spaceKey.isPressed && PressingJump) Jump(false);
-                if (keyboard.leftCtrlKey.wasPressedThisFrame) Crouch(true);
-                if (keyboard.fKey.wasPressedThisFrame) DoAction(PlayerAction.Lantern, true);
-                if (keyboard.fKey.wasReleasedThisFrame) DoAction(PlayerAction.Lantern, false);
-                RotateHeld = keyboard.rKey.isPressed;
-            }
+            bool run = Ui.HplKeyBindings.IsHeld("Run");
+            if (run != PressingRun) Run(run);
+            if (Pressed("Jump")) Jump(true);
+            if (!Ui.HplKeyBindings.IsHeld("Jump") && PressingJump) Jump(false);
+            if (Pressed("Crouch")) Crouch(true);
+            if (Pressed("Lantern")) DoAction(PlayerAction.Lantern, true);
+            if (Ui.HplKeyBindings.WasReleased("Lantern")) DoAction(PlayerAction.Lantern, false);
+            RotateHeld = Ui.HplKeyBindings.IsHeld("Rotate");
+            // cLuxInputHandler: CrosshairToggle → cLuxPlayer::SetShowCrosshair(!GetShowCrosshair()).
+            if (Pressed("CrosshairToggle")) ScriptApi.HplMap.Current?.GameUi?.ToggleCrosshair();
+
+            // Interact, attack / throw; the scroll wheel moves a held object (grab depth).
+            if (Pressed("Interact")) DoAction(PlayerAction.Interact, true);
+            if (Ui.HplKeyBindings.WasReleased("Interact")) DoAction(PlayerAction.Interact, false);
+            if (Pressed("Attack")) DoAction(PlayerAction.Attack, true);
+            if (Ui.HplKeyBindings.WasReleased("Attack")) DoAction(PlayerAction.Attack, false);
 
             if (mouse != null && Cursor.lockState == CursorLockMode.Locked)
             {
-                // Interact (left), attack / throw (right), scroll (grab depth); not the click that locked the mouse.
                 if (cursorWasLocked)
                 {
-                    if (mouse.leftButton.wasPressedThisFrame) DoAction(PlayerAction.Interact, true);
-                    if (mouse.rightButton.wasPressedThisFrame) DoAction(PlayerAction.Attack, true);
-                    if (mouse.rightButton.wasReleasedThisFrame) DoAction(PlayerAction.Attack, false);
                     float scroll = mouse.scroll.ReadValue().y;
                     if (scroll > 0f) Scroll(1f);
                     if (scroll < 0f) Scroll(-1f);
                 }
-                if (mouse.leftButton.wasReleasedThisFrame) DoAction(PlayerAction.Interact, false);
                 UpdateMouseLook(mouse.delta.ReadValue(), Time.unscaledDeltaTime);
             }
+        }
+
+        static bool MouseBound(string action)
+        {
+            var a = Ui.HplKeyBindings.Get(action);
+            return a != null && (a.primary.StartsWith("MouseButton.", System.StringComparison.Ordinal) ||
+                                 a.secondary.StartsWith("MouseButton.", System.StringComparison.Ordinal));
         }
 
         public void SetUiInputBlocked(bool blocked)
@@ -550,9 +560,8 @@ namespace RTXMnesia.Player
             // Releases made over a menu must not leave a door / grab interaction stuck after resuming.
             if (!blocked && readDevices)
             {
-                var mouse = Mouse.current;
-                if (mouse == null || !mouse.leftButton.isPressed) DoAction(PlayerAction.Interact, false);
-                if (mouse == null || !mouse.rightButton.isPressed) DoAction(PlayerAction.Attack, false);
+                if (!Ui.HplKeyBindings.IsHeld("Interact")) DoAction(PlayerAction.Interact, false);
+                if (!Ui.HplKeyBindings.IsHeld("Attack")) DoAction(PlayerAction.Attack, false);
             }
         }
 

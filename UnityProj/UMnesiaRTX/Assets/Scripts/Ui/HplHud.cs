@@ -47,7 +47,10 @@ namespace RTXMnesia.Ui
 
         HplMap _map;
         Canvas _canvas;
-        HplGuiText _gameText, _hintText, _focusText, _deathText;
+        HplGuiText _gameText, _hintText, _focusText, _deathText, _completionText;
+
+        /// <summary>The completion counter (cLuxCompletionCountHandler), a module of the map's HUD.</summary>
+        public HplCompletionCount Completion { get; private set; }
         RawImage _questIcon, _questGlow, _crosshair;
         // Player HUD effects (cLuxPlayerHurt, cLuxPlayerHudEffect, cLuxPlayerDeath).
         RawImage _hurtNoise, _hudFlash, _deathFade;
@@ -90,6 +93,7 @@ namespace RTXMnesia.Ui
             }
             Hints.Active = showHints;
             Messages.parse = Hints.parse = ParseString;
+            Completion = new HplCompletionCount(game);
 
             BuildUi();
         }
@@ -134,11 +138,13 @@ namespace RTXMnesia.Ui
             {
                 string action = command.Substring(3);
                 var keys = _map != null ? _map.keysConfig : null;
+                var bound = HplKeyBindings.Get(action); // the user's keys (key config screen)
                 var names = new List<string>();
                 foreach (string slot in new[] { "Primary", "Secondary" })
                 {
                     // "Keyboard.J", "MouseButton.LeftMouse"; gamepad bindings are not used.
-                    string binding = keys != null ? keys.GetString(action, slot) : "";
+                    string binding = bound != null ? (slot == "Primary" ? bound.primary : bound.secondary)
+                        : keys != null ? keys.GetString(action, slot) : "";
                     if (string.IsNullOrEmpty(binding) || binding.StartsWith("Gamepad", System.StringComparison.Ordinal)) continue;
                     string key = binding.Substring(binding.IndexOf('.') + 1);
                     names.Add(TryTranslate("ButtonNames", key, out string translated) ? translated : key);
@@ -158,6 +164,7 @@ namespace RTXMnesia.Ui
             Messages.Update(timeStep);
             Hints.Active = showHints;
             Hints.Update(timeStep);
+            Completion?.Update(timeStep);
         }
 
         public string Translate(string category, string entry) =>
@@ -181,6 +188,7 @@ namespace RTXMnesia.Ui
             _hintText.Clear();
             _focusText.Clear();
             _deathText.Clear();
+            _completionText?.Clear();
 
             // cLuxEffect_PlayVoice::OnDraw: rows ending at y = 580, left aligned at 400 - width / 2.
             string voice = effects != null && effects.PlayVoice.Active && showSubtitles ? effects.PlayVoice.CurrentText : "";
@@ -245,6 +253,16 @@ namespace RTXMnesia.Ui
             _questIcon.color = new Color(1f, 1f, 1f, quest);
             float glowAlpha = quest * Messages.QuestOscillation;
             _questGlow.color = new Color(glowAlpha, glowAlpha, glowAlpha, 1f);
+
+            // cLuxCompletionCountHandler::OnDraw: "%.1f%%" right of x = 400 and " Completed" left of it, size 21, y 20.
+            if (Completion != null && Completion.Alpha > 0f && _completionText != null && _completionText.font != null)
+            {
+                var size = new Vector2(21f, 21f);
+                var color = new Color(1f, 1f, 1f, Completion.Alpha);
+                _completionText.DrawFont(Completion.Percent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%",
+                                         new Vector2(400f, 20f), size, color, HplFontAlign.Right);
+                _completionText.DrawFont(" " + Translate("CompletionCount", "Completed"), new Vector2(400f, 20f), size, color);
+            }
 
             RefreshCrosshair();
             RefreshPlayerEffects();
@@ -540,6 +558,9 @@ namespace RTXMnesia.Ui
             _gameText = CreateText(screen, "Game text", defaultFont);
             _deathText = CreateText(screen, "Death text", defaultFont);
             _hintText = CreateText(screen, "Hint text", hintsFont);
+            // The completion counter: menu.cfg CompletionCounter DefaultFont (game_header.fnt, from the inventory resources).
+            var inventoryAssets = Resources.Load<HplInventoryAssets>(HplInventoryAssets.ResourceName);
+            _completionText = CreateText(screen, "Completion text", inventoryAssets != null ? inventoryAssets.headerFont : defaultFont);
             Refresh();
         }
 

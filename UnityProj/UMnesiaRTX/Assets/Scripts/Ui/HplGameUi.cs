@@ -103,7 +103,10 @@ namespace RTXMnesia.Ui
                 else _menuScreen.Escape();
                 return true;
             }
-            bool journalKey = keyboard.jKey.wasPressedThisFrame, questKey = keyboard.mKey.wasPressedThisFrame, recentKey = keyboard.nKey.wasPressedThisFrame;
+            // A key config slot waiting for an input takes every key but Esc.
+            if (_menuScreen != null && _menuScreen.CapturingInput) return false;
+            bool journalKey = HplKeyBindings.WasPressed("Journal"), questKey = HplKeyBindings.WasPressed("QuestLog"),
+                 recentKey = HplKeyBindings.WasPressed("RecentText");
             if (journalKey || questKey || recentKey)
             {
                 if (JournalOpen) Journal.ExitPressed(true);
@@ -115,7 +118,7 @@ namespace RTXMnesia.Ui
                 }
                 return true;
             }
-            if (keyboard.tabKey.wasPressedThisFrame && (JournalOpen || InventoryOpen || !IsPaused))
+            if (HplKeyBindings.WasPressed("Inventory") && (JournalOpen || InventoryOpen || !IsPaused))
             {
                 if (JournalOpen) Journal.ExitPressed(true);
                 else if (InventoryOpen) _reading.CloseInventory();
@@ -139,6 +142,18 @@ namespace RTXMnesia.Ui
         // ------------------------------------------------------------------ screens
 
         public void Pause() { if (!IsTitleScreen) EnterScreen(UiScreen.Menu); }
+
+        /// <summary>cLuxPlayer::SetShowCrosshair(!GetShowCrosshair()) of the CrosshairToggle key, kept in the settings.</summary>
+        public void ToggleCrosshair()
+        {
+            if (Settings == null || _map == null) return;
+            Settings.crosshair = !Settings.crosshair;
+            if (_map.hud != null) _map.hud.showCrossHair = Settings.crosshair;
+            Settings.Save();
+        }
+
+        /// <summary>The key config window of the options (null: closed).</summary>
+        public HplKeyConfig KeyConfig => _menuScreen?.KeyConfig;
         public void OpenOptions(int tab = -1) { if (IsPaused && !ReadingUiOpen) _menuScreen.OpenOptions(tab); }
         /// <summary>Routes a visible control through the same path as a mouse / keyboard action (also for checks).</summary>
         public bool Choose(MenuControl control) => !IsTransitioning && _menuScreen != null && _menuScreen.Choose(control);

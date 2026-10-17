@@ -143,6 +143,7 @@ namespace RTXMnesia.ScriptApi
             {
                 case "Puzzle":
                     HplLog.Info("ProgLog: Picked up puzzle item " + name);
+                    map.AddCompletionAmount(hud.Completion != null ? hud.Completion.ItemValue : 0);
                     break;
                 case "Coins":
                     Coins += (int)amount;
@@ -153,6 +154,7 @@ namespace RTXMnesia.ScriptApi
                     var note = AddJournalEntry("Note", val, item.image);
                     HplLog.Info("ProgLog: Picked up note " + val);
                     if (amount > 0) map.GameUi?.OpenJournalEntry(note, amount >= 2, true);
+                    map.AddCompletionAmount(hud.Completion != null ? hud.Completion.NoteValue : 0);
                     consumed = true;
                     break;
                 case "Diary":
@@ -162,6 +164,7 @@ namespace RTXMnesia.ScriptApi
                     if (extraVal != "") map.RunScript(extraVal, name, diary.number);
                     if (ShowJournalOnDiaryPickup) map.GameUi?.OpenJournalEntry(diary, true, true);
                     else LastReadEntry = diary;
+                    map.AddCompletionAmount(hud.Completion != null ? hud.Completion.DiaryValue : 0);
                     consumed = true;
                     break;
                 case "Lantern":

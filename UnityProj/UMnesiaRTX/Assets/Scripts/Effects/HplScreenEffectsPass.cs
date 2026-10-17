@@ -18,7 +18,7 @@ namespace RTXMnesia.Effects
     public class HplScreenEffectsPass : CustomPass
     {
         public const string ShaderName = "Hidden/RTXMnesia/HplScreenEffects";
-        const int CopyPass = 0, TrailPass = 1, CompositePass = 2, InsanityPass = 7;
+        const int CopyPass = 0, TrailPass = 1, CompositePass = 2, InsanityPass = 7, GammaPass = 8;
 
         public Shader shader;
         [NonSerialized] public HplEffects effects;
@@ -43,6 +43,7 @@ namespace RTXMnesia.Effects
         static readonly int AmpMap1Id = Shader.PropertyToID("_HplAmpMap1");
         static readonly int ZoomMapId = Shader.PropertyToID("_HplZoomMap");
         static readonly int InsanityId = Shader.PropertyToID("_HplInsanity");
+        static readonly int GammaId = Shader.PropertyToID("_HplGamma");
 
         protected override void Setup(ScriptableRenderContext renderContext, CommandBuffer cmd)
         {
@@ -72,7 +73,23 @@ namespace RTXMnesia.Effects
         protected override void Execute(CustomPassContext ctx)
         {
             if (effects == null || _material == null) return;
-            if (ctx.hdCamera.camera.cameraType != CameraType.Game) return;
+            if (ctx.hdCamera.camera.cameraType != CameraType.Game || World.HplWaterReflection.IsReflectionCamera(ctx.hdCamera.camera)) return;
+            RenderEffects(ctx);
+
+            // The gamma of the settings (SDL_SetGamma in HPL2: the display ramp, output = input^(1/gamma)), last.
+            float gamma = Ui.HplUserSettings.Gamma;
+            if (Mathf.Abs(gamma - 1f) < 0.001f) return;
+            var props = ctx.propertyBlock;
+            CoreUtils.SetRenderTarget(ctx.cmd, _source, ClearFlag.None);
+            CoreUtils.DrawFullScreen(ctx.cmd, _material, props, CopyPass);
+            props.SetTexture(SourceId, _source);
+            props.SetFloat(GammaId, gamma);
+            CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
+            CoreUtils.DrawFullScreen(ctx.cmd, _material, props, GammaPass);
+        }
+
+        void RenderEffects(CustomPassContext ctx)
+        {
 
             float trail = effects.ImageTrail.Amount;
             float blur = effects.RadialBlur.Size;

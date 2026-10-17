@@ -7,6 +7,7 @@ Shader "Hidden/RTXMnesia/HplGui"
         [PerRendererData] _MainTex ("Texture", 2D) = "white" {}
         [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src blend", Float) = 5
         [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst blend", Float) = 10
+        _HplGamma ("Gamma (pre menu preview)", Float) = 1
     }
     SubShader
     {
@@ -40,6 +41,7 @@ Shader "Hidden/RTXMnesia/HplGui"
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
+            float _HplGamma;
 
             v2f vert(appdata v)
             {
@@ -52,7 +54,10 @@ Shader "Hidden/RTXMnesia/HplGui"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                return tex2D(_MainTex, i.uv) * i.color;
+                fixed4 c = tex2D(_MainTex, i.uv) * i.color;
+                // The pre menu's gamma preview: the gamma ramp of the display on this image (power law on linear values).
+                c.rgb = pow(max(c.rgb, 0), 1.0 / max(_HplGamma, 0.01));
+                return c;
             }
             ENDCG
         }

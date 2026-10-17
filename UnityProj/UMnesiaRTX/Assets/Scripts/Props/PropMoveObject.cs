@@ -193,8 +193,8 @@ namespace RTXMnesia.Props
     }
 
     /// <summary>
-    /// Prop types without their own behavior yet (Chest, Button, OilBarrel, EmotionStone, NPC, MultiSlider, Photocell,
-    /// critters) and enemies / commentary icons until step 6: physics bodies, effects, callbacks of the base prop.
+    /// Prop types without their own behavior (Chest, Button, Photocell: no .ent of the game uses them) and the man pig
+    /// enemy: physics bodies, effects, callbacks of the base prop.
     /// </summary>
     public sealed class PropGeneric : HplProp
     {

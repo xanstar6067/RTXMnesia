@@ -302,7 +302,8 @@ namespace RTXMnesia.Effects
     /// <summary>
     /// cLuxInstanityEvent_Bugs: bugs crawling on the HUD from the screen edges around the center (wander + swarm
     /// point 400, 300), fading in, then out when the duration is over; a looping GUI stream.
-    /// The events file writes "mfMaxSizeMul" for MaxSizeMul, so the bugs are never larger than 1 (kept).
+    /// Fix: the events file writes "mfMaxSizeMul" for MaxSizeMul (HPL2 then uses 1, bugs never larger than 1×);
+    /// the misspelled key is read too, so the three bug events reach their intended 1.3×.
     /// </summary>
     public sealed class InsanityEventBugs : InsanityEvent
     {
@@ -328,7 +329,7 @@ namespace RTXMnesia.Effects
             if (image != "") BugImage = assets.GetImage(image);
             _numOfBugs = Int(d, "NumOfBugs", 10);
             _minSizeMul = Float(d, "MinSizeMul", 1f);
-            _maxSizeMul = Float(d, "MaxSizeMul", 1f);
+            _maxSizeMul = Float(d, "MaxSizeMul", Float(d, "mfMaxSizeMul", 1f));
             _wanderCircleDist = Float(d, "WanderCircleDist", 1f);
             _wanderCircleRadius = Float(d, "WanderCircleRadius", 1f);
             _swarmPointMul = Float(d, "SwarmPointMul", 1f);

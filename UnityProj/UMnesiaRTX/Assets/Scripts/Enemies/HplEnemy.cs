@@ -786,7 +786,7 @@ namespace RTXMnesia.Enemies
 
         /// <summary>
         /// iLuxEnemy::FadeToSmoke: smoke at the bones (smaller ones closer than 10 cm to their parent), off, the
-        /// hallucination sound. Not ported: the dissolve of the mesh (cLuxMap::AddDissolveEntity) - it goes at once.
+        /// hallucination sound; a visible model dissolves in 1 s (cLuxMap::AddDissolveEntity).
         /// </summary>
         public void FadeToSmoke(bool playSound)
         {
@@ -802,6 +802,7 @@ namespace RTXMnesia.Enemies
                     if (system != null) system.LocalMatrix = Matrix4x4.Translate(bone.position);
                 }
             }
+            if (Model != null && Model.activeInHierarchy) Map.AddDissolveEntity(Model.transform, 1f);
             SetActive(false);
             if (playSound) Map.sound?.PlayGuiSoundData("enemy_hallucination_disappear", Sound.SoundEntryType.Gui);
         }

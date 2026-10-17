@@ -68,6 +68,8 @@ namespace RTXMnesia.ScriptApi
 
         [NonSerialized] public string DisplayNameEntry = "";
         [NonSerialized] public int NumberOfQuests;
+        /// <summary>cLuxMap::mlTotalCompletionAmount / mlCurrentCompletionAmount.</summary>
+        [NonSerialized] public int TotalCompletionAmount, CurrentCompletionAmount;
         [NonSerialized] public string LanternLitCallback = "";
         // cLuxMap check point (SetCheckPoint / LoadCheckPoint): where death puts the player back.
         [NonSerialized] public string CheckPointName = "", CheckPointStartPos = "", CheckPointCallback = "", CheckPointMusic = "";
@@ -138,6 +140,8 @@ namespace RTXMnesia.ScriptApi
         void OnDestroy()
         {
             ParticleWorld?.DestroyAll();
+            foreach (var dissolve in _dissolveEntities) dissolve.Destroy();
+            _dissolveEntities.Clear();
             Sound.HplSoundEntity.Started -= OnSoundEntityStarted;
             foreach (var enemy in _enemies) enemy.DestroyQueryShape();
             foreach (var rope in _ropes) rope.DestroyGraphics();
@@ -192,6 +196,7 @@ namespace RTXMnesia.ScriptApi
             if (!menuBackground && _arrival == null) _loadGame = RTXMnesia.Save.HplSaveHandler.TakePending(mapFile);
             if (effects == null && !TryGetComponent(out effects)) effects = gameObject.AddComponent<HplEffects>();
             if (hud == null && !TryGetComponent(out hud)) hud = gameObject.AddComponent<HplHud>();
+            HplKeyBindings.SetDefaultsConfig(keysConfig);
             effects.Init(this);
             hud.Init(this);
             InitSound();
@@ -299,7 +304,19 @@ namespace RTXMnesia.ScriptApi
                 GameUi = gameObject.AddComponent<HplGameUi>();
                 GameUi.Init(this);
             }
+
+            // The world reflection of water surfaces (a mirror camera, rendered only in Play mode).
+            if (Application.isPlaying)
+            {
+                var renderers = new List<MeshRenderer>();
+                foreach (var r in GetComponentsInChildren<MeshRenderer>(true))
+                    if (!IsTemplate(r.transform)) renderers.Add(r);
+                WaterReflection = HplWaterReflection.Create(renderers, transform);
+            }
         }
+
+        /// <summary>The water world reflection of this map (null: no such water or not in Play mode).</summary>
+        public HplWaterReflection WaterReflection { get; private set; }
 
         void AddEntity(HplEntity entity)
         {
@@ -344,7 +361,42 @@ namespace RTXMnesia.ScriptApi
             if (player != null && !Campaign.IsJustine) SetCheckPoint("_auto", player.startArea, "");
             if (!runScript || Script == null) return;
             Script.Run(Script.OnStart, "OnStart");
+            CalculateTotalCompletionAmount();
             Script.Run(Script.OnEnter, "OnEnter");
+        }
+
+        /// <summary>
+        /// cLuxMap::AddCompletionAmount: the completion of the map grows (the counter shows the increase after the
+        /// delay).
+        /// </summary>
+        public void AddCompletionAmount(int amount, float delay = 0f)
+        {
+            float previous = TotalCompletionAmount == 0 ? 0f : (float)CurrentCompletionAmount / TotalCompletionAmount;
+            CurrentCompletionAmount += amount;
+            float next = TotalCompletionAmount == 0 ? 0f : (float)CurrentCompletionAmount / TotalCompletionAmount;
+            hud?.Completion?.ShowCompletionIncrease(previous, next, delay);
+        }
+
+        /// <summary>
+        /// cLuxMap::CalculateTotalCompletionAmount, after OnStart of the first visit: the map's quests (from
+        /// SetNumberOfQuestsInMap), puzzle items, notes, diaries, chests (none in the game) and flashback areas.
+        /// </summary>
+        void CalculateTotalCompletionAmount()
+        {
+            var count = hud != null ? hud.Completion : null;
+            if (count == null) return;
+            TotalCompletionAmount += NumberOfQuests * count.QuestValue;
+            foreach (var entity in _entities)
+            {
+                if (entity is Props.PropItem item)
+                {
+                    if (item.ItemType == "Puzzle") TotalCompletionAmount += count.ItemValue;
+                    if (item.ItemType == "Note") TotalCompletionAmount += count.NoteValue;
+                    if (item.ItemType == "Diary") TotalCompletionAmount += count.DiaryValue;
+                }
+                else if (entity is HplArea area && area.AreaType == "Flashback") TotalCompletionAmount += count.FlashbackValue;
+            }
+            if (logDebugMessages) HplLog.Info("Total completion value: " + TotalCompletionAmount);
         }
 
         /// <summary>
@@ -368,7 +420,11 @@ namespace RTXMnesia.ScriptApi
             HplSavedMaps.LoadMap(this);
             if (runScript && Script != null)
             {
-                if (firstTime) Script.Run(Script.OnStart, "OnStart");
+                if (firstTime)
+                {
+                    Script.Run(Script.OnStart, "OnStart");
+                    CalculateTotalCompletionAmount();
+                }
                 Script.Run(Script.OnEnter, "OnEnter");
             }
             float loadTime = Time.realtimeSinceStartup - arrival.LoadStartTime;
@@ -487,6 +543,7 @@ namespace RTXMnesia.ScriptApi
             if (updateMap)
             {
                 HplGame.Update(timeStep);
+                UpdateDissolveEntities(timeStep);
                 UpdateTimers(timeStep);
                 for (int i = 0; i < _entities.Count; i++)
                     if (_entities[i].Active) _entities[i].UpdateLogic(timeStep);
@@ -524,6 +581,35 @@ namespace RTXMnesia.ScriptApi
         // ------------------------------------------------------------------ entity creation / destruction
 
         readonly List<HplEntity> _destroy = new();
+        readonly List<HplDissolveEntity> _dissolveEntities = new();
+        Transform _dissolveRoot;
+
+        public IReadOnlyList<HplDissolveEntity> DissolveEntities => _dissolveEntities;
+
+        /// <summary>
+        /// cLuxMap::AddDissolveEntity: a copy of the model under <paramref name="source"/> at its current pose fades out
+        /// in <paramref name="time"/> s (not saved, as in HPL2).
+        /// </summary>
+        public void AddDissolveEntity(Transform source, float time)
+        {
+            if (source == null) return;
+            if (_dissolveRoot == null)
+            {
+                _dissolveRoot = new GameObject("HplDissolve (runtime)") { hideFlags = HideFlags.DontSave }.transform;
+                _dissolveRoot.SetParent(transform, false);
+            }
+            _dissolveEntities.Add(new HplDissolveEntity(source, time, _dissolveRoot));
+        }
+
+        /// <summary>cLuxMap::UpdateDissolveEntities (before the timers).</summary>
+        void UpdateDissolveEntities(float timeStep)
+        {
+            for (int i = 0; i < _dissolveEntities.Count; )
+            {
+                if (_dissolveEntities[i].Update(timeStep)) i++;
+                else _dissolveEntities.RemoveAt(i);
+            }
+        }
         Transform _templateRoot, _entityRoot;
 
         bool IsTemplate(Transform t) => _templateRoot != null && t.IsChildOf(_templateRoot);
@@ -686,6 +772,8 @@ namespace RTXMnesia.ScriptApi
                 if (entity is HplProp prop)
                 {
                     prop.DestroyAttachments();
+                    // iLuxProp::BeforeEntityDestruction: DissolveOnDestruction fades a copy of the model out.
+                    if (prop.DissolveOnDestruction) AddDissolveEntity(prop.GameObject.transform, prop.DissolveTime);
                     prop.BeforeDestruction();
                     prop.KillParticleSystems();
                     foreach (var body in prop.PhysicsBodies)

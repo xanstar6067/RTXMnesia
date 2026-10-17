@@ -74,7 +74,8 @@ namespace RTXMnesia.EditorDev
                 CallScript(map, "StartInsanityEvent", "Bugs_Swarm");
                 var bugs = HplInsanity.CurrentEvent as InsanityEventBugs;
                 Check(bugs != null && bugs.Bugs.Count == 7 && (bool)CallScript(map, "InsanityEventIsActive"), "StartInsanityEvent Bugs_Swarm: 7 bugs");
-                Check(bugs.Bugs.All(b => b.sizeMul >= 0.8f && b.sizeMul <= 1f), "bug sizes 0.8-1 (the file's mfMaxSizeMul typo)");
+                Check(bugs.Bugs.All(b => b.sizeMul >= 0.8f && b.sizeMul <= 1.3f) && bugs.Bugs.Any(b => b.sizeMul > 1f),
+                      "bug sizes 0.8-1.3 (the file's mfMaxSizeMul typo is read)");
                 Check(AnyEntry(map, "insanity_bug3"),
                       "the swarm's loop sound plays");
                 float d0 = bugs.Bugs.Average(b => Vector2.Distance(b.pos, new Vector2(400f, 300f)));
@@ -138,9 +139,9 @@ namespace RTXMnesia.EditorDev
                 player.PlaceAt(area.Component.transform.position, 0f);
                 Step(map, 0.5f);
                 t = 0f;
-                while (t < 3f && HplInsanity.CurrentEvent == null) { Step(map, 1f / 60f); t += 1f / 60f; }
+                while (t < 16f && HplInsanity.CurrentEvent == null) { Step(map, 1f / 60f); t += 1f / 60f; }
                 Check(HplInsanity.CurrentEvent != null && area.Active,
-                      $"standing in it starts {HplInsanity.CurrentEvent?.Name} within {t:0.0} s (check every 0-1 s: the IsanityArea_CheckTimeMax typo); AutoDisable false keeps it on");
+                      $"standing in it starts {HplInsanity.CurrentEvent?.Name} within {t:0.0} s (check every 1-15 s: InsanityArea_CheckTimeMax); AutoDisable false keeps it on");
                 HplInsanity.Reset();
                 Check(HplInsanity.CurrentEvent == null && HplInsanity.DisabledSets.Count() == 2, "Reset ends the event and keeps the disabled sets");
 

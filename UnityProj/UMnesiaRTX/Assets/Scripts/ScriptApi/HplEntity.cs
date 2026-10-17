@@ -473,6 +473,7 @@ namespace RTXMnesia.ScriptApi
         float _insanityCheckCount;
         readonly string _flashbackFile, _flashbackCallback;
         float _flashbackCheckCollisionCount;
+        readonly string _signTextCat = "", _signTextEntry = "";
 
         /// <summary>The liquid of a Liquid area (cLuxArea_Liquid), else null.</summary>
         public HplLiquidArea Liquid { get; }
@@ -511,6 +512,13 @@ namespace RTXMnesia.ScriptApi
                 _flashbackFile = area.GetVariable("FlashbackFile") ?? "";
                 _flashbackCallback = area.GetVariable("Callback") ?? "";
             }
+            else if (AreaType == "Sign")
+            {
+                // cLuxAreaLoader_Sign::LoadVariables, cLuxArea_Sign: the focus text, Sign_MaxFocusDist.
+                _signTextCat = area.GetVariable("TextCat") ?? "";
+                _signTextEntry = area.GetVariable("TextEntry") ?? "";
+                MaxFocusDistance = gameConfig != null ? gameConfig.GetFloat("Player_Interaction", "Sign_MaxFocusDist") : 0f;
+            }
             else if (AreaType == "Ladder")
             {
                 // cLuxAreaLoader_Ladder::LoadVariables, cLuxArea_Ladder::SetupAfterLoad: the forward of the area (its
@@ -545,11 +553,13 @@ namespace RTXMnesia.ScriptApi
             }
             else if (AreaType == "Insanity")
             {
-                // cLuxAreaLoader_Insanity / cLuxArea_Insanity: the maximum is read with the original's key typo
-                // "IsanityArea_CheckTimeMax" (missing in game.cfg → 0), so checks come every 0-1 s instead of 1-15 s.
+                // cLuxAreaLoader_Insanity / cLuxArea_Insanity. Fix: HPL2 reads the maximum with the key typo
+                // "IsanityArea_CheckTimeMax" (missing in game.cfg → 0, checks every 0-1 s); here the game.cfg key
+                // InsanityArea_CheckTimeMax is used (1-15 s), the misspelled one only if a config has it.
                 _insanityAutoDisable = area.GetVariable("AutoDisable") == "true";
                 _insanityCheckTimeMin = gameConfig != null ? gameConfig.GetFloat("Insanity", "InsanityArea_CheckTimeMin", 0f) : 0f;
-                _insanityCheckTimeMax = gameConfig != null ? gameConfig.GetFloat("Insanity", "IsanityArea_CheckTimeMax", 0f) : 0f;
+                _insanityCheckTimeMax = gameConfig != null ? gameConfig.GetFloat("Insanity", "InsanityArea_CheckTimeMax",
+                    gameConfig.GetFloat("Insanity", "IsanityArea_CheckTimeMax", 0f)) : 0f;
                 _insanityCheckCount = Hpl.HplMath.RandRectf(_insanityCheckTimeMin, _insanityCheckTimeMax);
             }
         }
@@ -636,9 +646,14 @@ namespace RTXMnesia.ScriptApi
             Effects.HplInsanity.StartEvent(Map);
         }
 
-        // cLuxArea_Script and cLuxArea_Ladder; other areas (signs, examine) are not ported yet.
+        // cLuxArea_Script, cLuxArea_Ladder and cLuxArea_Sign (always: the focus text shows, OnInteract does nothing).
+        // Examine areas are in no map of the game.
         public override bool CanInteract(Dynamics.HplPhysicsBody body) =>
-            AreaType == "Ladder" || AreaType == "Script" && (_itemInteraction || InteractCallback != "");
+            AreaType == "Ladder" || AreaType == "Sign" || AreaType == "Script" && (_itemInteraction || InteractCallback != "");
+
+        /// <summary>cLuxArea_Sign::GetFocusText: kTranslate(TextCat, TextEntry).</summary>
+        public override string GetFocusText() =>
+            AreaType == "Sign" && Map != null && Map.hud != null ? Map.hud.Translate(_signTextCat, _signTextEntry) : "";
 
         public override bool OnInteract(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos)
         {
@@ -691,6 +706,7 @@ namespace RTXMnesia.ScriptApi
         public override FocusCrosshair GetFocusCrosshair(Dynamics.HplPhysicsBody body, Vector3 hplFocusPos)
         {
             if (AreaType == "Ladder") return FocusCrosshair.Ladder;
+            if (AreaType == "Sign") return FocusCrosshair.Default;
             if (AreaType != "Script") return FocusCrosshair.LastEnum;
             if (InteractCallback == "") return FocusCrosshair.Default;
             return CustomFocusCrossHair == FocusCrosshair.Default ? FocusCrosshair.Grab : CustomFocusCrossHair;

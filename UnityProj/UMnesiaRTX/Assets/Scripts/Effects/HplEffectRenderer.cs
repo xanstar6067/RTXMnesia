@@ -113,7 +113,7 @@ namespace RTXMnesia.Effects
         protected override void Execute(CustomPassContext ctx)
         {
             if (renderer == null || _material == null) return;
-            if (ctx.hdCamera.camera.cameraType != CameraType.Game) return;
+            if (ctx.hdCamera.camera.cameraType != CameraType.Game || World.HplWaterReflection.IsReflectionCamera(ctx.hdCamera.camera)) return;
             var cmd = ctx.cmd;
 
             if (renderer.FlashObjects.Count > 0)

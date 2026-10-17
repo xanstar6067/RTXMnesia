@@ -37,6 +37,9 @@ namespace RTXMnesia.ScriptApi
         /// <summary>The collection for a save file (cLuxSaveGame_SaveData::mpSavedMaps).</summary>
         public static List<SavedMap> Export() => new(s_maps.Values);
 
+        /// <summary>cLuxSavedGameMapCollection::GetSavedMap(name, false): the saved state of a visited map, else null.</summary>
+        public static SavedMap Get(string mapName) => mapName != null && s_maps.TryGetValue(mapName, out var s) ? s : null;
+
         /// <summary>cLuxMapHandler::SetSavedMapCollection after loading a save.</summary>
         public static void Import(List<SavedMap> maps)
         {
@@ -73,6 +76,8 @@ namespace RTXMnesia.ScriptApi
                 full = full,
                 displayNameEntry = map.DisplayNameEntry,
                 numberOfQuests = map.NumberOfQuests,
+                totalCompletionAmount = map.TotalCompletionAmount,
+                currentCompletionAmount = map.CurrentCompletionAmount,
                 fogActive = map.FogActive,
                 fogColor = map.FogColor,
                 fogStart = map.FogStart,
@@ -285,6 +290,8 @@ namespace RTXMnesia.ScriptApi
 
             map.DisplayNameEntry = s.displayNameEntry;
             map.NumberOfQuests = s.numberOfQuests;
+            map.TotalCompletionAmount = s.totalCompletionAmount;
+            map.CurrentCompletionAmount = s.currentCompletionAmount;
             map.SetFog(s.fogActive, s.fogColor, s.fogStart, s.fogEnd, s.fogFalloffExp);
             if (s.full)
             {

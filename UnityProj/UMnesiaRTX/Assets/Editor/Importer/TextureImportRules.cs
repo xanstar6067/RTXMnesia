@@ -15,6 +15,7 @@ namespace RTXMnesia.Importer
 
             var importer = (TextureImporter)assetImporter;
             importer.textureType = TextureImporterType.Default;
+            importer.textureShape = TextureImporterShape.Texture2D;
             importer.mipmapEnabled = true;
             importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
             importer.anisoLevel = 8;
@@ -50,6 +51,14 @@ namespace RTXMnesia.Importer
                     importer.anisoLevel = 0;
                     importer.textureCompression = TextureImporterCompression.Uncompressed;
                     importer.npotScale = TextureImporterNPOTScale.None;
+                    break;
+                case TextureRole.CubeMap:
+                    importer.sRGBTexture = true;
+                    importer.textureShape = TextureImporterShape.TextureCube;
+                    importer.generateCubemap = TextureImporterGenerateCubemap.FullCubemap;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                    importer.alphaSource = TextureImporterAlphaSource.None;
+                    importer.anisoLevel = 0;
                     break;
                 case TextureRole.Height:
                     importer.textureType = TextureImporterType.SingleChannel;

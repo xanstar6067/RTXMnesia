@@ -232,9 +232,18 @@ namespace RTXMnesia.ScriptApi
         }
 
         /// <summary>Active state now; the mesh fade in / dissolve comes with the dissolve materials.</summary>
+        /// <summary>
+        /// Turning on fades the model in (FadeInMeshEntity); turning off leaves a copy of the model that dissolves in
+        /// the fade time (cLuxMap::AddDissolveEntity), whether the prop was on or not, as the original.
+        /// </summary>
         protected void SetPropActiveAndFade(string asName, bool abActive, float afFadeTime)
         {
-            foreach (var p in GetProps(asName)) p.SetActive(abActive);
+            foreach (var p in GetProps(asName))
+            {
+                if (!abActive) Map.AddDissolveEntity(p.GameObject.transform, afFadeTime);
+                p.SetActive(abActive);
+                if (abActive) p.FadeInMeshEntity(afFadeTime);
+            }
         }
 
         protected void SetPropStaticPhysics(string asName, bool abX)
@@ -372,9 +381,15 @@ namespace RTXMnesia.ScriptApi
         protected int GetLeverState(string asName) =>
             GetEntity(asName, HplEntityType.Prop, "Lever") is Props.PropLever l ? l.CurrentState : 0;
 
-        protected void SetMultiSliderStuckState(string asName, int alStuckState, bool abEffects) => NotPorted(nameof(SetMultiSliderStuckState), "multi sliders");
+        protected void SetMultiSliderStuckState(string asName, int alStuckState, bool abEffects)
+        {
+            if (GetEntity(asName, HplEntityType.Prop, "MultiSlider") is Props.PropMultiSlider slider) slider.SetStuckState(alStuckState, abEffects);
+        }
 
-        protected void SetMultiSliderCallback(string asName, string asCallback) => NotPorted(nameof(SetMultiSliderCallback), "multi sliders");
+        protected void SetMultiSliderCallback(string asName, string asCallback)
+        {
+            if (GetEntity(asName, HplEntityType.Prop, "MultiSlider") is Props.PropMultiSlider slider) slider.SetChangeStateCallback(asCallback);
+        }
 
         protected void SetButtonSwitchedOn(string asName, bool abSwitchedOn, bool abEffects) => NotPorted(nameof(SetButtonSwitchedOn), "buttons");
 

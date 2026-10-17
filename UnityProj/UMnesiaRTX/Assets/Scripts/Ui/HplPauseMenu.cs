@@ -14,6 +14,8 @@ namespace RTXMnesia.Ui
         SensitivityLess, SensitivityMore, InvertMouse, SmoothMouse,
         VolumeSlider, SensitivitySlider, NewGame, ReturnTitle, ConfirmNewGame, ConfirmReturnTitle,
         Continue, ConfirmContinue, LoadGame, LoadSlot, LoadOk, ConfirmLoad, ExitAndSave, ConfirmExitAndSave,
+        KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
+        GammaLess, GammaMore, GammaSlider,
     }
 
     /// <summary>In-game cLuxMainMenu: menu.cfg layout and gui_main_menu.skin on the same Canvas system as the HUD.</summary>
@@ -124,7 +126,8 @@ namespace RTXMnesia.Ui
         }
 
         public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer,
-                            MenuControl confirmation = MenuControl.ConfirmQuit, IReadOnlyList<string> saves = null, int selectedSave = -1)
+                            MenuControl confirmation = MenuControl.ConfirmQuit, IReadOnlyList<string> saves = null, int selectedSave = -1,
+                            HplKeyConfig keyConfig = null)
         {
             _loadFade.color = Color.clear; _loadingText.Clear();
             _menuText.Clear();
@@ -136,7 +139,7 @@ namespace RTXMnesia.Ui
             _selected = selected;
             _opacity = opacity;
             _shade.color = new Color(0, 0, 0, _titleScreen ? 0 : 0.5f * opacity);
-            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options && saves == null;
+            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options && saves == null && keyConfig == null;
             if (_logo.enabled)
             {
                 float width = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
@@ -147,6 +150,7 @@ namespace RTXMnesia.Ui
                 _logo.color = new Color(1, 1, 1, opacity);
             }
             if (confirmQuit) Confirmation(confirmation);
+            else if (keyConfig != null) KeyConfig(keyConfig);
             else if (options) Options(tab, settings);
             else if (saves != null) LoadGame(saves, selectedSave);
             else Main();
@@ -223,11 +227,13 @@ namespace RTXMnesia.Ui
                 MenuControl.ConfirmContinue => T("MainMenu", "Continue old game?", "Продолжить прошлую игру?"),
                 MenuControl.ConfirmExitAndSave => T("MainMenu", "Sure you want to exit and save?", "Сохранить и выйти в главное меню?"),
                 MenuControl.ConfirmLoad => T("LoadGame", "LoadGameMessage", "Загрузить сохранённую игру?"),
+                MenuControl.ConfirmKeyDefaults => T("KeyConfig", "LoadDefaultsMessage", "Применить раскладку по умолчанию?"),
+                MenuControl.ConfirmKeyInvalid => T("KeyConfig", "InvalidInputMessage", "Некоторые клавиши повторяются. Сохранить?"),
                 _ => T("MainMenu", "Sure you want to quit?", "Выйти из игры?"),
             };
             var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(410, size, question) : new List<string> { question };
             for (int i = 0; i < rows.Count; i++) Draw(_guiText, rows[i], new Vector2(400, 235 + i * 22), size, Color.white, HplFontAlign.Center);
-            bool okCancel = action == MenuControl.ConfirmLoad;
+            bool okCancel = action is MenuControl.ConfirmLoad or MenuControl.ConfirmKeyDefaults or MenuControl.ConfirmKeyInvalid;
             Button(new Rect(260, 365, 120, 28), okCancel ? T("Global", "OK", "OK") : T("MainMenu", "Yes", "Да"), action);
             Button(new Rect(420, 365, 120, 28), okCancel ? T("Global", "Cancel", "Отмена") : T("MainMenu", "No", "Нет"), MenuControl.Cancel);
         }
@@ -273,6 +279,8 @@ namespace RTXMnesia.Ui
                 case 1:
                     Toggle(195, "FullScreen", "Полный экран", settings.fullscreen, MenuControl.Fullscreen);
                     Toggle(245, "VSync", "Вертикальная синхронизация", settings.vSync, MenuControl.VSync);
+                    Adjust(305, "Gamma", "Гамма", settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
+                           (settings.gamma - HplUserSettings.MinGamma) / (HplUserSettings.MaxGamma - HplUserSettings.MinGamma), MenuControl.GammaLess, MenuControl.GammaMore);
                     break;
                 case 2:
                     Adjust(200, "Volume", "Общая громкость", Mathf.RoundToInt(settings.masterVolume * 100) + "%", settings.masterVolume, MenuControl.VolumeLess, MenuControl.VolumeMore);
@@ -281,10 +289,82 @@ namespace RTXMnesia.Ui
                     Toggle(195, "InvertMouse", "Инверсия мыши", settings.invertMouse, MenuControl.InvertMouse);
                     Toggle(245, "SmoothMouse", "Сглаживание мыши", settings.smoothMouse, MenuControl.SmoothMouse);
                     Adjust(305, "MouseSensitivity", "Чувствительность мыши", settings.mouseSensitivity.ToString("0.0", CultureInfo.InvariantCulture), (settings.mouseSensitivity - 0.2f) / 4.8f, MenuControl.SensitivityLess, MenuControl.SensitivityMore);
+                    // cLuxMainMenu_Options: the key config button under the input settings.
+                    string keyConfig = T("OptionsMenu", "KeyConfigButton", "Конфигурация клавиш");
+                    float keyWidth = _guiText.font != null ? _guiText.font.GetLength(Vector2.one * 18, keyConfig) : 200;
+                    Button(new Rect(140, 380, keyWidth + 20, 25), keyConfig, MenuControl.KeyConfig, null, default, HplFontAlign.Left);
                     break;
             }
             Button(new Rect(500, 485, 80, 30), T("MainMenu", "OK", "OK"), MenuControl.Apply);
             Button(new Rect(590, 485, 95, 30), T("MainMenu", "Cancel", "Отмена"), MenuControl.Cancel);
+        }
+
+        /// <summary>
+        /// cLuxMainMenu_KeyConfig::CreateGui (620 × 460 window): the category selector, the action / primary /
+        /// secondary headers (font × 1.25), a row per action of the category (inputs 140 × 16, 10 apart, primary at
+        /// 240, secondary 150 further), empty or shared inputs red, the tooltip of the selected row, "Default keys",
+        /// OK and Cancel. A slot waiting for an input shows "...".
+        /// </summary>
+        void KeyConfig(HplKeyConfig keys)
+        {
+            var window = new Rect(90, 70, 620, 460);
+            Window(window);
+            Draw(_guiText, T("KeyConfig", "KeyConfigTitle", "Конфигурация клавиш"), new Vector2(125, 50), Vector2.one * 25, Color.white);
+            var header = Vector2.one * 18 * 1.25f;
+            var size = Vector2.one * 16;
+            float x = window.x + 30, y = window.y + 85;
+            string category = T("KeyConfig", "Category", "Категория");
+            Draw(_guiText, category, new Vector2(x, y), header, Color.white);
+            float comboX = x + (_guiText.font != null ? _guiText.font.GetLength(header, category) : 100) + 10;
+            string[] categories = { T("KeyConfig", "Movement", "Движение"), T("KeyConfig", "Actions", "Действия"), T("KeyConfig", "Misc", "Разное") };
+            var combo = new Rect(comboX, y, 175, 25);
+            Piece(null, combo, new Color(0, 0, 0, 0.5f));
+            Button(combo, categories[Mathf.Clamp(keys.Category, 0, 2)] + "  >", MenuControl.KeyCategory);
+
+            x += 15;
+            y += 25 + 5;
+            Draw(_guiText, T("KeyConfig", "HeaderAction", "Действие"), new Vector2(x, y), header, Color.white);
+            Draw(_guiText, T("KeyConfig", "HeaderPrimary", "Основная"), new Vector2(x + 240 + 70, y), header, Color.white, HplFontAlign.Center);
+            Draw(_guiText, T("KeyConfig", "HeaderSecondary", "Дополнительная"), new Vector2(x + 390 + 70, y), header, Color.white, HplFontAlign.Center);
+            y += header.y + 10;
+
+            int selectedEntry = -1;
+            foreach (int i in keys.EntriesOf(keys.Category))
+            {
+                var e = keys.Entries[i];
+                Draw(_guiText, T("Actions", e.name, e.name), new Vector2(x, y), size, Color.white);
+                for (int s = 0; s < 2; s++)
+                {
+                    var rect = new Rect(x + (s == 0 ? 240 : 390), y, 140, 16);
+                    bool waiting = keys.WaitingEntry == i && keys.WaitingSlot == s;
+                    Piece(null, rect, waiting ? new Color(1, 1, 1, 0.25f) : new Color(0, 0, 0, 0.45f));
+                    string name = HplKeyBindings.ButtonName(e.inputs[s]);
+                    string label = waiting ? "..." : name == "" ? "" : T("ButtonNames", name, name);
+                    int index = _buttons.Count;
+                    _buttons.Add((rect, MenuControl.KeySlot));
+                    _buttonData.Add(i * 2 + s);
+                    var color = e.invalid[s] ? Color.red : index == _selected ? Highlight : Color.white;
+                    Draw(_guiText, label, new Vector2(rect.center.x, rect.y), size, color, HplFontAlign.Center);
+                    if (index == _selected) selectedEntry = i;
+                }
+                y += 16 + 10;
+            }
+            string tip = selectedEntry >= 0 ? T("Actions", keys.Entries[selectedEntry].name + "Tooltip", "") : "";
+
+            // Tip label (400 × 30, black 0.5 background) and the buttons along the bottom.
+            float bottom = window.y + window.height - 25 - 10;
+            if (tip != "")
+            {
+                Piece(null, new Rect(window.x + 40, bottom, 400, 30), new Color(0, 0, 0, 0.5f));
+                var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(396, Vector2.one * 14, tip) : new List<string> { tip };
+                for (int r = 0; r < rows.Count && r < 2; r++) Draw(_guiText, rows[r], new Vector2(window.x + 42, bottom + r * 15), Vector2.one * 14, Color.white);
+            }
+            string defaults = T("KeyConfig", "SetDefault", "Задать клавиши по умолчанию");
+            float defaultsWidth = (_guiText.font != null ? _guiText.font.GetLength(Vector2.one * 18, defaults) : 200) + 20;
+            Button(new Rect(window.x + 40, bottom - 35, defaultsWidth, 25), defaults, MenuControl.KeyDefaults);
+            float okX = window.x + window.width - 80 * 2 - 3 - 5;
+            Button(new Rect(okX, bottom, 80, 30), T("Global", "OK", "OK"), MenuControl.KeyOk);
+            Button(new Rect(okX + 83, bottom, 80, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
         }
 
         void Toggle(float y, string key, string fallback, bool value, MenuControl control)
@@ -302,7 +382,12 @@ namespace RTXMnesia.Ui
             Draw(_guiText, value, new Vector2(545, y), Vector2.one * 18, Color.white, HplFontAlign.Center);
             Piece("SliderHoriBackground", new Rect(475, y + 34, 140, 6), Color.white);
             Piece("SliderHoriArrowUp", new Rect(475 + Mathf.Clamp01(fraction) * 128, y + 29, 12, 18), Color.white);
-            _sliders.Add((new Rect(475, y + 25, 140, 28), less == MenuControl.VolumeLess ? MenuControl.VolumeSlider : MenuControl.SensitivitySlider));
+            _sliders.Add((new Rect(475, y + 25, 140, 28), less switch
+            {
+                MenuControl.VolumeLess => MenuControl.VolumeSlider,
+                MenuControl.GammaLess => MenuControl.GammaSlider,
+                _ => MenuControl.SensitivitySlider,
+            }));
         }
 
         void Button(Rect rect, string label, MenuControl action, HplGuiText layer = null, Vector2 size = default, HplFontAlign align = HplFontAlign.Center)

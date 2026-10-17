@@ -59,6 +59,10 @@ namespace RTXMnesia.ScriptApi
         public float Health = 100f;
         public int Toughness;
         public bool ShowMesh = true, ShowHints = true;
+
+        /// <summary>iLuxProp::mbDissolveOnDestruction / mfDissolveTime: the model fades out when the prop is destroyed.</summary>
+        public bool DissolveOnDestruction;
+        public float DissolveTime = 1f;
         public bool IsInteractedWith;
         public readonly List<string> ConnectedProps = new();
         public bool StaticPhysics { get; private set; }
@@ -116,6 +120,8 @@ namespace RTXMnesia.ScriptApi
             ShowMesh = VarBool("ShowMesh", true);
             if (!ShowMesh) SetMeshVisible(false);
             ShowHints = VarBool("ShowHints", true);
+            DissolveOnDestruction = VarBool("DissolveOnDestruction", false);
+            DissolveTime = VarFloat("DissolveTime", 1f);
 
             // Effects properties
             _effectsOnSound = VarString("EffectsOnSound", "");
@@ -405,6 +411,7 @@ namespace RTXMnesia.ScriptApi
             UpdateMoving(timeStep);
             UpdateCheckIfOutsidePlayer();
             UpdateEffectFading(timeStep);
+            UpdateMeshFading(timeStep);
             UpdateAnimation();
             UpdateAttachedProps(false);
             for (int i = 0; i < InteractConnections.Count; i++)
@@ -416,6 +423,36 @@ namespace RTXMnesia.ScriptApi
         }
 
         protected virtual void UpdatePropSpecific(float timeStep) { }
+
+        // iLuxProp::mfFadeInAlpha / mfFadeInSpeed: in a reference object, not saved (a loaded prop shows at once).
+        sealed class MeshFade
+        {
+            public HplMeshFader fader;
+            public float alpha = 1f, speed;
+        }
+        readonly MeshFade _meshFade = new();
+
+        /// <summary>The coverage of the model while it fades in (1 when not fading).</summary>
+        public float MeshFadeAlpha => _meshFade.alpha;
+
+        /// <summary>iLuxProp::FadeInMeshEntity: the coverage of the model goes from 0 to 1 in the given time.</summary>
+        public void FadeInMeshEntity(float time)
+        {
+            _meshFade.fader ??= new HplMeshFader(HplMeshFader.ModelRenderers(GameObject.transform));
+            _meshFade.alpha = 0f;
+            _meshFade.speed = 1f / time;
+            // HPL2 sets the coverage in the next update; 0 now, so the model does not show for one frame.
+            _meshFade.fader.SetAlpha(time > 0f ? 0f : 1f);
+            if (time <= 0f) _meshFade.alpha = 1f;
+        }
+
+        /// <summary>iLuxProp::UpdateMeshFading.</summary>
+        void UpdateMeshFading(float timeStep)
+        {
+            if (_meshFade.alpha >= 1f || _meshFade.fader == null) return;
+            _meshFade.alpha += _meshFade.speed * timeStep;
+            _meshFade.fader.SetAlpha(_meshFade.alpha);
+        }
 
         // ------------------------------------------------------------------ attached props
 

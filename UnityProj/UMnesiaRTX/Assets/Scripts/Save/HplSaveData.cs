@@ -254,6 +254,7 @@ namespace RTXMnesia.Save
         public string name = "", displayNameEntry = "";
         public bool full;
         public int numberOfQuests;
+        public int totalCompletionAmount, currentCompletionAmount;
         public string lanternLitCallback = "";
         public bool fogActive;
         public Color fogColor;

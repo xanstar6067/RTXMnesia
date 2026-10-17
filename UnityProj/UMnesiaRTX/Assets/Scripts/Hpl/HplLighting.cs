@@ -105,9 +105,12 @@ namespace RTXMnesia.Hpl
             Shader.SetGlobalVector(TranslucentFogId, active
                 ? new Vector4(start, end - start, 1f - color.a, falloffExp)
                 : new Vector4(0f, 1f, 1f, 1f));
+            // The water surface mixes to the fog color itself (water_surface_frag.glsl), gamma values as in HPL2.
+            Shader.SetGlobalVector(FogColorId, new Vector4(color.r, color.g, color.b, color.a));
         }
 
         static readonly int TranslucentFogId = Shader.PropertyToID("_HplTranslucentFog");
+        static readonly int FogColorId = Shader.PropertyToID("_HplFogColor");
 
         static float FogDistance(float fogEnd) => Mathf.Max(1f, fogEnd);
 

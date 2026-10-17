@@ -23,6 +23,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     TEXTURE2D(_HplAmpMap1);
     TEXTURE2D(_HplZoomMap);
     float4 _HplInsanity;    // x: wave time, y: amplitude map blend, z: wave alpha, w: zoom alpha
+    float _HplGamma;        // gamma of the settings: sRGB value^(1/gamma), as SDL's gamma ramp
+
+    float4 GammaFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float3 color = LoadSource(int2(v.positionCS.xy));
+        return float4(SRGBToLinear(pow(saturate(color), 1.0 / max(_HplGamma, 0.01))), 1.0);
+    }
 
     float3 LoadSource(int2 p)
     {
@@ -226,6 +234,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment InsanityFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Gamma"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment GammaFrag
             ENDHLSL
         }
     }

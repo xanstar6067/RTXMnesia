@@ -18,8 +18,10 @@ namespace RTXMnesia.Importer
     ///   Height → pixel displacement (POM), Alpha → alpha clipping, Illumination → emission.
     /// - Translucent Add → HDRP/Unlit additive; Alpha / PremulAlpha → HDRP/Lit transparent.
     ///   Mul / MulX2 (no HDRP blend mode) → Assets/Shaders/HplMultiply.shader, also for decals.
-    /// - Decal → HDRP/Decal (mesh decals), Add → HDRP/Unlit additive. Water → HDRP/Lit transparent placeholder (TODO proper water).
-    /// - CubeMap / CubeMapAlpha are ignored: HDRP reflection probes / ray-traced reflections replace them.
+    /// - Decal → HDRP/Decal (mesh decals), Add → HDRP/Unlit additive.
+    /// - Water → Assets/Shaders/HplWater.shader (water_surface_frag.glsl): refraction, waves, cube map or world
+    ///   reflection (HplWaterReflection), fog.
+    /// - CubeMap of other materials and CubeMapAlpha are ignored: HDRP reflection probes / ray-traced reflections replace them.
     /// Existing materials are updated in place so prefabs and scenes keep their references.
     /// </summary>
     public static class MaterialConverter
@@ -105,7 +107,8 @@ namespace RTXMnesia.Importer
 
             if (mat.Type == AmnesiaMaterial.Kind.Unknown)
                 log.Warn($"{rel}: unknown material type '{mat.TypeName}', converted as SolidDiffuse");
-            if (mat.Texture("CubeMap") != null)
+            if (mat.Type == AmnesiaMaterial.Kind.Water) Add(plan, Resolve("CubeMap"), TextureRole.CubeMap);
+            else if (mat.Texture("CubeMap") != null)
                 log.Info($"{rel}: CubeMap ignored (HDRP reflections replace it)");
             if (mat.Texture("DissolveAlpha") != null)
                 log.Info($"{rel}: DissolveAlpha ignored (TODO when dissolve effects are ported)");
@@ -187,7 +190,16 @@ namespace RTXMnesia.Importer
                     EditorUtility.DisplayProgressBar("Amnesia: materials", plan.AssetPath, (float)i / plans.Count);
                     try
                     {
-                        var material = CreateMaterial(plan.Source, role => Tex(plan, role), log);
+                        Cubemap Cube()
+                        {
+                            if (!plan.Jobs.TryGetValue(TextureRole.CubeMap, out var job) || !textures.TryGetValue(Key(job), out string path)) return null;
+                            var cube = AssetDatabase.LoadAssetAtPath<Cubemap>(path);
+                            if (cube == null) log.Error($"Converted cube map missing in AssetDatabase: {path}");
+                            return cube;
+                        }
+                        var material = plan.Source.Type == AmnesiaMaterial.Kind.Water
+                            ? CreateWater(plan.Source, role => Tex(plan, role), Cube())
+                            : CreateMaterial(plan.Source, role => Tex(plan, role), log);
                         SaveInPlace(material, plan.AssetPath);
                     }
                     catch (Exception e)
@@ -236,20 +248,38 @@ namespace RTXMnesia.Importer
                     return m;
                 }
 
-                case AmnesiaMaterial.Kind.Water:
-                {
-                    var m = CreateLit(src, tex);
-                    m.SetFloat("_SurfaceType", HdrpTransparent);
-                    m.SetFloat("_BlendMode", (float)HdrpBlend.Alpha);
-                    m.SetColor(BaseColor, new Color(1f, 1f, 1f, 0.5f));
-                    m.SetFloat("_Smoothness", 0.95f);
-                    HDMaterial.ValidateMaterial(m);
-                    return m;
-                }
-
                 default:
                     return CreateLit(src, tex);
             }
+        }
+
+        /// <summary>
+        /// cMaterialType_Water (MaterialType_Water.cpp): the variables as HPL2 sets them on the program —
+        /// t = time × WaveSpeed, amplitude × 0.04, frequency × 10. The reflection is the cube map if the material has
+        /// one, else the world reflection (a mirror camera, HplWaterReflection); HasReflection false: the fake shading.
+        /// </summary>
+        public static Material CreateWater(AmnesiaMaterial src, Func<TextureRole, Texture2D> tex, Cubemap cube)
+        {
+            var m = new Material(FindShader("RTXMnesia/HplWater"));
+            var albedo = tex(TextureRole.Albedo);
+            if (albedo != null) m.SetTexture(BaseColorMap, albedo);
+            var normal = tex(TextureRole.Normal);
+            if (normal != null) m.SetTexture("_NormalMap", normal);
+            bool hasReflection = src.Bool("HasReflection", true);
+            float mode = !hasReflection ? 0f : cube != null ? 1f : 2f;
+            if (cube != null) m.SetTexture("_CubeMap", cube);
+            m.SetFloat("_ReflectionMode", mode);
+            m.SetFloat("_RefractionScale", src.Float("RefractionScale", 0.1f));
+            m.SetFloat("_FresnelBias", src.Float("FrenselBias", 0.2f));
+            m.SetFloat("_FresnelPow", src.Float("FrenselPow", 8f));
+            m.SetFloat("_WaveSpeed", src.Float("WaveSpeed", 1f));
+            m.SetFloat("_WaveAmplitude", src.Float("WaveAmplitude", 1f) * 0.04f);
+            m.SetFloat("_WaveFreq", src.Float("WaveFreq", 1f) * 10f);
+            float fadeStart = src.Float("ReflectionFadeStart", 0f), fadeEnd = src.Float("ReflectionFadeEnd", 0f);
+            m.SetVector("_ReflectionFade", new Vector4(fadeStart, fadeEnd - fadeStart, fadeEnd > 0f ? 1f : 0f, fadeEnd));
+            m.SetFloat("_OcclusionCullReflection", src.Bool("OcclusionCullWorldReflection", true) ? 1f : 0f);
+            m.renderQueue = (int)RenderQueue.Transparent;
+            return m;
         }
 
         static Material CreateLit(AmnesiaMaterial src, Func<TextureRole, Texture2D> tex)

@@ -32,7 +32,11 @@ namespace RTXMnesia.ScriptApi
         protected void CompleteQuest(string asName, string asNameAndTextEntry)
         {
             HplGame.AddQuest(asName, asNameAndTextEntry);
-            if (HplGame.DisableQuest(asName)) ProgLog("High", "Completed Quest " + asName);
+            if (HplGame.DisableQuest(asName))
+            {
+                ProgLog("High", "Completed Quest " + asName);
+                Map.AddCompletionAmount(Map.hud.Completion != null ? Map.hud.Completion.QuestValue : 0, 6f);
+            }
         }
 
         protected bool QuestIsCompleted(string asName)
