@@ -1,5 +1,7 @@
 # Проверка концовок (29_orb_chamber) — задание для сквозного прохода
 
+Результаты прогона 2026-10-17: [EndingsCheckResults.md](EndingsCheckResults.md), включая незакрытую визуальную проверку титров Агриппы и уточнения исходного поведения.
+
 Цель: убедиться, что все три концовки основной игры доходят от игрового действия до титров и возврата в главное меню без ошибок порта. Исправлять найденное можно только с отчётом; особенности оригинала, перечисленные в журнале карты, **не исправлять**.
 
 Правила проекта (AGENTS.md): ресурсы Amnesia не коммитить; `src/` и папку игры не трогать; Unity для batch должен быть закрыт (`UnityProj/UMnesiaRTX/Temp/UnityLockfile`); перед batch-прогоном посмотреть `git diff UnityProj/UMnesiaRTX/ProjectSettings/` — если пусто, после прогона вернуть `git checkout UnityProj/UMnesiaRTX/ProjectSettings/`, иначе сделать копию папки и восстановить из неё; коммитит пользователь.
@@ -15,7 +17,7 @@
 ## Инструменты
 
 1. **Логика без Play** — `PlayerSimulation` (`-batchmode -quit -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch03/29_orb_chamber.map -seed 1 [-scriptDebug] -script "..."`, без `-nographics`, если нужны `shot`). Команды: `watch t интервал` (таймеры, реплики, сообщения), `call Функция арг…` (функция скрипта уровня или API `HplScript`), `goto x y z yaw`, `aim Сущность`, `interact`, `release`, `throw`, `mouse x y t`, `body Сущность`, `sounds`, `health`, `shot имя`. `-scriptDebug` выдаёт фонарь и голову Агриппы (`OnStart`, как в оригинале).
-2. **Титры в Play** — `RTXMnesia.EditorDev.CreditsPreview.RunBatch` (без `-quit`/`-nographics`): сейчас проверяет только endNum 2 (Даниэль). Для 0 и 1 добавить параметр (например, `-endNum`) в `Assets/Scripts/Dev/HplCreditsPreviewProbe.cs` и прогнать все три.
+2. **Титры в Play** — `RTXMnesia.EditorDev.CreditsPreview.RunBatch` (без `-quit`/`-nographics`), параметр `-endNum 0|1|2` (по умолчанию 2, Даниэль). Снимки: `Logs/CreditsCheck/<endNum>/`. Проверяются также код, очистка `AddKeyPart` и новая игра после возврата в меню.
 3. **Ручная проверка** — открыть сцену 29 в редакторе и нажать Play (карта стартует сразу). Чтобы получить голову Агриппы, на `HplMap` включить `scriptDebug`.
 
 ## Общий ход карты

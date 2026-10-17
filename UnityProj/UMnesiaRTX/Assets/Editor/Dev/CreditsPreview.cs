@@ -10,7 +10,7 @@ namespace RTXMnesia.EditorDev
     /// <summary>
     /// Batch Play check of the credits on 29_orb_chamber (no -quit / -nographics), see
     /// <see cref="Dev.HplCreditsPreviewProbe"/>: -batchmode -executeMethod RTXMnesia.EditorDev.CreditsPreview.RunBatch.
-    /// Screenshots in Logs/CreditsCheck.
+    /// -endNum 0/1/2 (Daniel by default); screenshots in Logs/CreditsCheck/{endNum}.
     /// </summary>
     [InitializeOnLoad]
     public static class CreditsPreview

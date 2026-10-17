@@ -20,13 +20,14 @@ namespace RTXMnesia.EditorDev
     /// <see cref="HplMap"/>, the steps go through it: the level script, its timers and callbacks, effects and HUD run
     /// too, and script messages are copied into the log.
     /// Batch: -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch [-amnesiaMap maps/...map] [-script "..."]
-    /// [-scriptDebug] [-noScript] [-seed N] (shots need a GPU: no -nographics). Script commands, ';'-separated,
+    /// [-scriptDebug] [-noScript] [-seed N] [-loadSave path] (shots need a GPU: no -nographics). Script commands, ';'-separated,
     /// durations in seconds:
     /// idle t | watch t interval | w/s/a/d t | run t | turn deg | pitch deg | crouch (toggle) | jump | leanr/leanl t |
     /// start AreaName | goto x y z [yawDeg] | shot name |
     /// interact | release | throw | scroll n | rotate on/off | mouse x y t (HPL2 mouse units per step) | aim Entity [Body] |
     /// body Entity (bodies and joints) | call Function args (script or engine function).
     /// "watch" steps like idle and logs the script state every interval.
+    /// until Var value timeout | expectvar Var value: wait for / assert a local script variable.
     /// </summary>
     public static class PlayerSimulation
     {
@@ -55,6 +56,13 @@ namespace RTXMnesia.EditorDev
 
             if (int.TryParse(ImportMenu.Arg("-seed", ""), out int seed)) HplMath.Seed(seed);
             HplGame.Reset();
+            string savePath = ImportMenu.Arg("-loadSave", "");
+            if (savePath != "")
+            {
+                var save = RTXMnesia.Save.HplSaveHandler.ReadFile(savePath);
+                if (save == null) throw new InvalidDataException("Cannot read -loadSave: " + savePath);
+                RTXMnesia.Save.HplSaveHandler.BeginLoad(save);
+            }
             // -globals "name=value;…": global script variables set by other maps (hub return visits).
             foreach (string pair in ImportMenu.Arg("-globals", "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -149,6 +157,21 @@ namespace RTXMnesia.EditorDev
                     {
                         case "idle": Step(steps); break;
                         case "watch": Step(steps, Arg(2, 1f)); break;
+                        case "until":
+                        {
+                            string name = p[1], expected = p[2];
+                            int limit = Mathf.CeilToInt(Arg(3, 240f) / dt);
+                            while (map.GetVar(name) != expected && limit-- > 0) Step(1);
+                            if (map.GetVar(name) != expected) throw new InvalidOperationException($"Timeout: {name}={map.GetVar(name)}, expected {expected}");
+                            log.Info($"t={time:0.00} reached {name}={expected}");
+                            break;
+                        }
+                        case "expectvar":
+                            // Script integer variables default to zero even when their stored text is empty.
+                            int.TryParse(map.GetVar(p[1]), NumberStyles.Integer, CultureInfo.InvariantCulture, out int actual);
+                            if (actual != int.Parse(p[2], CultureInfo.InvariantCulture)) throw new InvalidOperationException($"FAIL: {p[1]}={actual}, expected {p[2]}");
+                            log.Info($"PASS: {p[1]}={p[2]}");
+                            break;
                         case "w": player.held.forward = true; Step(steps); break;
                         case "s": player.held.backward = true; Step(steps); break;
                         case "a": player.held.left = true; Step(steps); break;

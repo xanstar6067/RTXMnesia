@@ -17,7 +17,8 @@ namespace RTXMnesia.Dev
     public sealed class HplCreditsPreviewProbe : MonoBehaviour
     {
         public const string ExitCodeKey = "RTXMnesia.CreditsPreview.ExitCode";
-        string Folder => Path.GetFullPath("Logs/CreditsCheck");
+        int _endNum = 2;
+        string Folder => Path.GetFullPath("Logs/CreditsCheck/" + _endNum);
         int _checks;
 
         IEnumerator Start()
@@ -46,6 +47,12 @@ namespace RTXMnesia.Dev
 
         IEnumerator Run()
         {
+            string[] args = Environment.GetCommandLineArgs();
+            int index = Array.IndexOf(args, "-endNum");
+            if (index >= 0 && (index + 1 >= args.Length || !int.TryParse(args[index + 1], out _endNum) || _endNum < 0 || _endNum > 2))
+                throw new ArgumentException("-endNum must be 0, 1 or 2");
+            string song = _endNum == 0 ? "ending_alexander.ogg" : _endNum == 1 ? "ending_agrippa.ogg" : "ending_daniel.ogg";
+            string code = _endNum == 0 ? "tyr299" : _endNum == 1 ? "odn314" : "lke271";
             Directory.CreateDirectory(Folder);
             yield return new WaitForSecondsRealtime(1f);
             var map = HplMap.Current;
@@ -55,18 +62,20 @@ namespace RTXMnesia.Dev
             map.effects.Fade.FadeIn(0f);
             string menuScene = map.Campaign.MenuScene;
             HplGame.SetGlobalVar("credits_reset_probe", "1");
+            HplCredits.AddKeyPart(299);
             yield return new WaitForSecondsRealtime(0.3f);
 
-            // As 29_orb_chamber's Daniel ending (StartCredits("ending_daniel.ogg", false, "Ending", "MainCredits", 2)).
+            // The selected 29_orb_chamber ending (-endNum 0/1/2; Daniel by default).
             typeof(HplScript).GetMethod("StartCredits", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                .Invoke(map.Script, new object[] { "ending_daniel.ogg", false, "Ending", "MainCredits", 2 });
+                .Invoke(map.Script, new object[] { song, false, "Ending", "MainCredits", _endNum });
             var credits = HplCredits.Current;
             Check(credits != null && HplCredits.Active, "StartCredits shows the credits");
             Check(credits.RowCount > 100, $"Ending/MainCredits word wrapped ({credits.RowCount} rows)");
             yield return null;
             float gameTime = map.GameTime;
             Check(map.IsMenuPaused && Time.timeScale == 0 && map.player.UiInputBlocked, "the map stops (Credits container)");
-            Check(map.sound.Music.CurrentSongName == "ending_daniel.ogg", $"the ending song plays ({map.sound.Music.CurrentSongName})");
+            Check(map.hud == null || map.hud.Canvas == null || !map.hud.Canvas.enabled, "HUD is hidden");
+            Check(map.sound.Music.CurrentSongName == song, $"the ending song plays ({map.sound.Music.CurrentSongName})");
             yield return new WaitForSecondsRealtime(1f);
             credits.ExitPressed();
             Check(credits.State == 0, "Exit is ignored in the first 3 s");
@@ -82,7 +91,19 @@ namespace RTXMnesia.Dev
             while (credits.State < 3 && Time.realtimeSinceStartup < wait) yield return null;
             Check(credits.State == 3 && credits.FadeAlpha == 0f, "fade out and in to The End (FadeSpeed 0.5)");
             yield return new WaitForSecondsRealtime(0.5f);
+            var normal = typeof(HplCredits).GetField("_textNormal", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(credits);
+            var commands = (IEnumerable)typeof(HplGuiText).GetField("_commands", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(normal);
+            bool hasCode = false;
+            foreach (object command in commands)
+                if ((string)command.GetType().GetField("text").GetValue(command) == code) hasCode = true;
+            Check(hasCode, "The End displays code " + code);
+            var header = (HplGuiText)typeof(HplCredits).GetField("_textHeader", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).GetValue(credits);
+            int headerQuads = 0;
+            header.ForEachQuad((rect, uv, color) => headerQuads++);
+            Check(header.CommandCount == 1 && headerQuads > 0, $"The End header has glyphs ({headerQuads}, font {header.font.file})");
             Capture(map, credits, "TheEnd.png");
+            yield return new WaitForSecondsRealtime(0.5f);
+            Capture(map, credits, "TheEndRepeat.png");
             // mfTime runs since the fade out began (4 s of fades): The End can be left at once.
             credits.ExitPressed();
             Check(credits.State == 4, "Exit leaves The End (its 3 s counted from the fade out, as in HPL2)");
@@ -95,6 +116,12 @@ namespace RTXMnesia.Dev
             var ui = mainMenu != null ? mainMenu.Ui : null;
             Check(SceneManager.GetActiveScene().path == menuScene && ui != null && ui.IsTitleScreen && Time.timeScale == 1, "the last fade returns to the main menu");
             Check(!HplCredits.Active && !HplGame.GlobalVars.ContainsKey("credits_reset_probe"), "the game is reset, the credits gone");
+            Check(HplCredits.KeyParts.Count == 0, "AddKeyPart buffer is reset");
+            Check(ui.Choose(MenuControl.NewGame) && ui.Choose(MenuControl.ConfirmNewGame), "new game accepted after ending");
+            wait = Time.realtimeSinceStartup + 60f;
+            while (SceneManager.GetActiveScene().path != HplGameUi.FirstLevelScene && Time.realtimeSinceStartup < wait) yield return null;
+            yield return null; yield return null;
+            Check(SceneManager.GetActiveScene().path == HplGameUi.FirstLevelScene && HplMap.Current != null && !HplGame.GlobalVars.ContainsKey("credits_reset_probe"), "new game starts on 00_rainy_hall with reset progress");
             Debug.Log($"PASS: {_checks} credits checks (start, stopped map, song, scroll, end of text, fades, The End, main menu, reset); screenshots {Folder}");
         }
 
@@ -110,6 +137,8 @@ namespace RTXMnesia.Dev
             canvas.planeDistance = camera.nearClipPlane + 0.01f;
             camera.targetTexture = target;
             Canvas.ForceUpdateCanvases();
+            foreach (var text in canvas.GetComponentsInChildren<HplGuiText>())
+                Debug.Log($"[CreditsCapture] {name} {text.name}: commands={text.CommandCount}, vertices={text.canvasRenderer.GetMesh()?.vertexCount}, culled={text.canvasRenderer.cull}");
             camera.Render();
             var previous = RenderTexture.active;
             RenderTexture.active = target;
