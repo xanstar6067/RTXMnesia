@@ -84,7 +84,8 @@ namespace RTXMnesia.Player
                 Vector3 right = _player.CameraRight;
                 Vector3 pos = start + right * _movement;
                 int count = 0;
-                while (HplPhysics.CheckShapeWorldCollision(_headShape, pos, Quaternion.identity, _headHalfExtents, out _))
+                while (HplPhysics.CheckShapeWorldCollision(_headShape, pos, Quaternion.identity, _headHalfExtents, out _,
+                                                         collideCharacters: false))
                 {
                     _movement += reverseMov;
                     _rotation += reverseRot;

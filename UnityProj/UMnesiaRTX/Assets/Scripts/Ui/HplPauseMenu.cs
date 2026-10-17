@@ -48,6 +48,10 @@ namespace RTXMnesia.Ui
         int _pieceIndex, _popupPieceIndex, _selected, _popupStart = -1;
         float _opacity;
         static readonly Color Highlight = new(232f / 255f, 201f / 255f, 28f / 255f, 1f);
+        /// <summary>gui_main_menu.skin: the Default font size and TextBoxSelectedTextBack (the list selection).</summary>
+        const float SkinFontSize = 14;
+        static readonly Color SelectionColor = new(0.51f, 0.427f, 0.318f, 1f);
+        bool _popupLayer;
         public int ButtonCount => _buttons.Count;
         public bool HasCursor => _cursor.texture != Texture2D.whiteTexture;
         public Canvas Canvas => _root.GetComponent<Canvas>();
@@ -170,7 +174,23 @@ namespace RTXMnesia.Ui
                 Place(_logo.rectTransform, new Rect(pos.x * width - (width - 800) * 0.5f, pos.y * 600, height * _logo.texture.width / _logo.texture.height, height));
                 _logo.color = new Color(1, 1, 1, opacity);
             }
-            if (confirmQuit) Confirmation(confirmation);
+            if (confirmQuit)
+            {
+                // cGuiPopUpMessageBox opens over the window that asked (load game, key config); that window is
+                // drawn but not pressable, the pop up goes on the top layer.
+                if (keyConfig != null || saves != null)
+                {
+                    _selected = -1;
+                    if (keyConfig != null) KeyConfig(keyConfig);
+                    else LoadGame(saves, selectedSave);
+                    _buttons.Clear();
+                    _buttonData.Clear();
+                    _selected = selected;
+                }
+                _popupLayer = true;
+                Confirmation(confirmation);
+                _popupLayer = false;
+            }
             else if (keyConfig != null) KeyConfig(keyConfig);
             else if (options)
             {
@@ -242,10 +262,14 @@ namespace RTXMnesia.Ui
             }
         }
 
+        /// <summary>
+        /// cGuiPopUpMessageBox: a window as wide as its text + 40 (at least 200) and 90 + font high, centered, the
+        /// text at (20, 30) in the skin's default font (14), two skin buttons 80 × 30, 20 apart, at y 50 + font.
+        /// The main menu's questions have no label; load game and key config pop ups are "Warning".
+        /// </summary>
         void Confirmation(MenuControl action)
         {
-            Window(new Rect(165, 205, 470, 215));
-            var size = Vector2.one * 18;
+            var size = Vector2.one * SkinFontSize;
             var question = action switch
             {
                 MenuControl.ConfirmNewGame => T("MainMenu", "Start a new game?", "Начать новую игру?"),
@@ -257,30 +281,46 @@ namespace RTXMnesia.Ui
                 MenuControl.ConfirmKeyInvalid => T("KeyConfig", "InvalidInputMessage", "Некоторые клавиши повторяются. Сохранить?"),
                 _ => T("MainMenu", "Sure you want to quit?", "Выйти из игры?"),
             };
-            var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(410, size, question) : new List<string> { question };
-            for (int i = 0; i < rows.Count; i++) Draw(_guiText, rows[i], new Vector2(400, 235 + i * 22), size, Color.white, HplFontAlign.Center);
             bool okCancel = action is MenuControl.ConfirmLoad or MenuControl.ConfirmKeyDefaults or MenuControl.ConfirmKeyInvalid;
-            Button(new Rect(260, 365, 120, 28), okCancel ? T("Global", "OK", "OK") : T("MainMenu", "Yes", "Да"), action);
-            Button(new Rect(420, 365, 120, 28), okCancel ? T("Global", "Cancel", "Отмена") : T("MainMenu", "No", "Нет"), MenuControl.Cancel);
+            string label = okCancel ? T("Global", "Warning", "Внимание") : "";
+            float length = _guiText.font != null ? Mathf.Max(_guiText.font.GetLength(size, label), _guiText.font.GetLength(size, question)) : 300;
+            float width = Mathf.Max(length + 40, 200), height = 90 + size.y;
+            var window = new Rect(400 - width / 2, 300 - height / 2, width, height);
+            Window(window, label);
+            Draw(_guiText, question, window.position + new Vector2(20, 30), size, Color.white);
+            float x = window.x + width / 2 - (80 * 2 + 20) / 2f, y = window.y + 50 + size.y;
+            SkinButton(new Rect(x, y, 80, 30), okCancel ? T("Global", "OK", "OK") : T("MainMenu", "Yes", "Да"), action);
+            SkinButton(new Rect(x + 100, y, 80, 30), okCancel ? T("Global", "Cancel", "Отмена") : T("MainMenu", "No", "Нет"), MenuControl.Cancel);
         }
 
-        /// <summary>cLuxMainMenu_LoadGame: the saves, newest first; a click selects, OK loads after a confirmation.</summary>
+        /// <summary>
+        /// cLuxMainMenu_LoadGame::CreateGui: a 600 × 440 window centered, the list box (15, 75) 570 × 300 with the
+        /// list box background, rows of the default font (14) 2 apart from 2 below its top, the selected one on the
+        /// skin's selection color; OK / Cancel skin buttons 80 × 30, 3 apart, 5 from the right and 35 from the bottom.
+        /// </summary>
         void LoadGame(IReadOnlyList<string> saves, int selectedSave)
         {
-            Window(new Rect(90, 70, 620, 460));
-            Draw(_guiText, T("LoadGame", "LoadGameTitle", "Загрузить игру"), new Vector2(125, 50), Vector2.one * 25, Color.white);
-            var size = Vector2.one * 16;
-            for (int i = 0; i < saves.Count && i < 20; i++)
+            var window = new Rect(100, 80, 600, 440);
+            Window(window, T("LoadGame", "LoadGameTitle", "Загрузить игру"));
+            var list = new Rect(window.x + 15, window.y + 75, 570, 300);
+            Piece("ListBoxBackground", list, Color.white);
+            var size = Vector2.one * SkinFontSize;
+            float rowHeight = size.y + 2;
+            int rows = Mathf.FloorToInt((list.height - 2) / rowHeight);
+            // The list scrolls so that the selected save stays visible (the slider of cWidgetListBox).
+            int first = Mathf.Clamp(selectedSave - rows + 1, 0, Mathf.Max(0, saves.Count - rows));
+            for (int i = first; i < saves.Count && i < first + rows; i++)
             {
-                Rect rect = new(110, 90 + i * 19, 580, 18);
-                if (i == selectedSave) Piece(null, rect, new Color(1, 1, 1, 0.15f));
-                Button(rect, saves[i], MenuControl.LoadSlot, null, size, HplFontAlign.Left);
-                _buttonData[_buttonData.Count - 1] = i;
+                Rect rect = new(list.x, list.y + 2 + (i - first) * rowHeight, list.width, size.y);
+                if (i == selectedSave) Piece(null, rect, SelectionColor);
+                int index = _buttons.Count;
+                _buttons.Add((rect, MenuControl.LoadSlot));
+                _buttonData.Add(i);
+                Draw(_guiText, saves[i], new Vector2(rect.x + 3, rect.y), size, index == _selected && i != selectedSave ? Highlight : Color.white);
             }
-            if (saves.Count == 0)
-                Draw(_guiText, T("LoadGame", "NoGame", "Нет игры для загрузки"), new Vector2(400, 200), Vector2.one * 18, Color.white, HplFontAlign.Center);
-            Button(new Rect(500, 485, 80, 30), T("Global", "OK", "OK"), MenuControl.LoadOk);
-            Button(new Rect(590, 485, 95, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
+            float x = window.xMax - 80 * 2 - 3 - 5, y = window.yMax - 25 - 10;
+            SkinButton(new Rect(x, y, 80, 30), T("Global", "OK", "OK"), MenuControl.LoadOk);
+            SkinButton(new Rect(x + 83, y, 80, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
         }
 
         void Options(int tab, HplUserSettings settings)
@@ -541,6 +581,42 @@ namespace RTXMnesia.Ui
             Draw(layer != null ? layer : _guiText, label, new Vector2(align == HplFontAlign.Left ? rect.x : rect.center.x, rect.y), size, index == _selected ? Highlight : Color.white, align);
         }
 
+        /// <summary>cWidgetWindow with a label: the skin's WindowLabel font (25) at WindowLabelTextOffset (35, −20).</summary>
+        void Window(Rect r, string label)
+        {
+            Window(r);
+            if (!string.IsNullOrEmpty(label)) Draw(_guiText, label, r.position + new Vector2(35, -20), Vector2.one * 25, Color.white);
+        }
+
+        /// <summary>
+        /// cWidgetButton: ButtonUp background and borders inside the rect (iWidget::DrawBordersAndCorners), the text
+        /// in the default font centered (the focused button in the highlight color).
+        /// </summary>
+        void SkinButton(Rect r, string label, MenuControl action)
+        {
+            int index = _buttons.Count;
+            _buttons.Add((r, action));
+            _buttonData.Add(-1);
+            Vector2 Size(string type)
+            {
+                var t = _assets != null ? _assets.Find(type).texture : null;
+                return t != null ? new Vector2(t.width, t.height) : Vector2.one * 4;
+            }
+            Vector2 lu = Size("ButtonUpCornerLU"), ru = Size("ButtonUpCornerRU"), rd = Size("ButtonUpCornerRD"), ld = Size("ButtonUpCornerLD");
+            Piece("ButtonUpBackground", new Rect(r.x + lu.x, r.y + lu.y, r.width - lu.x - rd.x, r.height - lu.y - rd.y), Color.white);
+            Vector2 right = Size("ButtonUpBorderRight"), left = Size("ButtonUpBorderLeft"), up = Size("ButtonUpBorderUp"), down = Size("ButtonUpBorderDown");
+            Piece("ButtonUpBorderRight", new Rect(r.xMax - right.x, r.y + ru.y, right.x, r.height - rd.y - ru.y), Color.white);
+            Piece("ButtonUpBorderLeft", new Rect(r.x, r.y + lu.y, left.x, r.height - ld.y - lu.y), Color.white);
+            Piece("ButtonUpBorderUp", new Rect(r.x + lu.x, r.y, r.width - lu.x - ru.x, up.y), Color.white);
+            Piece("ButtonUpBorderDown", new Rect(r.x + ld.x, r.yMax - down.y, r.width - rd.x - ld.x, down.y), Color.white);
+            Piece("ButtonUpCornerLU", new Rect(r.x, r.y, lu.x, lu.y), Color.white);
+            Piece("ButtonUpCornerRU", new Rect(r.xMax - ru.x, r.y, ru.x, ru.y), Color.white);
+            Piece("ButtonUpCornerRD", new Rect(r.xMax - rd.x, r.yMax - rd.y, rd.x, rd.y), Color.white);
+            Piece("ButtonUpCornerLD", new Rect(r.x, r.yMax - ld.y, ld.x, ld.y), Color.white);
+            Draw(_guiText, label, new Vector2(r.center.x, r.y + r.height / 2 - SkinFontSize / 2f), Vector2.one * SkinFontSize,
+                 index == _selected ? Highlight : Color.white, HplFontAlign.Center);
+        }
+
         void Window(Rect r)
         {
             Piece("WindowBackground", r, Color.white);
@@ -573,6 +649,11 @@ namespace RTXMnesia.Ui
 
         void Piece(string type, Rect rect, Color color)
         {
+            if (_popupLayer)
+            {
+                PopupPiece(type, rect, color);
+                return;
+            }
             if (_pieceIndex == _pieces.Count)
             {
                 var image = Image(_screen, "Skin piece");
@@ -590,6 +671,7 @@ namespace RTXMnesia.Ui
         void Draw(HplGuiText layer, string text, Vector2 pos, Vector2 size, Color color, HplFontAlign align = HplFontAlign.Left)
         {
             color.a *= _opacity;
+            if (_popupLayer) layer = _popupText;
             layer.DrawFont(text, pos, size, color, align);
         }
         static RawImage Image(Transform parent, string name)

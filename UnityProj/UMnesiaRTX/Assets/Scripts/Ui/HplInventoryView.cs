@@ -18,6 +18,13 @@ namespace RTXMnesia.Ui
         readonly Dictionary<int, Rect> _regions = new();
         int _imageCount;
         float _alpha;
+        // cLuxInventory oil display: a clip region at the oil height with two moving liquid images and three bubbles.
+        readonly RectTransform _oilClip;
+        readonly RawImage[] _oilLiquid = new RawImage[2], _oilBubbles = new RawImage[3];
+        readonly Vector2[] _oilBubblePos = new Vector2[3];
+        readonly float[] _oilBubbleSpeed = new float[3];
+        float _oilMovementT;
+        bool _oilBubblesPlaced;
         public bool HasCursor => _cursor.texture != Texture2D.whiteTexture;
         Vector2 SlotSize => V("SlotSize", new Vector2(74, 99));
         Vector2 Start => V("SlotsStart", new Vector2(172, 62));
@@ -54,6 +61,10 @@ namespace RTXMnesia.Ui
             _message.rectTransform.pivot = Vector2.one * 0.5f;
             _message.rectTransform.anchoredPosition = Vector2.zero;
             _message.rectTransform.sizeDelta = new Vector2(800, 600);
+            _oilClip = new GameObject("Oil clip region", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
+            _oilClip.SetParent(_screen, false);
+            for (int i = 0; i < 2; i++) _oilLiquid[i] = Image(_oilClip, "Oil liquid");
+            for (int i = 0; i < 3; i++) _oilBubbles[i] = Image(_oilClip, "Oil bubble");
             _drag = Image(_screen, "Picked inventory item");
             _transitionShade = Image(_root.transform, "Journal return fade");
             _transitionShade.rectTransform.anchorMin = Vector2.zero; _transitionShade.rectTransform.anchorMax = Vector2.one;
@@ -159,25 +170,84 @@ namespace RTXMnesia.Ui
             Center("inventory_" + file + "_glow_" + suffix + ".tga", rect.center, glow);
             Around(file, key, rect);
         }
+        /// <summary>
+        /// cLuxInventory::OilOnDraw / OilOnUpdate: the liquid (twice the widget size, two copies at 0.75 and 0.25
+        /// alpha, drifting with sin / cos) and the bubbles are clipped to the oil height inside the background widget;
+        /// the foreground glass and the frame go over them.
+        /// </summary>
         void Oil()
         {
             Vector2 center = V("OilCenter", new Vector2(720, 293));
             var rect = Center("inventory_oil_bg.tga", center);
-            float fraction = Mathf.Clamp01(_map.player.lampOil / 100f);
-            if (fraction > 0)
+            Vector2 size = rect.size;
+            float height = _map.player.lampOil * 0.01f * size.y;
+            if (!_oilBubblesPlaced)
             {
-                var fill = new Rect(rect.x, rect.yMax - rect.height * fraction, rect.width, rect.height * fraction);
-                Draw("inventory_oil_liquid.tga", fill, Color.white).uvRect = new Rect(0, 0, 1, fraction);
+                _oilBubblesPlaced = true;
                 for (int i = 0; i < 3; i++)
                 {
-                    float y = Mathf.Repeat(Time.unscaledTime * rect.height * 0.5f * (0.5f + i * 0.25f) + i * 25f, Mathf.Max(1, fill.height - 6));
-                    Draw("inventory_oil_bubble_" + (i + 1) + ".tga", new Rect(fill.x + 6 + i * 10, fill.yMax - y - 6, 6, 6), Color.white);
+                    _oilBubbleSpeed[i] = 40f;
+                    _oilBubblePos[i] = center + new Vector2(Random.Range(-10f, 10f), Random.Range(-10f, 10f));
                 }
             }
-            Draw("inventory_oil_fg.tga", rect, Color.white);
+            if (height >= Mathf.Epsilon) UpdateOil(rect, Time.unscaledDeltaTime);
+
+            // The clip region sits right after the background in the drawing order.
+            _oilClip.SetSiblingIndex(_images[_imageCount - 1].transform.GetSiblingIndex() + 1);
+            var clip = new Rect(rect.x, rect.y + size.y - height, size.x, Mathf.Max(0f, height));
+            Place(_oilClip, clip);
+            bool visible = height > 0f;
+            Vector2 liquidSize = size * 2f;
+            Vector2 liquidPos = rect.position - liquidSize * 0.25f;
+            Vector2 add1 = new(Mathf.Sin(_oilMovementT * 0.3f) * size.x * 0.5f, Mathf.Cos(_oilMovementT * 0.2f) * size.y * 0.2f);
+            Vector2 add2 = new(Mathf.Cos(_oilMovementT * 0.2f) * size.x * 0.3f, Mathf.Sin(_oilMovementT * 0.15f) * size.y * 0.15f);
+            ClippedImage(_oilLiquid[0], "inventory_oil_liquid.tga", new Rect(liquidPos + add1, liquidSize), clip, 0.75f, visible);
+            ClippedImage(_oilLiquid[1], "inventory_oil_liquid.tga", new Rect(liquidPos + add2, liquidSize), clip, 0.25f, visible);
+            for (int i = 0; i < 3; i++)
+            {
+                var texture = Assets != null ? Assets.Texture("inventory_oil_bubble_" + (i + 1) + ".tga") : null;
+                Vector2 bubbleSize = texture != null ? new Vector2(texture.width, texture.height) : Vector2.one * 6;
+                ClippedImage(_oilBubbles[i], "inventory_oil_bubble_" + (i + 1) + ".tga", new Rect(_oilBubblePos[i], bubbleSize), clip, 1f, visible);
+            }
+
+            Center("inventory_oil_fg.tga", center);
             _regions[HplInventory.Oil] = rect;
             Around("generic", "Oil", rect);
         }
+
+        /// <summary>cLuxInventory::OilOnUpdate: the liquid drift time; bubbles rise and start over when all are out.</summary>
+        void UpdateOil(Rect widget, float dt)
+        {
+            _oilMovementT += dt;
+            int outside = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                if (_oilBubblePos[i].y < widget.y - 30f)
+                {
+                    outside++;
+                    continue;
+                }
+                _oilBubblePos[i].y -= dt * _oilBubbleSpeed[i];
+            }
+            if (outside < 3) return;
+            for (int i = 0; i < 3; i++)
+            {
+                _oilBubbleSpeed[i] = widget.height * 0.5f * Random.Range(0.5f, 1.25f);
+                _oilBubblePos[i] = new Vector2(Random.Range(widget.x, widget.xMax), widget.y + widget.height);
+            }
+        }
+
+        /// <summary>An image of the clip region, placed in virtual-screen coordinates.</summary>
+        void ClippedImage(RawImage image, string file, Rect rect, Rect clip, float alpha, bool visible)
+        {
+            var texture = Assets != null ? Assets.Texture(file) : null;
+            image.enabled = visible && texture != null;
+            if (!image.enabled) return;
+            image.texture = texture;
+            image.color = new Color(1, 1, 1, alpha * _alpha);
+            Place(image.rectTransform, new Rect(rect.x - clip.x, rect.y - clip.y, rect.width, rect.height));
+        }
+
         void Around(string style, string key, Rect widget)
         {
             var size = V(key + "FrameSize", new Vector2(-1, -1));

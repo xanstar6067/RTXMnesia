@@ -56,13 +56,15 @@ namespace RTXMnesia.Hpl
         /// geometry (a corner of one mesh) gives the push of all its contacts, like Newton's contact list.
         /// </summary>
         public static bool CheckShapeWorldCollision(Collider shape, Vector3 position, Quaternion rotation, Vector3 halfExtents,
-                                                    out Vector3 pushBack, CollisionCallback callback = null)
+                                                    out Vector3 pushBack, CollisionCallback callback = null,
+                                                    bool collideCharacters = true)
         {
             pushBack = Vector3.zero;
             bool collided = false;
-            // Other characters collide too (HPL2 character bodies are physics bodies): the player and the enemies.
-            int count = Physics.OverlapBoxNonAlloc(position, halfExtents, Overlaps, rotation,
-                                                   Physics.DefaultRaycastLayers | (1 << CharacterLayer), QueryTriggerInteraction.Ignore);
+            // Other characters collide too (HPL2 character bodies are physics bodies): the player and the enemies,
+            // unless abCollideCharacter is false (cLuxPlayerLean: the head would hit the player's own body).
+            int mask = collideCharacters ? Physics.DefaultRaycastLayers | (1 << CharacterLayer) : Physics.DefaultRaycastLayers & ~(1 << CharacterLayer);
+            int count = Physics.OverlapBoxNonAlloc(position, halfExtents, Overlaps, rotation, mask, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
                 Collider other = Overlaps[i];

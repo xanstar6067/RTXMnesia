@@ -161,7 +161,7 @@ namespace RTXMnesia.Importer
                 }
                 string asset = animFolder + "/" + Path.GetFileNameWithoutExtension(source) + ".dae";
                 string target = AmnesiaPaths.ToAbsolute(asset);
-                if (!File.Exists(target) || File.GetLastWriteTimeUtc(source) > File.GetLastWriteTimeUtc(target)) File.Copy(source, target, true);
+                ColladaAnimFix.CopyFixed(source, target);
                 list.Add((a, asset));
             }
             AssetDatabase.Refresh();

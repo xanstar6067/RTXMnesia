@@ -55,6 +55,7 @@ namespace RTXMnesia.EditorDev
                 Keys(Check);
                 Water(Check);
                 PreMenu(Check);
+                LeanAndOil(Check);
                 log.Info($"PASS: {checks} feature checks");
                 log.Save("Feature tests (signs, barrels, stones, sliders, fade, completion, keys, water)");
                 Debug.Log($"PASS: {checks} feature checks");
@@ -315,6 +316,50 @@ namespace RTXMnesia.EditorDev
             var welcome = assets.sections[2].texts[0];
             check(welcome.category == "PreMenu" && welcome.entry == "WelcomeMessage01" && welcome.frameSize == new Vector2(640f, 300f) &&
                   welcome.fontSize == new Vector2(18f, 18f), "welcome text: PreMenu / WelcomeMessage01 in a 640 × 300 frame, size 18");
+        }
+
+        // ================================================================== 01_old_archives: lean, lamp oil
+
+        static void LeanAndOil(Action<bool, string> check)
+        {
+            var (map, player) = Open("maps/main/ch01/01_old_archives.map");
+            Step(map, 0.5f);
+
+            // cLuxPlayerLean: the head shape ignores character bodies (abCollideCharacter = false), the own body too.
+            for (int i = 0; i < 60; i++) { player.held = default; player.held.leanRight = true; map.Step(Time.fixedDeltaTime); }
+            float right = player.Lean.Movement, rightRoll = player.Roll;
+            for (int i = 0; i < 90; i++) { player.held = default; player.held.leanLeft = true; map.Step(Time.fixedDeltaTime); }
+            float left = player.Lean.Movement, leftRoll = player.Roll;
+            player.held = default;
+            Step(map, 1f);
+            check(right > 0.3f && rightRoll < -0.05f && left < -0.3f && leftRoll > 0.05f && player.Lean.Movement == 0f,
+                  $"lean: E {right:0.00} m roll {rightRoll * Mathf.Rad2Deg:0.0}°, Q {left:0.00} m roll {leftRoll * Mathf.Rad2Deg:0.0}°, released → 0");
+
+            // Lamp oil: the map's three potions (two inactive in the map, as in the original), an item of type LampOil.
+            var potions = map.Entities.OfType<PropItem>().Where(p => p.Name.StartsWith("potion_oil", StringComparison.Ordinal)).ToList();
+            var active = potions.Where(p => p.Active).ToList();
+            check(potions.Count == 3 && potions.All(p => p.ItemType == "LampOil") && active.Count == 1 && active[0].Name == "potion_oil_2" &&
+                  active[0].GameObject.activeInHierarchy && active[0].GameObject.GetComponentsInChildren<MeshRenderer>().Any(r => r.enabled),
+                  $"oil potions: {potions.Count} of type LampOil, active and drawn: {string.Join(", ", active.Select(p => p.Name))}");
+
+            HplGame.Reset();
+            HplGame.AddItem(map, "lantern", "Lantern", "Lantern", "", 1f, "", "", out _);
+            var potion = active[0];
+            check(potion.CanInteract(null) && potion.OnInteract(null, Vector3.zero), "potion_oil_2 picked up");
+            Step(map, 0.1f);
+            var oil = HplGame.Items.FirstOrDefault(i => i.type == "LampOil");
+            check(oil != null && oil.amount > 0f && potion.DestroyMe, $"inventory: LampOil x{oil?.count} amount {oil?.amount}, prop removed");
+
+            var inventory = new HplInventory(map);
+            try
+            {
+                player.SetLampOil(20f);
+                float amount = oil.amount;
+                check(inventory.Use(oil) && Mathf.Approximately(player.lampOil, Mathf.Min(100f, 20f + amount)) && !HplGame.Items.Contains(oil),
+                      $"using the oil: lamp oil 20 → {player.lampOil:0} (+{amount}), the potion used up");
+            }
+            finally { inventory.View.Destroy(); }
+            HplGame.Reset();
         }
 
         // ================================================================== helpers

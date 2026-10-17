@@ -55,6 +55,9 @@ namespace RTXMnesia.Player
         public string CurrentHandObject => _current != null ? _current.Data.name : "";
         public string CurrentAnimation => _currentAnim;
         public Transform Root => _root;
+        /// <summary>The hands model and its legacy animation (for checks).</summary>
+        public Transform HandsModel => _hands;
+        public Animation HandsAnimation => _animation;
 
         PlayerHands(AmnesiaPlayer player, HplHandsData data, HplConfig config)
         {
@@ -125,8 +128,9 @@ namespace RTXMnesia.Player
             else if (o != null)
             {
                 CreateAndAttach(o);
-                PlayAnim(o.Data.animDraw, false);
+                // Shown before the animation starts: a legacy Animation of an inactive object does not play.
                 _hands.gameObject.SetActive(true);
+                PlayAnim(o.Data.animDraw, false);
                 State = HandsState.Draw;
             }
             _current = o;
@@ -248,7 +252,12 @@ namespace RTXMnesia.Player
 
         // ------------------------------------------------------------------ animation
 
-        /// <summary>cMeshEntity::PlayFadeToName with a 0.2 s fade (a non-looping one holds its last frame).</summary>
+        /// <summary>
+        /// cMeshEntity::PlayFadeToName with a 0.2 s fade (a non-looping one holds its last frame). HPL2 normalizes the
+        /// weights of the active animations (cMeshEntity::GetAnimationWeightMul), so an animation fading in while no
+        /// other is active is the full pose at once; Unity's cross fade from nothing would blend from the rest pose
+        /// (the hands popped out of the import pose at the start of the draw).
+        /// </summary>
         void PlayAnim(string name, bool loop, bool instant = false)
         {
             _currentAnim = name ?? "";
@@ -260,8 +269,16 @@ namespace RTXMnesia.Player
                 return;
             }
             state.wrapMode = loop ? WrapMode.Loop : WrapMode.ClampForever;
+            bool othersActive = false;
+            foreach (AnimationState other in _animation)
+                if (other != state && other.enabled && other.weight > 0f) othersActive = true;
             state.time = 0f;
-            if (instant) _animation.Play(name, PlayMode.StopAll);
+            if (instant || !othersActive)
+            {
+                _animation.Stop();
+                state.time = 0f;
+                _animation.Play(name, PlayMode.StopAll);
+            }
             else _animation.CrossFade(name, 0.2f, PlayMode.StopAll);
         }
 
@@ -293,6 +310,9 @@ namespace RTXMnesia.Player
                         else
                         {
                             foreach (var o in _objects.Values) o.Entity.gameObject.SetActive(false);
+                            // Unity rewinds the states of a deactivated object; a stale holster at its first frame
+                            // would blend into the next draw.
+                            if (_animation != null) _animation.Stop();
                             _hands.gameObject.SetActive(false);
                             State = HandsState.Disabled;
                         }

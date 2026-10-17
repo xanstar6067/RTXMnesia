@@ -90,7 +90,7 @@ namespace RTXMnesia.Ui
         }
 
         public void Refresh() => _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
-            _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad ? _saveLabels : null, _selectedSave,
+            _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad || ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad ? _saveLabels : null, _selectedSave,
             _keyConfig, _combo);
 
         /// <summary>cLuxMainMenu_LoadGame::OnSetActive → PopulateSavedGameList.</summary>

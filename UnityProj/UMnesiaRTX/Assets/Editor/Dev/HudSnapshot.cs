@@ -29,6 +29,16 @@ namespace RTXMnesia.EditorDev
                 if (!textures.TryGetValue(texture, out var source))
                     textures[texture] = source = texture == Texture2D.whiteTexture ? texture : Readable(texture);
                 if (source == null) continue;
+                // RectMask2D clipping (the inventory oil level), as the canvas renderer clips.
+                Rect clip = new(0, 0, image.width, image.height);
+                foreach (var mask in graphic.GetComponentsInParent<UnityEngine.UI.RectMask2D>())
+                {
+                    var corners = new Vector3[4];
+                    mask.rectTransform.GetWorldCorners(corners);
+                    Vector2 a = camera.WorldToScreenPoint(corners[0]), b = camera.WorldToScreenPoint(corners[2]);
+                    clip = Rect.MinMaxRect(Mathf.Max(clip.xMin, Mathf.Min(a.x, b.x)), Mathf.Max(clip.yMin, Mathf.Min(a.y, b.y)),
+                                           Mathf.Min(clip.xMax, Mathf.Max(a.x, b.x)), Mathf.Min(clip.yMax, Mathf.Max(a.y, b.y)));
+                }
                 var vertices = mesh.vertices;
                 var uvs = mesh.uv;
                 var colors = mesh.colors32;
@@ -52,10 +62,10 @@ namespace RTXMnesia.EditorDev
                     }
                     Vector2 bl = UvAt(left, bottom), br = UvAt(right, bottom), tl = UvAt(left, top), tr = UvAt(right, top);
                     Color tint = colors.Length > start ? colors[start] : Color.white;
-                    for (int y = Mathf.Max(0, Mathf.FloorToInt(bottom)); y < Mathf.Min(image.height, Mathf.CeilToInt(top)); y++)
+                    for (int y = Mathf.Max(Mathf.CeilToInt(clip.yMin - 0.5f), Mathf.FloorToInt(bottom)); y < Mathf.Min(Mathf.CeilToInt(clip.yMax - 0.5f), Mathf.CeilToInt(top)); y++)
                     {
                         float v = (y + 0.5f - bottom) / (top - bottom);
-                        for (int x = Mathf.Max(0, Mathf.FloorToInt(left)); x < Mathf.Min(image.width, Mathf.CeilToInt(right)); x++)
+                        for (int x = Mathf.Max(Mathf.CeilToInt(clip.xMin - 0.5f), Mathf.FloorToInt(left)); x < Mathf.Min(Mathf.CeilToInt(clip.xMax - 0.5f), Mathf.CeilToInt(right)); x++)
                         {
                             float u = (x + 0.5f - left) / (right - left);
                             Vector2 uv = Vector2.Lerp(Vector2.Lerp(bl, br, u), Vector2.Lerp(tl, tr, u), v);
