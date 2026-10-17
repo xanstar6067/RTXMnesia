@@ -43,6 +43,21 @@ MonoBehaviour:
   - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/maps/main/ch02/20_sewer.unity
     m_guid: f7336c0165dd26d429820606a561a124
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/main_menu/ptest/ptest_menu.unity
+    m_guid: f5edd03594d92434a8551ed14e0b0bb7
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/ptest/01_cells.unity
+    m_guid: e2320e543e4a8d842923d0e42d5c398b
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/ptest/02_library.unity
+    m_guid: 33e764b821e231f4aa2563995affdb8f
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/ptest/03_dungeon.unity
+    m_guid: 811cc024571645e46ba142ce8ce9d49c
+  - m_enabled: 1
+    m_path: Assets/AmnesiaImported/Levels/maps/ptest/04_final.unity
+    m_guid: 2c3f55de8d7a3a046977c41d3bbaf34c
   m_HasScriptingDefines: 0
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
