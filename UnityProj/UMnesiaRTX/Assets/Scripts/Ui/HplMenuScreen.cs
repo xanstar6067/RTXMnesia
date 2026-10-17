@@ -25,6 +25,8 @@ namespace RTXMnesia.Ui
         public bool ShowingKeyConfig => _keyConfig != null;
         /// <summary>A key config slot waits for an input: the keys go to it, not to the game UI.</summary>
         public bool CapturingInput => _keyConfig != null && _keyConfig.IsWaiting;
+        /// <summary>The open drop-down list of the graphics options; null: none.</summary>
+        public HplMenuCombo OpenCombo => _combo;
 
         readonly HplGameUi _ui;
         readonly HplMap _map;
@@ -34,6 +36,7 @@ namespace RTXMnesia.Ui
         int _selectedSave = -1;
         MenuControl? _dragSlider;
         HplKeyConfig _keyConfig;
+        HplMenuCombo _combo;
 
         public HplMenuScreen(HplGameUi ui, HplPauseMenu menu)
         {
@@ -60,11 +63,18 @@ namespace RTXMnesia.Ui
             DraftSettings = null;
             _dragSlider = null;
             _keyConfig = null;
+            _combo = null;
         }
 
         /// <summary>cLuxMainMenu::ExitPressed: closes a window, or the menu itself in game.</summary>
         public void Escape()
         {
+            // An open drop-down list closes first (cWidgetComboBox loses focus).
+            if (_combo != null)
+            {
+                _combo = null;
+                return;
+            }
             if (ShowingKeyConfig)
             {
                 // cLuxInputMenuEntry: Esc cancels the waiting input; the window's pop up closes; else back to options.
@@ -81,7 +91,7 @@ namespace RTXMnesia.Ui
 
         public void Refresh() => _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
             _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad ? _saveLabels : null, _selectedSave,
-            _keyConfig);
+            _keyConfig, _combo);
 
         /// <summary>cLuxMainMenu_LoadGame::OnSetActive → PopulateSavedGameList.</summary>
         public void OpenLoadGame(int select = -1)
@@ -119,6 +129,11 @@ namespace RTXMnesia.Ui
                 Refresh();
                 return;
             }
+            if (_combo != null)
+            {
+                UpdateCombo(mouse, keyboard);
+                return;
+            }
             if (mouse != null && ShowingOptions && !ShowingKeyConfig) DragSlider(mouse);
             int hovered = mouse != null ? _menu.HitTest(mouse.position.ReadValue()) : -1;
             if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0f && hovered >= 0) _selected = hovered;
@@ -138,6 +153,62 @@ namespace RTXMnesia.Ui
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && hovered >= 0) Activate(hovered);
             else if (keyboard != null && (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame))
                 Activate(_selected);
+        }
+
+        /// <summary>
+        /// The open list: the wheel and the arrow buttons scroll, the pointer or Up / Down highlight, a click or Enter
+        /// picks (a disabled choice does nothing), a click outside closes it.
+        /// </summary>
+        void UpdateCombo(Mouse mouse, Keyboard keyboard)
+        {
+            var items = HplGraphicsOptions.Items(_combo.control, DraftSettings, _menu.Translate, out _);
+            int shown = Mathf.Min(items.Count, HplMenuCombo.MaxItems);
+            if (mouse != null)
+            {
+                float wheel = mouse.scroll.ReadValue().y;
+                if (wheel != 0f) Scroll(wheel > 0f ? -1 : 1, items.Count, shown);
+                int hit = _menu.HitTest(mouse.position.ReadValue());
+                if (hit >= 0 && _menu.ControlAt(hit) == MenuControl.ComboItem && mouse.delta.ReadValue().sqrMagnitude > 0f)
+                    _combo.hover = _menu.DataAt(hit);
+                if (mouse.leftButton.wasPressedThisFrame)
+                {
+                    if (hit < 0) _combo = null;
+                    else Activate(hit);
+                    Refresh();
+                    return;
+                }
+            }
+            if (keyboard != null)
+            {
+                int move = keyboard.upArrowKey.wasPressedThisFrame ? -1 : keyboard.downArrowKey.wasPressedThisFrame ? 1 : 0;
+                if (move != 0)
+                {
+                    _combo.hover = HplGraphicsOptions.Step(items, _combo.hover, move);
+                    if (_combo.hover < _combo.first) _combo.first = _combo.hover;
+                    if (_combo.hover >= _combo.first + shown) _combo.first = _combo.hover - shown + 1;
+                }
+                if (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame) PickComboItem(_combo.hover);
+            }
+            Refresh();
+        }
+
+        void Scroll(int direction, int count, int shown) =>
+            _combo.first = Mathf.Clamp(_combo.first + direction, 0, Mathf.Max(0, count - shown));
+
+        void OpenComboList(MenuControl control)
+        {
+            var items = HplGraphicsOptions.Items(control, DraftSettings, _menu.Translate, out int current);
+            int shown = Mathf.Min(items.Count, HplMenuCombo.MaxItems);
+            _combo = new HplMenuCombo { control = control, hover = current, first = Mathf.Clamp(current - shown + 1, 0, Mathf.Max(0, items.Count - shown)) };
+        }
+
+        public void PickComboItem(int item)
+        {
+            if (_combo == null) return;
+            var items = HplGraphicsOptions.Items(_combo.control, DraftSettings, _menu.Translate, out _);
+            if (item < 0 || item >= items.Count || !items[item].enabled) return;
+            HplGraphicsOptions.Set(_combo.control, DraftSettings, item, _menu.Translate);
+            _combo = null;
         }
 
         void DragSlider(Mouse mouse)
@@ -187,8 +258,16 @@ namespace RTXMnesia.Ui
                 _dragSlider = null;
                 Refresh();
             }
+            else if (HplGraphicsOptions.IsCombo(control))
+            {
+                // Arrows on a closed list step to the neighbouring choice.
+                var items = HplGraphicsOptions.Items(control, DraftSettings, _menu.Translate, out int current);
+                HplGraphicsOptions.Set(control, DraftSettings, HplGraphicsOptions.Step(items, current, direction), _menu.Translate);
+                Refresh();
+            }
             else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
-                     control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary) Activate(_selected, direction);
+                     control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary ||
+                     control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur) Activate(_selected, direction);
         }
 
         void Activate(int index, int direction = 0)
@@ -302,6 +381,22 @@ namespace RTXMnesia.Ui
                 case MenuControl.Fullscreen: DraftSettings.fullscreen = !DraftSettings.fullscreen; break;
                 case MenuControl.VSync: DraftSettings.vSync = !DraftSettings.vSync; break;
                 case MenuControl.InvertMouse: DraftSettings.invertMouse = !DraftSettings.invertMouse; break;
+                case MenuControl.Bloom: DraftSettings.bloom = !DraftSettings.bloom; break;
+                case MenuControl.ImageTrail: DraftSettings.imageTrail = !DraftSettings.imageTrail; break;
+                case MenuControl.RadialBlur: DraftSettings.radialBlur = !DraftSettings.radialBlur; break;
+                case MenuControl.Lighting: case MenuControl.Textures: case MenuControl.Resolution: case MenuControl.ScreenMode:
+                case MenuControl.FpsLimit: case MenuControl.TextureQuality: case MenuControl.Anisotropy:
+                case MenuControl.Antialiasing: case MenuControl.Shadows:
+                    OpenComboList(control);
+                    break;
+                case MenuControl.ComboItem: PickComboItem(_menu.DataAt(index)); break;
+                case MenuControl.ComboScrollUp:
+                case MenuControl.ComboScrollDown:
+                {
+                    var items = HplGraphicsOptions.Items(_combo.control, DraftSettings, _menu.Translate, out _);
+                    Scroll(control == MenuControl.ComboScrollUp ? -1 : 1, items.Count, Mathf.Min(items.Count, HplMenuCombo.MaxItems));
+                    break;
+                }
                 case MenuControl.SmoothMouse: DraftSettings.smoothMouse = !DraftSettings.smoothMouse; break;
                 case MenuControl.VolumeLess: DraftSettings.masterVolume = Mathf.Clamp01(DraftSettings.masterVolume + 0.05f * less); break;
                 case MenuControl.VolumeMore: DraftSettings.masterVolume = Mathf.Clamp01(DraftSettings.masterVolume + 0.05f * more); break;

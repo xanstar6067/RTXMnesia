@@ -56,6 +56,9 @@ namespace RTXMnesia.Dev
                 Capture(target, Path.Combine(folder, $"Options_{tab}.png"), camera, menuCanvas);
             }
             Debug.Log($"PASS: Play-mode menu, {vertices} text vertices; screenshots {folder}");
+            int graphicsFailures = 0;
+            yield return GraphicsOptions(map, target, camera, menuCanvas, folder, f => graphicsFailures = f);
+            if (graphicsFailures > 0) { Finish(1); yield break; }
             map.GameUi.Resume();
             // Synthetic contents for visual checks only. This batch never saves a scene or a game.
             map.player.active = true;
@@ -117,6 +120,95 @@ namespace RTXMnesia.Dev
             target.Release();
             Destroy(target);
             Finish(0);
+        }
+
+        /// <summary>
+        /// The graphics tab: its drop-down lists, a disabled choice, picking choices, applying them (quality settings,
+        /// camera anti-aliasing, shadows, the settings volume, blur flags) and putting the user's settings back.
+        /// </summary>
+        IEnumerator GraphicsOptions(HplMap map, RenderTexture target, Camera camera, Canvas menuCanvas, string folder, System.Action<int> result)
+        {
+            int failures = 0;
+            void Check(bool ok, string what)
+            {
+                if (ok) Debug.Log("PASS: graphics options: " + what);
+                else { failures++; Debug.LogError("FAIL: graphics options: " + what); }
+            }
+            var ui = map.GameUi;
+            string savedPrefs = PlayerPrefs.HasKey(HplUserSettings.PrefsKey) ? PlayerPrefs.GetString(HplUserSettings.PrefsKey) : null;
+            var original = ui.Settings.Copy();
+
+            ui.OpenOptions(1);
+            yield return null;
+            bool allCombos = true;
+            foreach (var c in new[] { MenuControl.Lighting, MenuControl.Textures, MenuControl.Resolution, MenuControl.ScreenMode, MenuControl.FpsLimit,
+                                      MenuControl.TextureQuality, MenuControl.Anisotropy, MenuControl.Antialiasing, MenuControl.Shadows,
+                                      MenuControl.VSync, MenuControl.Bloom, MenuControl.ImageTrail, MenuControl.RadialBlur, MenuControl.GammaLess })
+            {
+                bool found = false;
+                for (int i = 0; i < ui.Menu.ButtonCount; i++) found |= ui.Menu.ControlAt(i) == c;
+                if (!found) { allCombos = false; Debug.LogError("Graphics tab misses " + c); }
+            }
+            Check(allCombos, "every list, check box and the gamma are on the tab");
+
+            ui.Choose(MenuControl.Resolution);
+            yield return null;
+            Check(ui.OpenCombo != null && ui.OpenCombo.control == MenuControl.Resolution, "the resolution list opens");
+            Capture(target, Path.Combine(folder, "Options_1_Resolution.png"), camera, menuCanvas);
+            ui.ChooseComboItem(-1);
+            ui.Choose(MenuControl.Cancel);
+            ui.OpenOptions(1);
+            yield return null;
+
+            ui.Choose(MenuControl.Lighting);
+            ui.ChooseComboItem(1);
+            Check(ui.OpenCombo != null && ui.DraftSettings.lighting == 0, "enhanced lighting cannot be picked yet, the list stays open");
+            ui.ChooseComboItem(0);
+            Check(ui.OpenCombo == null, "classic lighting picked, the list closes");
+            ui.Choose(MenuControl.FpsLimit);
+            yield return null;
+            Capture(target, Path.Combine(folder, "Options_1_FpsLimit.png"), camera, menuCanvas);
+            ui.ChooseComboItem(2);
+            ui.Choose(MenuControl.Antialiasing); ui.ChooseComboItem((int)Hpl.HplAntialiasing.Fxaa);
+            ui.Choose(MenuControl.TextureQuality); ui.ChooseComboItem(1);
+            ui.Choose(MenuControl.Anisotropy); ui.ChooseComboItem(4);
+            ui.Choose(MenuControl.Shadows); ui.ChooseComboItem(0);
+            if (ui.DraftSettings.imageTrail) ui.Choose(MenuControl.ImageTrail);
+            if (ui.DraftSettings.radialBlur) ui.Choose(MenuControl.RadialBlur);
+            var d = ui.DraftSettings;
+            Check(d.fpsLimit == 120 && d.antialiasing == (int)Hpl.HplAntialiasing.Fxaa && d.textureQuality == 1 && d.anisotropy == 4 &&
+                  d.shadows == 0 && !d.imageTrail && !d.radialBlur, "choices change the draft");
+            yield return null;
+            Capture(target, Path.Combine(folder, "Options_1_Changed.png"), camera, menuCanvas);
+            ui.Choose(MenuControl.Apply);
+            yield return null;
+            yield return null;
+            var hd = camera.GetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData>();
+            Check(hd != null && hd.antialiasing == UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData.AntialiasingMode.FastApproximateAntialiasing,
+                  "the player camera renders with FXAA");
+            Check(QualitySettings.globalTextureMipmapLimit == 1 && QualitySettings.anisotropicFiltering == AnisotropicFiltering.ForceEnable &&
+                  Application.targetFrameRate == 120, "texture quality, 16x anisotropy and the FPS limit applied");
+            bool shadowsOff = true;
+            int casting = 0;
+            foreach (var light in World.AmnesiaLight.All)
+                if (light.castShadows && light.TryGetComponent<Light>(out var l)) { casting++; shadowsOff &= l.shadows == LightShadows.None; }
+            Check(shadowsOff, $"shadows off ({casting} shadow casting lights)");
+            Check(!Hpl.HplGraphics.ImageTrail && !Hpl.HplGraphics.RadialBlur, "image trail and radial blur hidden");
+            var volume = Hpl.HplGraphics.SettingsVolume;
+            Check(volume != null && volume.isActiveAndEnabled && volume.sharedProfile.TryGet<UnityEngine.Rendering.HighDefinition.MotionBlur>(out var blur) && blur.intensity.value == 0f,
+                  "the settings volume turns HDRP motion blur off");
+
+            // The user's settings back (applied and saved as they were).
+            original.Apply(map);
+            ui.Settings = original;
+            if (savedPrefs != null) PlayerPrefs.SetString(HplUserSettings.PrefsKey, savedPrefs); else PlayerPrefs.DeleteKey(HplUserSettings.PrefsKey);
+            PlayerPrefs.Save();
+            bool restored = true;
+            foreach (var light in World.AmnesiaLight.All)
+                if (light.castShadows && light.TryGetComponent<Light>(out var l)) restored &= l.shadows != LightShadows.None == (original.shadows > 0);
+            Check(restored && Hpl.HplGraphics.ImageTrail == original.imageTrail, "the user's settings restored");
+            ui.OpenOptions(0);
+            result(failures);
         }
 
         static void Capture(RenderTexture target, string path, Camera camera, Canvas menuCanvas)

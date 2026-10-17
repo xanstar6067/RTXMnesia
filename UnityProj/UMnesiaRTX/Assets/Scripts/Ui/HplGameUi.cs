@@ -157,6 +157,9 @@ namespace RTXMnesia.Ui
         public void OpenOptions(int tab = -1) { if (IsPaused && !ReadingUiOpen) _menuScreen.OpenOptions(tab); }
         /// <summary>Routes a visible control through the same path as a mouse / keyboard action (also for checks).</summary>
         public bool Choose(MenuControl control) => !IsTransitioning && _menuScreen != null && _menuScreen.Choose(control);
+        /// <summary>The open drop-down list of the graphics options (null: none) and picking one of its choices.</summary>
+        public HplMenuCombo OpenCombo => _menuScreen?.OpenCombo;
+        public void ChooseComboItem(int item) => _menuScreen?.PickComboItem(item);
 
         public bool OpenInventory() => _reading != null && _reading.OpenInventory();
         public void CloseInventory() => _reading?.CloseInventory();

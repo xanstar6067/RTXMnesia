@@ -16,6 +16,18 @@ namespace RTXMnesia.Ui
         Continue, ConfirmContinue, LoadGame, LoadSlot, LoadOk, ConfirmLoad, ExitAndSave, ConfirmExitAndSave,
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
+        // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows,
+        Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
+    }
+
+    /// <summary>The open drop-down list (cWidgetComboBox menu): its control, first shown choice and the highlighted one.</summary>
+    public sealed class HplMenuCombo
+    {
+        /// <summary>cWidgetComboBox::mlMaxItems.</summary>
+        public const int MaxItems = 12;
+        public MenuControl control;
+        public int first, hover;
     }
 
     /// <summary>In-game cLuxMainMenu: menu.cfg layout and gui_main_menu.skin on the same Canvas system as the HUD.</summary>
@@ -25,14 +37,15 @@ namespace RTXMnesia.Ui
         readonly HplMenuAssets _assets;
         readonly GameObject _root;
         readonly RectTransform _screen;
-        readonly HplGuiText _menuText, _guiText, _loadingText;
+        readonly HplGuiText _menuText, _guiText, _loadingText, _popupText;
         readonly RawImage _shade, _cursor, _logo, _loadFade;
         readonly bool _titleScreen;
-        readonly List<RawImage> _pieces = new();
+        readonly List<RawImage> _pieces = new(), _popupPieces = new();
+        readonly Dictionary<MenuControl, Rect> _comboRects = new();
         readonly List<(Rect rect, MenuControl control)> _buttons = new();
         readonly List<int> _buttonData = new();
         readonly List<(Rect rect, MenuControl control)> _sliders = new();
-        int _pieceIndex, _selected;
+        int _pieceIndex, _popupPieceIndex, _selected, _popupStart = -1;
         float _opacity;
         static readonly Color Highlight = new(232f / 255f, 201f / 255f, 28f / 255f, 1f);
         public int ButtonCount => _buttons.Count;
@@ -72,6 +85,8 @@ namespace RTXMnesia.Ui
             _logo.enabled = _titleScreen && _logo.texture != null;
             _menuText = Text("Menu font", _assets != null ? _assets.menuFont : map.hud.defaultFont);
             _guiText = Text("GUI font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
+            // An open drop-down list is drawn over the window, its own pieces and text above the window's text.
+            _popupText = Text("Drop-down list font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
             _cursor = Image(_screen, "Original menu cursor");
             var pointer = _assets != null ? _assets.Find("PointerNormal").texture : null;
             _cursor.texture = pointer != null ? pointer : Texture2D.whiteTexture;
@@ -105,12 +120,14 @@ namespace RTXMnesia.Ui
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_screen, position, Canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : Canvas.worldCamera, out var p);
             return new Vector2(p.x + 400, 300 - p.y);
         }
+        /// <summary>The button under the pointer; with a drop-down list open only its own controls (-1 elsewhere).</summary>
         public int HitTest(Vector2 position)
         {
             var p = VirtualPoint(position);
-            for (int i = 0; i < _buttons.Count; i++) if (_buttons[i].rect.Contains(p)) return i;
+            for (int i = Mathf.Max(0, _popupStart); i < _buttons.Count; i++) if (_buttons[i].rect.Contains(p)) return i;
             return -1;
         }
+        public string Translate(string category, string entry, string fallback) => T(category, entry, fallback);
         public bool TrySlider(Vector2 position, out MenuControl control)
         {
             var p = VirtualPoint(position);
@@ -127,15 +144,19 @@ namespace RTXMnesia.Ui
 
         public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer,
                             MenuControl confirmation = MenuControl.ConfirmQuit, IReadOnlyList<string> saves = null, int selectedSave = -1,
-                            HplKeyConfig keyConfig = null)
+                            HplKeyConfig keyConfig = null, HplMenuCombo combo = null)
         {
             _loadFade.color = Color.clear; _loadingText.Clear();
             _menuText.Clear();
             _guiText.Clear();
+            _popupText.Clear();
             _buttons.Clear();
             _buttonData.Clear();
             _sliders.Clear();
+            _comboRects.Clear();
             _pieceIndex = 0;
+            _popupPieceIndex = 0;
+            _popupStart = -1;
             _selected = selected;
             _opacity = opacity;
             _shade.color = new Color(0, 0, 0, _titleScreen ? 0 : 0.5f * opacity);
@@ -151,10 +172,15 @@ namespace RTXMnesia.Ui
             }
             if (confirmQuit) Confirmation(confirmation);
             else if (keyConfig != null) KeyConfig(keyConfig);
-            else if (options) Options(tab, settings);
+            else if (options)
+            {
+                Options(tab, settings);
+                if (combo != null && tab == 1) ComboList(combo, settings);
+            }
             else if (saves != null) LoadGame(saves, selectedSave);
             else Main();
             for (int i = _pieceIndex; i < _pieces.Count; i++) _pieces[i].enabled = false;
+            for (int i = _popupPieceIndex; i < _popupPieces.Count; i++) _popupPieces[i].enabled = false;
             if (HasCursor)
             {
                 _cursor.enabled = true;
@@ -280,10 +306,7 @@ namespace RTXMnesia.Ui
                         Toggle(345, "Commentary", "Комментарии", settings.commentary, MenuControl.Commentary);
                     break;
                 case 1:
-                    Toggle(195, "FullScreen", "Полный экран", settings.fullscreen, MenuControl.Fullscreen);
-                    Toggle(245, "VSync", "Вертикальная синхронизация", settings.vSync, MenuControl.VSync);
-                    Adjust(305, "Gamma", "Гамма", settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
-                           (settings.gamma - HplUserSettings.MinGamma) / (HplUserSettings.MaxGamma - HplUserSettings.MinGamma), MenuControl.GammaLess, MenuControl.GammaMore);
+                    Graphics(settings);
                     break;
                 case 2:
                     Adjust(200, "Volume", "Общая громкость", Mathf.RoundToInt(settings.masterVolume * 100) + "%", settings.masterVolume, MenuControl.VolumeLess, MenuControl.VolumeMore);
@@ -370,6 +393,122 @@ namespace RTXMnesia.Ui
             Button(new Rect(okX + 83, bottom, 80, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
         }
 
+        /// <summary>
+        /// The graphics tab in two columns: drop-down lists with their label above (as in cLuxMainMenu_Options), the
+        /// check boxes, and the gamma under the screen settings.
+        /// </summary>
+        void Graphics(HplUserSettings settings)
+        {
+            const float leftX = 120, rightX = 420, top = 158, comboStep = 45, toggleStep = 27;
+            float y = top;
+            foreach (var c in new[] { MenuControl.Lighting, MenuControl.Textures, MenuControl.Resolution, MenuControl.ScreenMode, MenuControl.FpsLimit })
+            {
+                Combo(leftX, y, c, settings);
+                y += comboStep;
+            }
+            SmallToggle(leftX, y, T("OptionsMenu", "VSync", "Вертикальная синхронизация"), settings.vSync, MenuControl.VSync);
+            y += toggleStep + 4;
+            SmallAdjust(leftX, y, T("OptionsMenu", "Gamma", "Гамма"), settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
+                        (settings.gamma - HplUserSettings.MinGamma) / (HplUserSettings.MaxGamma - HplUserSettings.MinGamma),
+                        MenuControl.GammaLess, MenuControl.GammaMore, MenuControl.GammaSlider);
+            y = top;
+            foreach (var c in new[] { MenuControl.TextureQuality, MenuControl.Anisotropy, MenuControl.Antialiasing, MenuControl.Shadows })
+            {
+                Combo(rightX, y, c, settings);
+                y += comboStep;
+            }
+            // Own text: the game's Russian "Bloom" entry reads "Потускнение" (dimming), the opposite of the effect.
+            SmallToggle(rightX, y, "Свечение (Bloom)", settings.bloom, MenuControl.Bloom);
+            y += toggleStep;
+            SmallToggle(rightX, y, T("OptionsMenu", "ImageTrail", "След при движении"), settings.imageTrail, MenuControl.ImageTrail);
+            y += toggleStep;
+            SmallToggle(rightX, y, T("OptionsMenu", "RadialBlur", "Радиальное размытие"), settings.radialBlur, MenuControl.RadialBlur);
+        }
+
+        /// <summary>A closed drop-down list (cWidgetComboBox): label, background with the choice and the arrow button.</summary>
+        void Combo(float x, float y, MenuControl control, HplUserSettings settings)
+        {
+            var size = Vector2.one * 16;
+            Draw(_guiText, HplGraphicsOptions.Label(control, Translate), new Vector2(x, y), size, Color.white);
+            var items = HplGraphicsOptions.Items(control, settings, Translate, out int current);
+            var rect = new Rect(x, y + 19, 230, 22);
+            _comboRects[control] = rect;
+            Piece(null, rect, new Color(0, 0, 0, 0.5f));
+            Piece("ComboBoxBackground", rect, Color.white);
+            Piece("ComboBoxButtonIcon", new Rect(rect.xMax - 18, rect.y + 2, 18, 18), Color.white);
+            Button(new Rect(rect.x + 4, rect.y + 2, rect.width - 22, 18), items.Count > 0 ? items[current].label : "", control, null, size, HplFontAlign.Left);
+            _buttons[_buttons.Count - 1] = (rect, control);
+        }
+
+        /// <summary>
+        /// The open list under its combo box (moved up if it would leave the screen): up to 12 choices of font height
+        /// + 2, the highlighted one on a light background, disabled ones grey; more choices - scroll arrows.
+        /// </summary>
+        void ComboList(HplMenuCombo combo, HplUserSettings settings)
+        {
+            if (!_comboRects.TryGetValue(combo.control, out var box)) return;
+            var items = HplGraphicsOptions.Items(combo.control, settings, Translate, out int current);
+            int shown = Mathf.Min(items.Count, HplMenuCombo.MaxItems);
+            combo.first = Mathf.Clamp(combo.first, 0, Mathf.Max(0, items.Count - shown));
+            const float rowHeight = 16 + 2;
+            float height = 2 + rowHeight * shown + 2;
+            var menu = new Rect(box.x, box.yMax, box.width, height);
+            if (menu.yMax > 595) menu.y = Mathf.Max(5, 595 - height);
+            _popupStart = _buttons.Count;
+            PopupPiece(null, menu, new Color(0, 0, 0, 0.92f));
+            PopupPiece("ComboBoxBackground", menu, Color.white);
+            bool scroll = items.Count > shown;
+            float textWidth = menu.width - (scroll ? 20 : 0);
+            for (int i = 0; i < shown; i++)
+            {
+                int item = combo.first + i;
+                var row = new Rect(menu.x + 1, menu.y + 2 + i * rowHeight, textWidth - 2, rowHeight);
+                if (item == combo.hover) PopupPiece(null, row, new Color(0.82f, 0.81f, 0.79f, 0.35f));
+                else if (item == current) PopupPiece(null, row, new Color(1, 1, 1, 0.12f));
+                _buttons.Add((row, MenuControl.ComboItem));
+                _buttonData.Add(item);
+                var color = !items[item].enabled ? new Color(0.5f, 0.5f, 0.5f, 1) : item == combo.hover ? Highlight : Color.white;
+                color.a *= _opacity;
+                _popupText.DrawFont(items[item].label, new Vector2(row.x + 3, row.y), Vector2.one * 16, color);
+            }
+            if (scroll)
+            {
+                var up = new Rect(menu.xMax - 19, menu.y + 2, 18, 18);
+                var down = new Rect(menu.xMax - 19, menu.yMax - 20, 18, 18);
+                PopupPiece("SliderVertBackground", new Rect(up.x, up.yMax, 18, down.y - up.yMax), Color.white);
+                float range = down.y - up.yMax - 12;
+                float t = combo.first / (float)(items.Count - shown);
+                PopupPiece(null, new Rect(up.x + 3, up.yMax + t * range, 12, 12), new Color(1, 1, 1, 0.6f));
+                PopupPiece("SliderVertArrowUp", up, Color.white);
+                PopupPiece("SliderVertArrowDown", down, Color.white);
+                _buttons.Add((up, MenuControl.ComboScrollUp)); _buttonData.Add(-1);
+                _buttons.Add((down, MenuControl.ComboScrollDown)); _buttonData.Add(-1);
+            }
+        }
+
+        /// <summary>A check box of a column (font 16).</summary>
+        void SmallToggle(float x, float y, string label, bool value, MenuControl control)
+        {
+            Piece(value ? "CheckBoxEnabledChecked" : "CheckBoxEnabledUnchecked", new Rect(x, y + 1, 16, 16), Color.white);
+            Button(new Rect(x + 24, y, 250, 20), label, control, null, Vector2.one * 16, HplFontAlign.Left);
+            _buttons[_buttons.Count - 1] = (new Rect(x - 4, y - 2, 280, 22), control);
+        }
+
+        /// <summary>A slider of a column: label and value, then the less button, the slider and the more button.</summary>
+        void SmallAdjust(float x, float y, string label, string value, float fraction, MenuControl less, MenuControl more, MenuControl slider)
+        {
+            var size = Vector2.one * 16;
+            Draw(_guiText, label, new Vector2(x, y), size, Color.white);
+            Draw(_guiText, value, new Vector2(x + 230, y), size, Color.white, HplFontAlign.Right);
+            float barY = y + 22;
+            Button(new Rect(x, barY, 20, 20), "<", less, null, size);
+            Button(new Rect(x + 210, barY, 20, 20), ">", more, null, size);
+            var bar = new Rect(x + 26, barY + 7, 178, 6);
+            Piece("SliderHoriBackground", bar, Color.white);
+            Piece("SliderHoriArrowUp", new Rect(bar.x + Mathf.Clamp01(fraction) * (bar.width - 12), barY + 2, 12, 18), Color.white);
+            _sliders.Add((new Rect(bar.x, barY - 2, bar.width, 24), slider));
+        }
+
         void Toggle(float y, string key, string fallback, bool value, MenuControl control)
         {
             Piece(value ? "CheckBoxEnabledChecked" : "CheckBoxEnabledUnchecked", new Rect(140, y + 2, 18, 18), Color.white);
@@ -418,6 +557,18 @@ namespace RTXMnesia.Ui
                 };
                 Piece(type, p, Color.white);
             }
+        }
+
+        void PopupPiece(string type, Rect rect, Color color)
+        {
+            if (_popupPieceIndex == _popupPieces.Count) _popupPieces.Add(Image(_screen, "Drop-down list piece"));
+            var target = _popupPieces[_popupPieceIndex++];
+            target.transform.SetSiblingIndex(_popupText.transform.GetSiblingIndex());
+            var piece = type != null && _assets != null ? _assets.Find(type) : default;
+            target.texture = piece.texture != null ? piece.texture : Texture2D.whiteTexture;
+            target.color = (piece.texture != null ? piece.color * color : color) * new Color(1, 1, 1, _opacity);
+            target.enabled = true;
+            Place(target.rectTransform, rect);
         }
 
         void Piece(string type, Rect rect, Color color)

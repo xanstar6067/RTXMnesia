@@ -91,8 +91,9 @@ namespace RTXMnesia.Effects
         void RenderEffects(CustomPassContext ctx)
         {
 
-            float trail = effects.ImageTrail.Amount;
-            float blur = effects.RadialBlur.Size;
+            // The graphics options can hide the trail and the radial blur; the effects themselves keep running.
+            float trail = Hpl.HplGraphics.ImageTrail ? effects.ImageTrail.Amount : 0f;
+            float blur = Hpl.HplGraphics.RadialBlur ? effects.RadialBlur.Size : 0f;
             float sepia = effects.Sepia.Amount;
             float fade = effects.Fade.Alpha;
             Color add = Color.white * effects.Flash.Alpha

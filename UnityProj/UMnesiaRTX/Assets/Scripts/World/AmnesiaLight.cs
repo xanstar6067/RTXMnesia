@@ -59,9 +59,13 @@ namespace RTXMnesia.World
         /// <summary>The player's darkness light (skipped by the light level).</summary>
         [System.NonSerialized] public bool excludeFromLightLevel;
 
+        /// <summary>The HDRP shadow resolution tier of the map (before the shadow setting lowers it); −1: not read yet.</summary>
+        [System.NonSerialized] public int baseShadowLevel = -1;
+
         void OnEnable()
         {
             All.Add(this);
+            HplGraphics.ApplyShadows(this);
             if (box) HplBoxLightPass.Register(this);
         }
 
