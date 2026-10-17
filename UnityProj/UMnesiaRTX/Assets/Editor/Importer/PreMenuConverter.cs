@@ -31,8 +31,9 @@ namespace RTXMnesia.Importer
             string rel = "config/pre_menu.cfg";
             if (File.Exists(init))
             {
+                // cfg files have several root elements (TinyXML reads them all).
                 var doc = new XmlDocument();
-                doc.Load(init);
+                doc.LoadXml("<Root>" + File.ReadAllText(init) + "</Root>");
                 if (doc.SelectSingleNode("//ConfigFiles") is XmlElement files && files.HasAttribute("PreMenu")) rel = files.GetAttribute("PreMenu");
             }
             else log.Warn("config/main_init.cfg missing, using config/pre_menu.cfg");
@@ -75,8 +76,9 @@ namespace RTXMnesia.Importer
             string configPath = PreMenuConfigPath(log);
             assets.sections.Clear();
             var doc = new XmlDocument();
-            doc.Load(configPath);
-            foreach (XmlNode node in doc.DocumentElement.ChildNodes)
+            doc.LoadXml("<Root>" + File.ReadAllText(configPath) + "</Root>");
+            var preMenu = doc.DocumentElement.SelectSingleNode("PreMenu") as XmlElement ?? doc.DocumentElement;
+            foreach (XmlNode node in preMenu.ChildNodes)
             {
                 if (node is not XmlElement e) continue;
                 var section = new HplPreMenuAssets.Section

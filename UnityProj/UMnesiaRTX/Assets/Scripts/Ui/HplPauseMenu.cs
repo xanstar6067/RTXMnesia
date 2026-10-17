@@ -15,7 +15,7 @@ namespace RTXMnesia.Ui
         VolumeSlider, SensitivitySlider, NewGame, ReturnTitle, ConfirmNewGame, ConfirmReturnTitle,
         Continue, ConfirmContinue, LoadGame, LoadSlot, LoadOk, ConfirmLoad, ExitAndSave, ConfirmExitAndSave,
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
-        GammaLess, GammaMore, GammaSlider,
+        GammaLess, GammaMore, GammaSlider, Commentary,
     }
 
     /// <summary>In-game cLuxMainMenu: menu.cfg layout and gui_main_menu.skin on the same Canvas system as the HUD.</summary>
@@ -275,6 +275,9 @@ namespace RTXMnesia.Ui
                     Toggle(195, "ShowSubtitles", "Субтитры", settings.subtitles, MenuControl.Subtitles);
                     Toggle(245, "ShowHints", "Подсказки", settings.hints, MenuControl.Hints);
                     Toggle(295, "ShowCrosshair", "Прицел", settings.crosshair, MenuControl.Crosshair);
+                    // menu.cfg Options ShowCommentary shows the developer commentary option.
+                    if (_map.menuConfig == null || _map.menuConfig.GetString("Options", "ShowCommentary", "false") == "true")
+                        Toggle(345, "Commentary", "Комментарии", settings.commentary, MenuControl.Commentary);
                     break;
                 case 1:
                     Toggle(195, "FullScreen", "Полный экран", settings.fullscreen, MenuControl.Fullscreen);

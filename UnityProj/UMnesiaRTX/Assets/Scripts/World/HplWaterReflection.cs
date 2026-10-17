@@ -168,7 +168,27 @@ namespace RTXMnesia.World
                 PlaceMirror(main, _active);
             }
             if (_mirror != null) _mirror.enabled = _active != null;
+            ApplyBlocks();
+        }
 
+        /// <summary>
+        /// Renders the reflection for <paramref name="main"/> at once (tools: edit mode renders of one camera, where
+        /// no other camera is drawn in the same frame). False if no surface is in view.
+        /// </summary>
+        public bool RenderFor(Camera main)
+        {
+            _active = ChooseSurface(main);
+            if (_active == null) return false;
+            EnsureMirror(main);
+            PlaceMirror(main, _active);
+            _mirror.Render();
+            _mirror.enabled = false;
+            ApplyBlocks();
+            return true;
+        }
+
+        void ApplyBlocks()
+        {
             _block ??= new MaterialPropertyBlock();
             foreach (var s in _surfaces)
             {

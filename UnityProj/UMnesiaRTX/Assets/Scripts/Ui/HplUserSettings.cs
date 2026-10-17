@@ -14,6 +14,11 @@ namespace RTXMnesia.Ui
         public bool fullscreen, vSync;
         /// <summary>Display gamma (HPL2 Graphics Gamma, 0.3–2, SDL_SetGamma); drawn by HplScreenEffectsPass.</summary>
         public float gamma = 1f;
+        /// <summary>Game option "Commentary" (user config Game ShowCommentary, off by default): developer commentary icons.</summary>
+        public bool commentary;
+
+        /// <summary>The applied commentary option (cLuxMapHandler::mbShowCommentary).</summary>
+        public static bool ShowCommentary { get; set; }
         public const float MinGamma = 0.3f, MaxGamma = 2f;
 
         /// <summary>The applied gamma (also set by the pre menu before a map exists).</summary>
@@ -89,6 +94,9 @@ namespace RTXMnesia.Ui
             map.hud.showCrossHair = crosshair;
             AudioListener.volume = masterVolume;
             Gamma = gamma;
+            // cLuxMapHandler::SetShowCommentary: turning it off stops the playing commentary.
+            if (ShowCommentary && !commentary) map.effects?.PlayCommentary.Stop();
+            ShowCommentary = commentary;
             QualitySettings.vSyncCount = vSync ? 1 : 0;
             if (!Application.isEditor && Screen.fullScreen != fullscreen)
                 Screen.fullScreenMode = fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;

@@ -25,12 +25,6 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     float4 _HplInsanity;    // x: wave time, y: amplitude map blend, z: wave alpha, w: zoom alpha
     float _HplGamma;        // gamma of the settings: sRGB value^(1/gamma), as SDL's gamma ramp
 
-    float4 GammaFrag(Varyings v) : SV_Target
-    {
-        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
-        float3 color = LoadSource(int2(v.positionCS.xy));
-        return float4(SRGBToLinear(pow(saturate(color), 1.0 / max(_HplGamma, 0.01))), 1.0);
-    }
 
     float3 LoadSource(int2 p)
     {
@@ -47,6 +41,13 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
         float3 a = LoadSource(i), b = LoadSource(i + int2(1, 0));
         float3 c = LoadSource(i + int2(0, 1)), d = LoadSource(i + int2(1, 1));
         return lerp(lerp(a, b, t.x), lerp(c, d, t.x), t.y);
+    }
+
+    float4 GammaFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float3 color = LoadSource(int2(v.positionCS.xy));
+        return float4(SRGBToLinear(pow(saturate(color), 1.0 / max(_HplGamma, 0.01))), 1.0);
     }
 
     float4 CopyFrag(Varyings v) : SV_Target

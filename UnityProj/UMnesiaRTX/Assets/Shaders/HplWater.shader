@@ -141,8 +141,8 @@ Shader "RTXMnesia/HplWater"
                 uv2.y += sin(t2 + uv2.x * _WaveFreq * 1.2) * _WaveAmplitude * 0.75;
 
                 // Final normal in tangent space (Unity convention: the import flipped green).
-                float3 n1 = UnpackNormalmapRGorAG(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, uv1), 1.0);
-                float3 n2 = UnpackNormalmapRGorAG(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, uv2), 1.0);
+                float3 n1 = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, uv1), 1.0);
+                float3 n2 = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, uv2), 1.0);
                 float3 normalTS = normalize(n1 * 0.7 + n2 * 0.3);
                 // The same normal in HPL2's tangent space (green down the image).
                 float3 normalHpl = float3(normalTS.x, -normalTS.y, normalTS.z);

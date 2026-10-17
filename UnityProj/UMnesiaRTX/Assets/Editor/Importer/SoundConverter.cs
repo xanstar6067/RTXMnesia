@@ -21,7 +21,8 @@ namespace RTXMnesia.Importer
     {
         public const string SoundsRoot = AmnesiaPaths.ImportedAssetsRoot + "/Sounds";
         public const string BankPath = SoundsRoot + "/sounds.asset";
-        static readonly string[] SoundFolders = { "sounds", "music" };
+        // commentary/: the developer commentary streams (commentary icons).
+        static readonly string[] SoundFolders = { "sounds", "music", "commentary" };
 
         public static HplSoundBank Convert(ImportLog log, HplLanguage language)
         {
@@ -199,7 +200,7 @@ namespace RTXMnesia.Importer
             if (!assetPath.StartsWith(SoundConverter.SoundsRoot + "/")) return;
             var importer = (AudioImporter)assetImporter;
             string rel = assetPath.Substring(SoundConverter.SoundsRoot.Length + 1).ToLowerInvariant();
-            bool stream = rel.StartsWith("music/") || rel.StartsWith("lang/");
+            bool stream = rel.StartsWith("music/") || rel.StartsWith("lang/") || rel.StartsWith("commentary/");
             long size = new FileInfo(AmnesiaPaths.ToAbsolute(assetPath)).Length;
 
             var settings = importer.defaultSampleSettings;

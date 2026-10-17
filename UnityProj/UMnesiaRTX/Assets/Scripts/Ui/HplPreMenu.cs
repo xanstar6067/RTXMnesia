@@ -59,6 +59,8 @@ namespace RTXMnesia.Ui
         public float AlphaFade => _alphaFade;
         public float GammaValue => GammaMin + (GammaMax - GammaMin) * _gammaSlider / Mathf.Max(1, _gammaSliderMax);
         public HplPreMenuAssets.Section CurrentSection => _section;
+        /// <summary>The overlay canvas (checks render it with a camera).</summary>
+        public Canvas Canvas => _root != null ? _root.GetComponent<Canvas>() : null;
 
         public void Begin(HplMap map, Action onDone)
         {
@@ -343,7 +345,17 @@ namespace RTXMnesia.Ui
                 int barSize = Mathf.RoundToInt(0.25f * _gammaSliderMax);
                 float handleWidth = track.width * barSize / (_gammaSliderMax + barSize);
                 float handleX = track.x + (track.width - handleWidth) * _gammaSlider / Mathf.Max(1, _gammaSliderMax);
-                Piece("SliderHandleBackground", new Rect(handleX, track.y, handleWidth, track.height), Color.white);
+                // The handle: background with the 2 px borders and corners of the skin (DrawBordersAndCorners).
+                var handle = new Rect(handleX, track.y, handleWidth, track.height);
+                Piece("SliderHandleBackground", handle, Color.white);
+                Piece("SliderHandleBorderLeft", new Rect(handle.x, handle.y + 2f, 2f, handle.height - 4f), Color.white);
+                Piece("SliderHandleBorderRight", new Rect(handle.xMax - 2f, handle.y + 2f, 2f, handle.height - 4f), Color.white);
+                Piece("SliderHandleBorderUp", new Rect(handle.x + 2f, handle.y, handle.width - 4f, 2f), Color.white);
+                Piece("SliderHandleBorderDown", new Rect(handle.x + 2f, handle.yMax - 2f, handle.width - 4f, 2f), Color.white);
+                Piece("SliderHandleCornerLU", new Rect(handle.x, handle.y, 2f, 2f), Color.white);
+                Piece("SliderHandleCornerRU", new Rect(handle.xMax - 2f, handle.y, 2f, 2f), Color.white);
+                Piece("SliderHandleCornerLD", new Rect(handle.x, handle.yMax - 2f, 2f, 2f), Color.white);
+                Piece("SliderHandleCornerRD", new Rect(handle.xMax - 2f, handle.yMax - 2f, 2f, 2f), Color.white);
             }
 
             for (int i = _pieceIndex; i < _pieces.Count; i++) _pieces[i].enabled = false;

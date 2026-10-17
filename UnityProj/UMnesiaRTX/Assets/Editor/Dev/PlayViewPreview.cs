@@ -10,7 +10,7 @@ namespace RTXMnesia.EditorDev
 {
     /// <summary>
     /// Batch Play snapshot of one view of a map (no -quit / -nographics), see <see cref="Dev.HplPlayViewProbe"/>:
-    /// -amnesiaMap maps/main/ch01/06_distillery.map -playView "x y z yaw [AimEntity]" → Logs/PlayView_&lt;map&gt;.png.
+    /// -amnesiaMap maps/main/ch01/06_distillery.map -playView "x y z yaw [AimEntity | pitch=degrees]" → Logs/PlayView_&lt;map&gt;.png.
     /// </summary>
     [InitializeOnLoad]
     public static class PlayViewPreview

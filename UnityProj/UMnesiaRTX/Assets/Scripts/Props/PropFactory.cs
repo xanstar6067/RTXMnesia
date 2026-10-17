@@ -32,8 +32,7 @@ namespace RTXMnesia.Props
                 case "CritterSpider": return new PropCritterSpider(entity);
                 case "Enemy_ManPig": // the grunt and the water lurker are made by HplMap
                     return new PropGeneric(entity, HplEntityType.Enemy);
-                case "CommentaryIcon":
-                    return new PropGeneric(entity, HplEntityType.CommentaryIcon);
+                case "CommentaryIcon": return new PropCommentaryIcon(entity);
                 default:
                     return null;
             }

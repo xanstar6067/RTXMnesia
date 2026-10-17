@@ -2,7 +2,7 @@
 
 Функции, которые движок Amnesia предоставляет скриптам `.hps` (регистрируются в `src/.../amnesia/src/game/LuxScriptHandler.cpp`, всего 261).
 Сгенерировано по копии игры в `source/`; «гл.1» и «всего» — число вызовов в скриптах первой главы и всей игры.
-Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но части поведения ещё нет: завершение прохождения, затухание моделей, враги); — пропускается с одним предупреждением в логе (часть движка не портирована).
+Наш порт: `UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/` (`HplScript*.cs`). Статус: ✓ готово; ~ частично (состояние хранится, но части поведения ещё нет); — пропускается с одним предупреждением в логе (часть движка не портирована).
 
 ## Нужны для главы 1 (по частоте)
 
@@ -56,7 +56,7 @@
 | `SetSwingDoorClosed` | 23 | 36 | ✓ | `void SetSwingDoorClosed(string &in asName, bool abClosed, bool abEffects)` |
 | `SetGlobalVarInt` | 22 | 56 | ✓ | `void SetGlobalVarInt(string &in asName, int alVal)` |
 | `CompleteQuest` | 22 | 65 | ~ | `void CompleteQuest(string &in asName, string &in asNameAndTextEntry)` |
-| `SetPropActiveAndFade` | 21 | 87 | ~ | `void SetPropActiveAndFade(string &in asName, bool abActive, float afFadeTime)` |
+| `SetPropActiveAndFade` | 21 | 87 | ✓ | `void SetPropActiveAndFade(string &in asName, bool abActive, float afFadeTime)` |
 | `FadeSepiaColorTo` | 21 | 27 | ✓ | `void FadeSepiaColorTo(float afAmount, float afSpeed)` |
 | `DestroyParticleSystem` | 21 | 59 | ✓ | `void DestroyParticleSystem(string &in asName)` |
 | `StopMusic` | 20 | 49 | ✓ | `void StopMusic(float afFadeTime, int alPrio)` |
@@ -240,4 +240,10 @@ GiveItemFromFile читает определения `.ent` из генерир�
 
 ## Враги
 
-`AddEnemyPatrolNode`, `ClearEnemyPatrolNodes`, `SetEnemyDisabled`, `SetEnemyDisableTriggers`, `ShowEnemyPlayerPosition` — ✓ для Grunt (`EnemyGrunt`) и водяного монстра (`EnemyWaterLurker`, 6.4), см. CLAUDE.md «Враги»: узел ищется по имени в контейнере узлов врага (нет контейнера / узла — ошибка движка, как в HPL2); `ShowEnemyPlayerPosition` всегда переводит в охоту (условие оригинала с `||` всегда истинно). Без вызовов в картах, но тоже перенесены: `AlertEnemyOfPlayerPresence`, `SetEnemyIsHallucination`, `FadeEnemyToSmoke` (без растворения модели), `SetEnemySanityDecreaseActive`, `TeleportEnemyToNode`, `TeleportEnemyToEntity`, `GetEnemyStateName`, `SetEntityPos` для врага (ступни тела). Man pig (`Enemy_ManPig`) — враг A Machine for Pigs, в данных The Dark Descent его сущности нет: функции на нём — `NotPorted` (`needs the man pig (not in The Dark Descent)`), функции man pig (`ChangeManPigPose`, `SetTeslaPig*`, `ForceTeslaPigSighting`) не переносятся.
+`AddEnemyPatrolNode`, `ClearEnemyPatrolNodes`, `SetEnemyDisabled`, `SetEnemyDisableTriggers`, `ShowEnemyPlayerPosition` — ✓ для Grunt (`EnemyGrunt`) и водяного монстра (`EnemyWaterLurker`, 6.4), см. CLAUDE.md «Враги»: узел ищется по имени в контейнере узлов врага (нет контейнера / узла — ошибка движка, как в HPL2); `ShowEnemyPlayerPosition` всегда переводит в охоту (условие оригинала с `||` всегда истинно). Без вызовов в картах, но тоже перенесены: `AlertEnemyOfPlayerPresence`, `SetEnemyIsHallucination`, `FadeEnemyToSmoke` (с растворением модели за 1 с, `cLuxMap::AddDissolveEntity`), `SetEnemySanityDecreaseActive`, `TeleportEnemyToNode`, `TeleportEnemyToEntity`, `GetEnemyStateName`, `SetEntityPos` для врага (ступни тела). Man pig (`Enemy_ManPig`) — враг A Machine for Pigs, в данных The Dark Descent его сущности нет: функции на нём — `NotPorted` (`needs the man pig (not in The Dark Descent)`), функции man pig (`ChangeManPigPose`, `SetTeslaPig*`, `ForceTeslaPigSighting`) не переносятся.
+
+## Дополнения 6.5 в) (2026-10-17)
+
+- `SetPropActiveAndFade` — ✓: включение — проявление модели за время (`iLuxProp::FadeInMeshEntity`), выключение — растворяющаяся копия модели (`cLuxMap::AddDissolveEntity`, делается и для уже выключенного пропа, как в оригинале). Покрытие HPL2 (screen-door dissolve) передано прозрачными копиями материалов HDRP/Lit (`World/HplMeshFade.cs`). Та же копия — `DissolveOnDestruction` пропов и `FadeEnemyToSmoke`.
+- `SetMultiSliderStuckState`, `SetMultiSliderCallback` — ✓ (`Props/PropMultiSlider.cs`, порт `cLuxProp_MultiSlider`; на картах вызовов нет, панели `20_sewer` работают через переменные экземпляра).
+- `CompleteQuest` теперь добавляет процент прохождения карты (`QuestCompletionValue`, задержка 6 с); `SetNumberOfQuestsInMap` участвует в итоге карты (см. CLAUDE.md «Процент прохождения»).

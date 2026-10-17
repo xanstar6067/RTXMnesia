@@ -33,6 +33,7 @@ namespace RTXMnesia.Effects
         public readonly AmountEffect Sepia = new();
         public readonly RadialBlurEffect RadialBlur = new();
         public readonly EmotionFlashEffect EmotionFlash = new();
+        public readonly PlayCommentaryEffect PlayCommentary = new();
 
         /// <summary>cLuxPostEffect_Insanity (cLuxPostEffectHandler, LuxPostEffects.cpp): set by the player's sanity.</summary>
         public readonly InsanityEffect Insanity = new();
@@ -51,7 +52,7 @@ namespace RTXMnesia.Effects
             _initialized = true;
             Map = map;
             // Same order as the handler's list.
-            _effects.AddRange(new Effect[] { Fade, Flash, SanityGainFlash, PlayVoice, ImageTrail, ScreenShake, Sepia, RadialBlur, EmotionFlash });
+            _effects.AddRange(new Effect[] { Fade, Flash, SanityGainFlash, PlayVoice, PlayCommentary, ImageTrail, ScreenShake, Sepia, RadialBlur, EmotionFlash });
             foreach (var e in _effects) e.Handler = this;
 
             var cfg = map.gameConfig;
@@ -686,6 +687,14 @@ namespace RTXMnesia.Effects
 
             public bool IsActive => Active;
 
+            /// <summary>cLuxEffect_PlayVoice::SetVolumeMul: also on the playing voice and effect sound.</summary>
+            public void SetVolumeMul(float mul)
+            {
+                VolumeMul = mul;
+                if (VoiceValid) _voiceEntry.SetVolumeMul(mul);
+                if (EffectValid) _effectEntry.SetVolumeMul(mul);
+            }
+
             /// <summary>cLuxEffect_PlayVoice::VoiceDonePlaying: checks the pointer, not validity; ignores effect sounds.</summary>
             public bool VoiceDonePlaying() => _voices.Count == 0 && _voiceEntry == null;
 
@@ -760,6 +769,76 @@ namespace RTXMnesia.Effects
         /// cLuxEffect_EmotionFlash: white fades in, a text is shown while the player is paused, then all fades out.
         /// The text is drawn by the HUD; the FOV / radial blur parts are as in HPL2.
         /// </summary>
+        /// <summary>
+        /// cLuxEffect_PlayCommentary: a developer commentary as a GUI stream; meanwhile the world sounds (global
+        /// volume id Commentary = 5) and the music go to 0.15 and voices to 0.1. When it ends or stops, they come back
+        /// and the icon stops turning.
+        /// </summary>
+        public sealed class PlayCommentaryEffect : Effect
+        {
+            public const int GlobalVolumeId = 5; // eLuxGlobalVolumeType_Commentary
+            RTXMnesia.Sound.SoundEntry _entry;
+            int _entryId = -1;
+            public int IconId { get; private set; } = -1;
+            public string Talker { get; private set; } = "";
+            public string Topic { get; private set; } = "";
+
+            RTXMnesia.Sound.HplSoundHandler Sound => Handler.Map.sound;
+
+            public void Start(string talker, string topic, string file, int iconId)
+            {
+                if (_entry != null)
+                {
+                    Stop();
+                    Handler.Map.CommentaryIconById(IconId)?.SetPlayingSound(false);
+                }
+                Talker = talker;
+                Topic = topic;
+                IconId = iconId;
+                _entry = Sound.PlayGuiStream(file, false, 1f);
+                if (_entry == null) return;
+                _entryId = _entry.Id;
+                Active = true;
+                Sound.FadeGlobalVolume(0.15f, 0.5f, RTXMnesia.Sound.SoundEntryType.World, GlobalVolumeId, false);
+                Sound.Music?.FadeVolumeMul(0.15f, 0.5f);
+                Handler.PlayVoice.SetVolumeMul(0.1f);
+            }
+
+            public void Stop()
+            {
+                if (!Active) return;
+                if (Sound.IsValid(_entry, _entryId)) _entry.FadeOut(1f);
+                _entry = null;
+                Restore();
+            }
+
+            void Restore()
+            {
+                Sound.FadeGlobalVolume(1f, 0.5f, RTXMnesia.Sound.SoundEntryType.World, GlobalVolumeId, false);
+                Sound.Music?.FadeVolumeMul(1f, 0.5f);
+                Handler.PlayVoice.SetVolumeMul(1f);
+                Active = false;
+            }
+
+            public override void Update(float timeStep)
+            {
+                if (Sound.IsValid(_entry, _entryId)) return;
+                Handler.Map.CommentaryIconById(IconId)?.SetPlayingSound(false);
+                _entry = null;
+                Restore();
+            }
+
+            public override void Reset()
+            {
+                if (_entry != null && Sound.IsValid(_entry, _entryId)) _entry.Stop();
+                _entry = null;
+                Sound.SetGlobalVolume(1f, RTXMnesia.Sound.SoundEntryType.World, GlobalVolumeId);
+                Sound.Music?.SetVolumeMul(1f);
+                IconId = -1;
+                Talker = Topic = "";
+            }
+        }
+
         public sealed class EmotionFlashEffect : Effect
         {
             public float Alpha, TextAlpha;

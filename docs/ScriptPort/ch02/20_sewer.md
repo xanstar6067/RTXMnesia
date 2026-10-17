@@ -95,7 +95,7 @@
 
 ## Отличия и сохранённые особенности
 
-- `20_sewer.hps:139`: Панели water_wheel_cog_panel_1/2 имеют EntityType=MultiSlider (entities/special/water_wheel_cog_panel/water_wheel_cog_panel.ent). PropFactory пока создаёт PropGeneric для MultiSlider. Проверка nine combinations через CogPanelChange — диагностика скрипта; интерактивные панели ещё не реализованы.
+- `20_sewer.hps:139`: Панели water_wheel_cog_panel_1/2 — EntityType=MultiSlider; с 2026-10-17 это `PropMultiSlider` (порт `cLuxProp_MultiSlider`): три состояния по диапазону слайдера ±0.425, прилипание в 0.15 м, автодвижение к текущему состоянию, `ChangeStateCallback` = `CogPanelChange(панель, состояние)`. Проверено `FeatureTests` (CLAUDE.md «Мульти-слайдеры»).
 - `20_sewer.hps:16`: Сохранены пять комбинаций строк/задержек и девять допустимых сочетаний двух панелей (состояния 0..2). Отладочный gbForceWaterWheelSlowSpeed сохранён полем.
 - `20_sewer.hps:56`: Случайный выбор gvBoneEnts остаётся RandInt(0,1); счётчик созданных костей glBoneCount остаётся полем.
 - `20_sewer.hps:577`: Проверяются настоящие смерти на четырёх CP, включая ветви исходных alCount=0/1/2. Отображаемый счётчик health увеличивается уже после вызова callback.

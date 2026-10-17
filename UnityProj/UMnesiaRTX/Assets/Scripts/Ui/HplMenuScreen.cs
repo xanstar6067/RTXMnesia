@@ -188,7 +188,7 @@ namespace RTXMnesia.Ui
                 Refresh();
             }
             else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
-                     control == MenuControl.GammaLess || control == MenuControl.GammaMore) Activate(_selected, direction);
+                     control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary) Activate(_selected, direction);
         }
 
         void Activate(int index, int direction = 0)
@@ -298,6 +298,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.Subtitles: DraftSettings.subtitles = !DraftSettings.subtitles; break;
                 case MenuControl.Hints: DraftSettings.hints = !DraftSettings.hints; break;
                 case MenuControl.Crosshair: DraftSettings.crosshair = !DraftSettings.crosshair; break;
+                case MenuControl.Commentary: DraftSettings.commentary = !DraftSettings.commentary; break;
                 case MenuControl.Fullscreen: DraftSettings.fullscreen = !DraftSettings.fullscreen; break;
                 case MenuControl.VSync: DraftSettings.vSync = !DraftSettings.vSync; break;
                 case MenuControl.InvertMouse: DraftSettings.invertMouse = !DraftSettings.invertMouse; break;

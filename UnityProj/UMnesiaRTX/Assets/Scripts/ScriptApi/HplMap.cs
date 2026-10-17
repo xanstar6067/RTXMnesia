@@ -543,6 +543,7 @@ namespace RTXMnesia.ScriptApi
             if (updateMap)
             {
                 HplGame.Update(timeStep);
+                UpdateCheckCommentaryIconActive();
                 UpdateDissolveEntities(timeStep);
                 UpdateTimers(timeStep);
                 for (int i = 0; i < _entities.Count; i++)
@@ -599,6 +600,30 @@ namespace RTXMnesia.ScriptApi
                 _dissolveRoot.SetParent(transform, false);
             }
             _dissolveEntities.Add(new HplDissolveEntity(source, time, _dissolveRoot));
+        }
+
+        bool _commentaryIconsActive;
+
+        /// <summary>
+        /// cLuxMap::UpdateCheckCommentaryIconActive: the commentary icons follow the "commentary" option
+        /// (cLuxMapHandler::mbShowCommentary, <see cref="Ui.HplUserSettings.ShowCommentary"/>).
+        /// </summary>
+        void UpdateCheckCommentaryIconActive()
+        {
+            bool show = Ui.HplUserSettings.ShowCommentary;
+            if (_commentaryIconsActive == show) return;
+            _commentaryIconsActive = show;
+            foreach (var e in _entities)
+                if (e.Type == HplEntityType.CommentaryIcon) e.SetActive(show);
+        }
+
+        /// <summary>GetEntityByID(id, eLuxEntityType_CommentaryIcon).</summary>
+        public Props.PropCommentaryIcon CommentaryIconById(int id)
+        {
+            if (id < 0) return null;
+            foreach (var e in _entities)
+                if (e is Props.PropCommentaryIcon icon && icon.Id == id) return icon;
+            return null;
         }
 
         /// <summary>cLuxMap::UpdateDissolveEntities (before the timers).</summary>

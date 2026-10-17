@@ -46,6 +46,13 @@ namespace RTXMnesia.Dev
             player.active = true;
             player.PlaceAt(position, yawDegrees * Mathf.Deg2Rad);
             yield return new WaitForSecondsRealtime(0.5f);
+            // "pitch=<degrees>" instead of an entity: look up (positive) or down (negative).
+            if (!string.IsNullOrEmpty(aim) && aim.StartsWith("pitch=", StringComparison.Ordinal))
+            {
+                float pitchDegrees = float.Parse(aim.Substring(6), System.Globalization.CultureInfo.InvariantCulture);
+                player.AddLook(0f, -pitchDegrees * Mathf.Deg2Rad - player.Pitch);
+                aim = null;
+            }
             var target = string.IsNullOrEmpty(aim) ? null : map.GetEntityByName(aim);
             if (target != null)
             {
