@@ -162,11 +162,11 @@
 | `AddDebugMessage` | 35 | `AddDebugMessage(string asString, bool abCheckForDuplicates)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:14`) |
 | `AddEffectVoice` | 35 | `AddEffectVoice(string asVoiceFile, string asEffectFile, string asTextCat, string asTextEntry, bool abUsePostion,                                       string asPosEnitity, float afMinDistance, float afMaxDistance)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:31`) |
 | `AddEntityCollideCallback` | 39 | `AddEntityCollideCallback(string asParentName, string asChildName, string asFunction, bool abDeleteOnCollide, int alStates)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:205`) |
-| `AddKeyPart` | 4 | `AddKeyPart(int alKeyPart)` — ✓ с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы») |
+| `AddKeyPart` | 4 | `AddKeyPart(int alKeyPart)` — ✓ с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры») |
 | `AddLocalVarInt` | 4 | `AddLocalVarInt(string asName, int alVal)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:58`) |
 | `AddPropImpulse` | 9 | `AddPropImpulse(string asName, float afX, float afY, float afZ, string asCoordSystem)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:424`) |
 | `AddTimer` | 61 | `AddTimer(string asName, float afTime, string asFunction)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.General.cs:44`) |
-| `ChangePlayerStateToNormal` | 1 | `ChangePlayerStateToNormal()` — empty (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Player.cs:12`) |
+| `ChangePlayerStateToNormal` | 1 | `ChangePlayerStateToNormal()` — ✓ с 2026-10-17: состояние Normal, предмет в руках отпускается (`cLuxPlayer::ChangeState`) |
 | `CreateParticleSystemAtEntity` | 5 | `CreateParticleSystemAtEntity(string asPSName, string asPSFile, string asEntity, bool abSavePS)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:165`) |
 | `FadeGlobalSoundSpeed` | 6 | `FadeGlobalSoundSpeed(float afDestSpeed, float afTime)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:150`) |
 | `FadeImageTrailTo` | 3 | `FadeImageTrailTo(float afAmount, float afSpeed)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:12`) |
@@ -222,7 +222,7 @@
 | `SetRadialBlurStartDist` | 2 | `SetRadialBlurStartDist(float afStartDist)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:18`) |
 | `SetSwingDoorClosed` | 5 | `SetSwingDoorClosed(string asName, bool abClosed, bool abEffects)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:290`) |
 | `SetSwingDoorLocked` | 5 | `SetSwingDoorLocked(string asName, bool abLocked, bool abEffects)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Entities.cs:285`) |
-| `StartCredits` | 2 | `StartCredits(string asMusic, bool abLoopMusic, string asTextCat, string asTextEntry, int alEndNum)` — ✓ с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы») |
+| `StartCredits` | 2 | `StartCredits(string asMusic, bool abLoopMusic, string asTextCat, string asTextEntry, int alEndNum)` — ✓ с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры») |
 | `StartEffectEmotionFlash` | 2 | `StartEffectEmotionFlash(string asTextCat, string asTextEntry, string asSound)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:23`) |
 | `StartPlayerLookAt` | 32 | `StartPlayerLookAt(string asEntityName, float afSpeedMul, float afMaxSpeed, string asAtTargetCallback)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Player.cs:107`) |
 | `StartScreenShake` | 5 | `StartScreenShake(float afAmount, float afTime, float afFadeInTime, float afFadeOutTime)` — implemented (`UnityProj/UMnesiaRTX/Assets/Scripts/ScriptApi/HplScript.Effects.cs:50`) |

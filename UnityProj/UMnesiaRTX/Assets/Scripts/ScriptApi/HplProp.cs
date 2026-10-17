@@ -539,8 +539,9 @@ namespace RTXMnesia.ScriptApi
             if (data == null || data.animations.Count == 0) return;
             var skinned = GameObject.GetComponentInChildren<SkinnedMeshRenderer>(true);
             if (skinned == null) return;
+            // The model root: the child of the entity, or of the body the import attached it to.
             Transform t = skinned.transform;
-            while (t.parent != null && t.parent != GameObject.transform) t = t.parent;
+            while (t.parent != null && t.parent != GameObject.transform && t.parent.GetComponent<World.AmnesiaBody>() == null) t = t.parent;
             var animation = new Enemies.HplMeshAnimation(t.gameObject, data);
             if (animation.States.Count == 0) return;
             AnimatedModel = t.gameObject;

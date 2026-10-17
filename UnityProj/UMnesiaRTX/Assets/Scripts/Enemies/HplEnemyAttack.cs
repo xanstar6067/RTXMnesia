@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace RTXMnesia.Enemies
 {
-    /// <summary>cLuxMapHelper::ShapeDamage (LuxMapHelper.cpp) for enemy attacks (enemies not checked, lethal for the player).</summary>
+    /// <summary>cLuxMapHelper::ShapeDamage (LuxMapHelper.cpp) for enemy and critter attacks (enemies not checked; lethal for the player unless told).</summary>
     public static class HplEnemyAttack
     {
         static readonly Collider[] Overlaps = new Collider[128];
@@ -29,12 +29,16 @@ namespace RTXMnesia.Enemies
         /// </summary>
         public static bool ShapeDamage(HplMap map, HplEnemy attacker, Vector3 center, Quaternion rotation, Vector3 halfExtents, Vector3 origin,
                                        float minDamage, float maxDamage, float force, float maxImpulse, int strength, float hitSpeed,
-                                       DamageType damageType, bool checkPlayer, bool checkProps, ref bool hitPlayer)
+                                       DamageType damageType, bool checkPlayer, bool checkProps, ref bool hitPlayer,
+                                       float sphereRadius = 0f, bool lethalForPlayer = true)
         {
             hitPlayer = false;
             var player = map.player;
             int mask = Physics.DefaultRaycastLayers | (1 << HplPhysics.CharacterLayer);
-            int count = Physics.OverlapBoxNonAlloc(center, halfExtents, Overlaps, rotation, mask, QueryTriggerInteraction.Ignore);
+            // A sphere shape (critters) or a box (enemies).
+            int count = sphereRadius > 0f
+                ? Physics.OverlapSphereNonAlloc(center, sphereRadius, Overlaps, mask, QueryTriggerInteraction.Ignore)
+                : Physics.OverlapBoxNonAlloc(center, halfExtents, Overlaps, rotation, mask, QueryTriggerInteraction.Ignore);
             if (count == 0) return false;
 
             // GetBodiesInBV + CheckShapeCollision: the colliders grouped by their body.
@@ -116,7 +120,7 @@ namespace RTXMnesia.Enemies
                 if (entity != null) entity.GiveDamage(damage, strength);
                 else if (body.player)
                 {
-                    player.GiveDamage(damage, strength, damageType, true, true);
+                    player.GiveDamage(damage, strength, damageType, true, lethalForPlayer);
                     hitPlayer = true;
                 }
             }

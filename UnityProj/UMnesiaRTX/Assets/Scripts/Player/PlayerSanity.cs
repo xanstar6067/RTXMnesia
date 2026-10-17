@@ -23,7 +23,7 @@ namespace RTXMnesia.Player
         readonly float _sanityRegainSpeed, _sanityRegainLimit, _sanityVeryLowLimit, _sanityEffectsStart;
         readonly float _sanityWaveAlphaMul, _sanityWaveSpeedMul;
         readonly float _sanityLowLimit, _sanityLowLimitMaxTime, _sanityLowNewSanityAmount;
-        readonly float _checkNearEnemyInterval, _nearEnemyDecrease;
+        readonly float _checkNearEnemyInterval, _nearEnemyDecrease, _nearCritterDecrease;
 
         float _hitAlpha;
         bool _hitActive, _hitIsUpdated, _sanityLostIsUpdated, _sanityEffectUpdated;
@@ -51,6 +51,7 @@ namespace RTXMnesia.Player
             _sanityLowNewSanityAmount = cfg.GetFloat(g, "SanityLowNewSanityAmount", 0f);
             _checkNearEnemyInterval = cfg.GetFloat(g, "CheckNearEnemyInterval", 0f);
             _nearEnemyDecrease = cfg.GetFloat(g, "NearEnemyDecrease", 0f);
+            _nearCritterDecrease = cfg.GetFloat(g, "NearCritterDecrease", 0f);
         }
 
         public float HitAlpha => _hitAlpha;
@@ -156,7 +157,7 @@ namespace RTXMnesia.Player
         /// <summary>
         /// cLuxPlayerSanity::UpdateCheckEnemySeen: every CheckNearEnemyInterval s critters within 3 m and enemies in view
         /// (within 35 m, in the camera frustum, 2 of 5 rays from the eye to the body center and its sides / top / bottom
-        /// free) lower sanity; every enemy's seen flag is set. Critters are not ported yet.
+        /// free) lower sanity; every enemy's seen flag is set.
         /// </summary>
         void UpdateCheckEnemySeen(float timeStep)
         {
@@ -172,6 +173,16 @@ namespace RTXMnesia.Player
             var cam = _player.playerCamera;
             if (map != null && cam != null)
             {
+                // Critters that cause sanity decrease (the spider) within 3 m of the head: NearCritterDecrease.
+                Vector3 headPos = cam.transform.position;
+                foreach (var entity in map.Entities)
+                {
+                    if (!entity.Active || entity is not Props.PropCritterBase critter || !critter.CausesSanityDecrease) continue;
+                    if (critter.PhysicsBodies.Count == 0 || (critter.PhysicsBodies[0].Position - headPos).sqrMagnitude > 3f * 3f) continue;
+                    _player.LowerSanity(_nearCritterDecrease, true);
+                    break;
+                }
+
                 const float maxRangeSqr = 35f * 35f;
                 Vector3 head = cam.transform.position;
                 Vector3 right = cam.transform.right, up = cam.transform.up;

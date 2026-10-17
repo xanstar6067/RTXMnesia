@@ -116,7 +116,7 @@
 - `21_torture_nave.hps`: Исходные local/global переменные не объединялись. Кость повышает глобальный IngredientCount; у хора яд повышает локальный счётчик.
 - `21_torture_nave.hps:632`: Сохранены разные имена квестов 20SafetyDoorClosed/21SafetyDoorClosed и исходные ключи переводов 20LeverNotWorking.
 - `21_torture_nave.hps:779`: AreaWellLookAt отсутствует в исходной .map; соответствующая попытка взгляда оставлена.
-- `21_torture_nave.hps:19`: SetNPCAwake (пробуждение Агриппы с анимацией Awake, затем Idle, голова следит за игроком в AreaAgrippaStartTalk) и прикреплённые пропы (мясо на грузе верёвки `invisible_box_mass_2_1`) работают с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы»). Sticky и связь колеса с верёвкой работают с 2026-10-17 (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»); проход с косточкой на верёвке здесь не прогонялся.
+- `21_torture_nave.hps:19`: SetNPCAwake (пробуждение Агриппы с анимацией Awake, затем Idle, голова следит за игроком в AreaAgrippaStartTalk) и прикреплённые пропы (мясо на грузе верёвки `invisible_box_mass_2_1`) работают с 2026-10-17 (CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры»). Sticky и связь колеса с верёвкой работают с 2026-10-17 (CLAUDE.md «Верёвки, связи, липкие зоны, слизь»); проход с косточкой на верёвке здесь не прогонялся.
 - `source/maps/main/ch02/21_torture_nave.map:4572`: candle_floor_4 ссылается на отсутствующий PointLight_40. Исходная ссылка сохранена.
 
 ## API движка
@@ -125,13 +125,13 @@
 
 | Ограниченный API | Фактический статус | Ссылка |
 |---|---|---|
-| `AddAttachedPropToProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
+| `AddAttachedPropToProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры» |
 | `AttachBodyToStickyArea` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `AutoSave` | ✓ (2026-10-17, сохранения перенесены (CLAUDE.md «Сохранения»)) | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.General.cs` |
 | `InteractConnectPropWithRope` | ✓ с 2026-10-17: CLAUDE.md «Верёвки, связи, липкие зоны, слизь» |
 | `PreloadSound` | empty | `UnityProj\UMnesiaRTX\Assets\Scripts\ScriptApi\HplScript.Effects.cs:75` |
-| `RemoveAttachedPropFromProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
-| `SetNPCAwake` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы» |
+| `RemoveAttachedPropFromProp` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры» |
+| `SetNPCAwake` | ✓ с 2026-10-17 | CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры» |
 
 Grunt/brute и WaterLurker уже имеют ИИ в актуальном движке; скриптовая активация сама по себе не является проверкой всех состояний ИИ. AutoSave с 2026-10-17 пишет автосохранение (CLAUDE.md «Сохранения»). Пустой PreloadSound не проверяет ресурсы и не загружает их заранее.
 

@@ -9,7 +9,8 @@ namespace RTXMnesia.ScriptApi
     {
         protected void SetPlayerActive(bool abActive) => Player.active = abActive;
 
-        protected void ChangePlayerStateToNormal() { }
+        /// <summary>cLuxPlayer::ChangeState(Normal): a held item is let go (the interact state's leave), a ladder is left.</summary>
+        protected void ChangePlayerStateToNormal() => Player.States?.ChangeState(RTXMnesia.Player.PlayerStateType.Normal);
 
         protected void SetPlayerCrouching(bool abCrouch) => Player.MoveState.SetCrouch(abCrouch);
 

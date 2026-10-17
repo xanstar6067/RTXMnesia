@@ -6,7 +6,7 @@
 
 ## Нужны для главы 1 (по частоте)
 
-Подготовка Justine (2026-10-17): `SetPlayerPermaDeathSound` — ✓, хранит выбранную .snt у игрока и переносит между картами. В режиме Justine смерть проигрывает её и завершает приложение без загрузки checkpoint; основной режим смерти сохранён. `StartCredits` и `AddKeyPart` — ✓ с 2026-10-17 (титры, CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы»). Проверки и границы: `justine/README.md`.
+Подготовка Justine (2026-10-17): `SetPlayerPermaDeathSound` — ✓, хранит выбранную .snt у игрока и переносит между картами. В режиме Justine смерть проигрывает её и завершает приложение без загрузки checkpoint; основной режим смерти сохранён. `StartCredits` и `AddKeyPart` — ✓ с 2026-10-17 (титры, CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры»). Проверки и границы: `justine/README.md`.
 
 | Функция | гл.1 | всего | Статус | Сигнатура |
 |---|---:|---:|:---:|---|
@@ -174,7 +174,7 @@
 | `StopPropMovement` | 5 | ✓ | `void StopPropMovement(string &in asName)` |
 | `StopAllEffectVoices` | 5 | ✓ | `void StopAllEffectVoices(float afFadeOutTime)` |
 | `SetLightFlickerActive` | 5 | ✓ | `void SetLightFlickerActive(string& asLightName, bool abActive)` |
-| `ChangePlayerStateToNormal` | 5 | — | `void ChangePlayerStateToNormal()` |
+| `ChangePlayerStateToNormal` | 5 | ✓ | `void ChangePlayerStateToNormal()` |
 | `AddPlayerBodyForce` | 5 | ✓ | `void AddPlayerBodyForce(float afX, float afY, float afZ, bool abUseLocalCoords)` |
 | `StartCredits` | 4 | ✓ | `void StartCredits(string &in asMusic, bool abLoopMusic, string &in asTextCat, string &in asTextEntry, int alEndNum)` |
 | `ShowEnemyPlayerPosition` | 4 | ✓ | `void ShowEnemyPlayerPosition(string &in asName)` |
@@ -218,9 +218,9 @@ GiveItemFromFile читает определения `.ent` из генерир�
 
 `InteractConnectPropWithRope` / `InteractConnectPropWithMoveObject` — ✓: порт `cLuxInteractConnection_Rope` / `_MoveObject` (мин. скорость −|x|, макс. |x|). Верёвки областей Rope работают сами (`cLuxRope`); `CreateRope` пуст, как в оригинале (тело функции закомментировано). `AttachBodyToStickyArea`, `DetachFromStickyArea`, а также не вызываемые картами `AttachPropToStickyArea` и `SetAllowStickyAreaAttachment` — ✓ (`cLuxArea_Sticky`). Области SlimeDamage наносят урон сами. Подробности — CLAUDE.md «Верёвки, связи, липкие зоны, слизь».
 
-## Титры, NPC, анимации и прикреплённые пропы
+## Титры, NPC, анимации, прикреплённые пропы и критеры
 
-`StartCredits` — ✓: порт `cLuxCredits` (контейнер Credits: карта стоит, песня напрямую через `cMusicHandler`, прокрутка, «Конец» с кодом концовки, возврат в главное меню со сбросом игры). `AddKeyPart` — ✓: части ключа хранятся, их проверка в HPL2 закомментирована. `SetNPCAwake`, `SetNPCFollowPlayer` — ✓ (`cLuxProp_NPC`: пробуждение / сон, поворот головы к игроку в области). `PlayPropAnimation` — ✓ (`iLuxProp::PlayAnimation`, коллбэк неповторяющейся анимации). `AttachPropToProp`, `AddAttachedPropToProp` (устаревшая: передаёт fRotZ как z позиции — сохранено), `RemoveAttachedPropFromProp` — ✓ (`iLuxProp::AddAndAttachProp`). Подробности — CLAUDE.md «Титры, NPC, анимации и прикреплённые пропы».
+`StartCredits` — ✓: порт `cLuxCredits` (контейнер Credits: карта стоит, песня напрямую через `cMusicHandler`, прокрутка, «Конец» с кодом концовки, возврат в главное меню со сбросом игры). `AddKeyPart` — ✓: части ключа хранятся, их проверка в HPL2 закомментирована. `SetNPCAwake`, `SetNPCFollowPlayer` — ✓ (`cLuxProp_NPC`: пробуждение / сон, поворот головы к игроку в области). `PlayPropAnimation` — ✓ (`iLuxProp::PlayAnimation`, коллбэк неповторяющейся анимации). `AttachPropToProp`, `AddAttachedPropToProp` (устаревшая: передаёт fRotZ как z позиции — сохранено), `RemoveAttachedPropFromProp` — ✓ (`iLuxProp::AddAndAttachProp`). Подробности — CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры».
 
 ## Журнал
 
