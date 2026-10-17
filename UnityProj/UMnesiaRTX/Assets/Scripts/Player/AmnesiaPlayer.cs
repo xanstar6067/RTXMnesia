@@ -983,11 +983,14 @@ namespace RTXMnesia.Player
         /// </summary>
         public void SetCurrentHandObjectDrawn(bool drawn) { }
 
-        public void SetSanity(float x) => sanity = x;
+        bool SanityDisabled => ScriptApi.HplMap.Current != null && ScriptApi.HplMap.Current.disableInsanity;
+
+        public void SetSanity(float x) => sanity = SanityDisabled ? 100f : x;
 
         /// <summary>cLuxPlayer::AddSanity: capped at 100, below 0 starts the insanity collapse.</summary>
         public void AddSanity(float x, bool showEffect = true)
         {
+            if (SanityDisabled) { sanity = 100f; return; }
             if (sanity >= 100f && x > 0f) return;
             sanity = Mathf.Min(100f, sanity + x);
             if (sanity < 0f)
@@ -1001,6 +1004,7 @@ namespace RTXMnesia.Player
         /// <summary>cLuxPlayer::GiveSanityDamage: hint and hit effect, then <see cref="LowerSanity"/>.</summary>
         public void GiveSanityDamage(float amount)
         {
+            if (SanityDisabled) return;
             SanityHit?.Invoke();
             LowerSanity(amount, true);
             SanityHelper?.StartHit();
@@ -1014,6 +1018,7 @@ namespace RTXMnesia.Player
 
         public void LowerSanity(float amount, bool useEffect)
         {
+            if (SanityDisabled) return;
             if (health <= 0f) return;
             sanity -= amount;
             if (sanity < 0f)

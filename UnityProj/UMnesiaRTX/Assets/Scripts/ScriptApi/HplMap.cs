@@ -51,6 +51,12 @@ namespace RTXMnesia.ScriptApi
         [Tooltip("Run the level script. Off: the level without its events.")]
         public bool runScript = true;
 
+        [Header("Development maps (off for normal gameplay)")]
+        public bool disableAutoSaves;
+        public bool disableInsanity;
+        public bool disableEnemyAI;
+        Dev.HplDevRoom _devRoom;
+
         public static HplMap Current { get; private set; }
 
         public HplScript Script { get; private set; }
@@ -185,6 +191,7 @@ namespace RTXMnesia.ScriptApi
         {
             if (_built) return;
             _built = true;
+            _devRoom = GetComponent<Dev.HplDevRoom>();
             Current = this;
             _level = GetComponent<AmnesiaLevel>();
             if (string.IsNullOrEmpty(mapFile) && _level != null) mapFile = _level.mapFile;
@@ -266,11 +273,17 @@ namespace RTXMnesia.ScriptApi
                         ? new RTXMnesia.Enemies.EnemyGrunt(entity)
                         : new RTXMnesia.Enemies.EnemyWaterLurker(entity);
                     enemy.Load(this);
+                    if (disableEnemyAI)
+                    {
+                        enemy.SetDisabled(true);
+                        enemy.SetSanityDecreaseActive(false);
+                    }
                     AddEntity(enemy);
                     _enemies.Add(enemy);
                     continue;
                 }
                 var prop = Props.PropFactory.Create(entity);
+                if (prop == null && _devRoom != null) prop = new Props.PropGeneric(entity, HplEntityType.Prop);
                 if (prop == null)
                 {
                     // cLuxStaticPropLoader: not a script entity, but its bodies (and joints) exist.
@@ -282,7 +295,8 @@ namespace RTXMnesia.ScriptApi
             }
             SetCharacterShapes();
             // iLuxEntity::AfterWorldLoad: the enemies' node containers, the ropes.
-            foreach (var enemy in _enemies) enemy.AfterWorldLoad();
+            if (!disableEnemyAI)
+                foreach (var enemy in _enemies) enemy.AfterWorldLoad();
             foreach (var rope in _ropes) rope.AfterWorldLoad(transform);
 
             InitFog();
@@ -313,6 +327,7 @@ namespace RTXMnesia.ScriptApi
                     if (!IsTemplate(r.transform)) renderers.Add(r);
                 WaterReflection = HplWaterReflection.Create(renderers, transform);
             }
+            _devRoom?.Initialize(this);
         }
 
         /// <summary>The water world reflection of this map (null: no such water or not in Play mode).</summary>
@@ -547,13 +562,14 @@ namespace RTXMnesia.ScriptApi
                 UpdateDissolveEntities(timeStep);
                 UpdateTimers(timeStep);
                 for (int i = 0; i < _entities.Count; i++)
-                    if (_entities[i].Active) _entities[i].UpdateLogic(timeStep);
+                    if (_entities[i].Active && (_devRoom == null || !_devRoom.PreviewOnly(_entities[i])))
+                        _entities[i].UpdateLogic(timeStep);
             }
 
             // cLuxPlayer::Update (its collide callbacks before the camera effects, the body moves later)
             if (player != null) player.StepLogic(timeStep, _checkPlayerCallbacks);
             // cLuxInsanityHandler::Update (the module after the player).
-            if (!menuBackground) Effects.HplInsanity.Update(this, timeStep);
+            if (!menuBackground && !disableInsanity) Effects.HplInsanity.Update(this, timeStep);
 
             hud.Step(timeStep);
             effects.Step(timeStep);

@@ -19,11 +19,14 @@ namespace RTXMnesia.Importer
     {
         static readonly Dictionary<string, bool> Skinned = new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Skinned models (Collada skin controller = HPL2 skeleton) still go through Unity's import.</summary>
+        /// <summary>Skinned and animated models go through Unity's import to preserve bones and animation bindings.</summary>
         public static bool UsesUnityImport(string daeAbsolute)
         {
             if (!Skinned.TryGetValue(daeAbsolute, out bool skinned))
-                Skinned[daeAbsolute] = skinned = ColladaInfo.Load(daeAbsolute).HasSkin;
+            {
+                var info = ColladaInfo.Load(daeAbsolute);
+                Skinned[daeAbsolute] = skinned = info.HasSkin || info.HasAnimation;
+            }
             return skinned;
         }
 

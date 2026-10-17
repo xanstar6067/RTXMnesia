@@ -21,6 +21,22 @@ namespace RTXMnesia.Importer
     public static class EnemyConverter
     {
         public const string AssetPath = AmnesiaPaths.ImportedAssetsRoot + "/Resources/" + HplEnemyAssets.ResourceName + ".asset";
+        static readonly Dictionary<string, bool> EmbeddedAnimations = new(StringComparer.OrdinalIgnoreCase);
+
+        internal static bool HasEmbeddedAnimation(ResourceIndex index, string ent)
+        {
+            var doc = new XmlDocument();
+            doc.Load(ent);
+            string reference = doc.DocumentElement.Child("ModelData")?.Child("Mesh")?.Str("Filename");
+            string dae = string.IsNullOrEmpty(reference) ? null : index.Find(reference, ent);
+            if (dae == null) return false;
+            if (EmbeddedAnimations.TryGetValue(dae, out bool result)) return result;
+            using var reader = XmlReader.Create(dae);
+            while (reader.Read())
+                if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "animation")
+                    return EmbeddedAnimations[dae] = true;
+            return EmbeddedAnimations[dae] = false;
+        }
 
         [MenuItem("Tools/RTXMnesia/Import/Enemies (animations, AI nodes)")]
         public static void ConvertBatch()
@@ -52,11 +68,13 @@ namespace RTXMnesia.Importer
             // The other entities with animations (NPC, Object, critters): the same data for the props' mesh animations
             // (cEntityLoader_Object plays the first one).
             string entitiesRoot = Path.Combine(AmnesiaPaths.SourceRoot, "entities");
-            foreach (string ent in Directory.EnumerateFiles(entitiesRoot, "*.ent", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            var animatedEntities = Directory.EnumerateFiles(entitiesRoot, "*.ent", SearchOption.AllDirectories)
+                .Concat(Directory.EnumerateFiles(Path.Combine(AmnesiaPaths.SourceRoot, "models"), "*.ent", SearchOption.AllDirectories));
+            foreach (string ent in animatedEntities.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
             {
                 if (Path.GetFullPath(ent).StartsWith(Path.GetFullPath(enemyRoot) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
                 string text = File.ReadAllText(ent);
-                if (!text.Contains("<Animations") || !text.Contains("<Animation ")) continue;
+                if (!text.Contains("<Animation ") && !HasEmbeddedAnimation(index, ent)) continue;
                 try
                 {
                     var animated = ConvertEnemy(index, ent, log, missingIsWarning: true);
@@ -130,8 +148,9 @@ namespace RTXMnesia.Importer
             doc.Load(ent);
             var modelData = doc.DocumentElement.Child("ModelData");
             var animations = modelData?.Child("Animations");
-            var enemy = new HplEnemyAssets.Enemy { name = Path.GetFileNameWithoutExtension(ent) };
-            if (animations == null) return enemy;
+            var enemy = new HplEnemyAssets.Enemy { name = Path.GetFileNameWithoutExtension(ent), sourceFile = AmnesiaPaths.ToSourceRelative(ent) };
+            bool embedded = animations == null || !animations.Children().Any();
+            if (embedded && !HasEmbeddedAnimation(index, ent)) return enemy;
 
             string mesh = modelData.Child("Mesh")?.Str("Filename") ?? "";
             string dae = index.Find(mesh, ent);
@@ -140,10 +159,23 @@ namespace RTXMnesia.Importer
                 log.Error($"{AmnesiaPaths.ToSourceRelative(ent)}: model '{mesh}' not found");
                 return enemy;
             }
+            if (embedded)
+            {
+                animations = doc.CreateElement("Animations");
+                var animation = doc.CreateElement("Animation");
+                animation.SetAttribute("Name", "Default");
+                animation.SetAttribute("File", AmnesiaPaths.ToSourceRelative(dae));
+                animation.SetAttribute("Speed", "1");
+                animations.AppendChild(animation);
+            }
             if (!ModelConverter.IsConverted(dae)) ModelConverter.ConvertModels(new[] { dae }, "Enemy model");
             ReadNodePaths(dae, enemy);
             string animFolder = Path.GetDirectoryName(ModelConverter.AssetPathFor(dae)).Replace('\\', '/') + "/animations";
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(animFolder));
+            // Different .ent variants can share one model but name different clips alike. Never replace another
+            // variant's clip (destroying its live asset reference), e.g. the four Justine suitors.
+            string clipsFolder = animFolder + "/" + Path.GetFileNameWithoutExtension(ent);
+            Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(clipsFolder));
 
             var list = new List<(XmlElement element, string asset)>();
             foreach (XmlElement a in animations.ChildNodes.OfType<XmlElement>())
@@ -153,6 +185,10 @@ namespace RTXMnesia.Importer
                 string source = Path.GetDirectoryName(file).Length <= 1
                     ? Path.Combine(Path.GetDirectoryName(ent), file)
                     : index.Find(file, ent);
+                if (source == null || !File.Exists(source)) source = index.Find(file, ent);
+                // Some shipped critter clips are Collada .dae files, while the entity still names .dae_anim.
+                if (source == null && Path.GetExtension(file) == ".dae_anim")
+                    source = index.Find(Path.ChangeExtension(file, ".dae"), ent);
                 if (source == null || !File.Exists(source))
                 {
                     string message = $"{AmnesiaPaths.ToSourceRelative(ent)}: animation file missing: {file}";
@@ -177,12 +213,24 @@ namespace RTXMnesia.Importer
                     log.Error($"{asset}: Unity imported no animation clip");
                     continue;
                 }
-                string clipPath = animFolder + "/" + name + ".anim";
+                if (source.length <= 0f)
+                {
+                    log.Warn($"{asset}: '{name}' has no animation frames; kept as a static specimen");
+                    continue;
+                }
+                string clipPath = clipsFolder + "/" + name + ".anim";
                 var clip = Object.Instantiate(source);
                 clip.name = name;
                 clip.legacy = true;
-                AssetDatabase.DeleteAsset(clipPath);
-                AssetDatabase.CreateAsset(clip, clipPath);
+                var existing = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath);
+                if (existing != null)
+                {
+                    EditorUtility.CopySerialized(clip, existing);
+                    Object.DestroyImmediate(clip);
+                    clip = existing;
+                    EditorUtility.SetDirty(clip);
+                }
+                else AssetDatabase.CreateAsset(clip, clipPath);
 
                 var anim = new HplEnemyAssets.Animation
                 {

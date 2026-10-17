@@ -81,6 +81,9 @@ namespace RTXMnesia.Ui
             if (_map == null || Menu == null || IsTransitioning || HplLoadScreen.Active || HplCredits.Active) return;
             if (!IsTitleScreen && (_map.player == null || !_map.player.readDevices)) return;
             var keyboard = Keyboard.current;
+            // An external input panel (dev_room's clip search) owns typing while gameplay keeps running.
+            if (!IsPaused && _map.player != null && _map.player.UiInputBlocked &&
+                (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame)) return;
             if (keyboard != null && RouteKeys(keyboard)) return;
             if (!IsPaused) return;
 

@@ -39,6 +39,7 @@ namespace RTXMnesia.Enemies
         {
             [Tooltip(".ent file name without extension, e.g. servant_grunt.")]
             public string name;
+            public string sourceFile;
             public List<Animation> animations = new();
             [Tooltip("Collada node ids (HPL2's bone names) and the paths of node names under the model (Unity's objects).")]
             public List<string> nodeIds = new(), nodePaths = new();
@@ -93,6 +94,11 @@ namespace RTXMnesia.Enemies
 
         public Enemy GetEnemy(string entFile)
         {
+            string path = (entFile ?? "").Replace('\\', '/');
+            var exact = enemies.Find(e => string.Equals(e.sourceFile, path, StringComparison.OrdinalIgnoreCase));
+            if (exact != null) return exact;
+            // Keep old generated banks usable, but never substitute a different full path in a current bank.
+            if (path.Contains("/") && enemies.Exists(e => !string.IsNullOrEmpty(e.sourceFile))) return null;
             string name = System.IO.Path.GetFileNameWithoutExtension(entFile ?? "");
             return enemies.Find(e => string.Equals(e.name, name, StringComparison.OrdinalIgnoreCase));
         }

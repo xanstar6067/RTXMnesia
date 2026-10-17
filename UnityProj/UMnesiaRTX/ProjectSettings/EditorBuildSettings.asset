@@ -15,6 +15,9 @@ EditorBuildSettings:
     path: Assets/AmnesiaImported/Levels/main_menu/ptest/ptest_menu.unity
     guid: f5edd03594d92434a8551ed14e0b0bb7
   - enabled: 1
+    path: Assets/AmnesiaImported/Levels/maps/dev/dev_room.unity
+    guid: 316635b52c944bb4c938160d2a03da1f
+  - enabled: 1
     path: Assets/AmnesiaImported/Levels/maps/main/ch01/01_old_archives.unity
     guid: 57e844d6906a27b4d90e52e02b306951
   - enabled: 1

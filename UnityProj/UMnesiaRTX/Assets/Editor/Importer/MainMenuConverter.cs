@@ -57,6 +57,12 @@ namespace RTXMnesia.Importer
             // so a fresh checkout / another build profile starts at the same title screen.
             EditorBuildSettings.globalScenes = scenes.ToArray();
             EditorBuildSettings.scenes = scenes.ToArray();
+            var profile = UnityEditor.Build.Profile.BuildProfile.GetActiveBuildProfile();
+            if (profile != null && profile.overrideGlobalScenes)
+            {
+                profile.scenes = scenes.ToArray();
+                EditorUtility.SetDirty(profile);
+            }
             AssetDatabase.SaveAssets();
         }
     }

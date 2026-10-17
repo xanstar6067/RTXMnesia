@@ -121,6 +121,7 @@ namespace RTXMnesia.Effects
         /// <summary>cLuxInsanityHandler::StartEvent(): a random unused event of an enabled set within the sanity.</summary>
         public static void StartEvent(HplMap map)
         {
+            if (map.disableInsanity) return;
             EnsureLoaded(map.gameConfig);
             if (_events.Count == 0) return;
             float sanity = map.player != null ? map.player.sanity : 100f;
@@ -165,6 +166,7 @@ namespace RTXMnesia.Effects
         /// <summary>cLuxInsanityHandler::StartEvent(index).</summary>
         public static void StartEvent(HplMap map, int index)
         {
+            if (map.disableInsanity) return;
             EnsureLoaded(map.gameConfig);
             if (CurrentEventIndex >= 0) _events[CurrentEventIndex].OnExit();
             CurrentEventIndex = index;
@@ -174,6 +176,7 @@ namespace RTXMnesia.Effects
         /// <summary>cLuxInsanityHandler::StartEvent(name): the first event of that name; unknown names do nothing.</summary>
         public static void StartEvent(HplMap map, string name)
         {
+            if (map.disableInsanity) return;
             EnsureLoaded(map.gameConfig);
             int index = _events.FindIndex(e => e.Name == name);
             if (index < 0) return;
@@ -191,6 +194,7 @@ namespace RTXMnesia.Effects
         /// <summary>cLuxInsanityHandler::NewEventIsPossible: no wait left, sanity ≤ MaxSanity_LongWait, no event.</summary>
         public static bool NewEventIsPossible(HplMap map)
         {
+            if (map.disableInsanity) return false;
             EnsureLoaded(map.gameConfig);
             float sanity = map.player != null ? map.player.sanity : 100f;
             return NewEventCount <= 0f && sanity <= _maxSanityLongWait && CurrentEventIndex < 0;

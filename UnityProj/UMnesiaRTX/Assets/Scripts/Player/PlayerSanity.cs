@@ -69,6 +69,12 @@ namespace RTXMnesia.Player
 
         public void Update(float timeStep)
         {
+            if (HplMap.Current != null && HplMap.Current.disableInsanity)
+            {
+                _player.SetSanity(100f);
+                if (Effects != null) Effects.Insanity.Active = false;
+                return;
+            }
             _t += timeStep;
             _hitIsUpdated = false;
             _sanityLostIsUpdated = false;

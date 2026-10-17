@@ -74,7 +74,7 @@ namespace RTXMnesia.Save
         /// <summary>cLuxSaveHandler::AutoSave: the oldest saves over the limit go, then a new auto save. Not in hard mode.</summary>
         public static string AutoSave(HplMap map)
         {
-            if (map == null || map.menuBackground || map.player == null) return null;
+            if (map == null || map.menuBackground || map.player == null || map.disableAutoSaves) return null;
             string folder = Folder(map.Campaign);
             int max = map.gameConfig != null ? map.gameConfig.GetInt("Saving", "MaxAutoSaves", 20) : 20;
             DeleteOldestSaveFiles(folder, max);

@@ -101,6 +101,14 @@ namespace RTXMnesia.Importer
             return converter.ScenePath;
         }
 
+        /// <summary>Our generated test maps use the same resource and entity pipeline as game maps.</summary>
+        internal static string ConvertGenerated(XmlDocument document, string mapRelative, Action<GameObject> finish)
+        {
+            var converter = new LevelConverter(Path.Combine(AmnesiaPaths.SourceRoot, mapRelative));
+            converter.Run(document, finish);
+            return converter.ScenePath;
+        }
+
         /// <summary>
         /// .ent files outside any map (the player's hands and hand objects): built like map entities at the origin
         /// (model, lights, billboards, particles, sounds), saved as one prefab with its generated meshes next to it.
@@ -141,10 +149,10 @@ namespace RTXMnesia.Importer
             return prefab;
         }
 
-        void Run()
+        void Run(XmlDocument document = null, Action<GameObject> finish = null)
         {
-            var doc = new XmlDocument();
-            doc.Load(_mapAbsolute);
+            var doc = document ?? new XmlDocument();
+            if (document == null) doc.Load(_mapAbsolute);
             var mapData = doc.DocumentElement.Child("MapData") ?? throw new InvalidDataException("No MapData element");
             var contents = mapData.Child("MapContents") ?? throw new InvalidDataException("No MapContents element");
 
@@ -209,6 +217,7 @@ namespace RTXMnesia.Importer
             BuildEntityTemplates(root.transform, entities);
             BuildEnvironment(mapData, root.transform);
             BuildScriptRuntime(root);
+            finish?.Invoke(root);
 
             AssetDatabase.SaveAssets();
             EditorSceneManager.MarkSceneDirty(scene);
@@ -804,7 +813,7 @@ namespace RTXMnesia.Importer
 
         /// <summary>
         /// EntityLoader_Object.cpp: a body per &lt;Body&gt; with its shapes (a body without shapes is skipped with an
-        /// error, a shape belongs to the first body that lists it). Colliders get the body's physics material.
+        /// warning, a shape belongs to the first body that lists it). Colliders get the body's physics material.
         /// </summary>
         List<(HplEntityFile.Body data, AmnesiaBody body)> BuildEntityBodies(HplEntityFile ent, Transform parent, Vector3 scale)
         {
@@ -822,7 +831,7 @@ namespace RTXMnesia.Importer
                 }
                 if (shapes.Count == 0)
                 {
-                    _log.Error($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: no shapes found for body '{body.Name}'");
+                    _log.Warn($"{AmnesiaPaths.ToSourceRelative(ent.Path)}: no shapes found for body '{body.Name}' (skipped)");
                     continue;
                 }
 
@@ -1489,7 +1498,7 @@ namespace RTXMnesia.Importer
             if (!_menuBackground) CommentaryConverter.Convert(_log);
             if (!_menuBackground) EnemyConverter.Convert(_index, _log);
             if (!_menuBackground) InsanityConverter.Convert(_index, _log);
-            if (!_menuBackground) RopeConverter.Convert(_index, _log, new[] { _mapAbsolute });
+            if (!_menuBackground && File.Exists(_mapAbsolute)) RopeConverter.Convert(_index, _log, new[] { _mapAbsolute });
 
             var sound = root.AddComponent<RTXMnesia.Sound.HplSoundHandler>();
             sound.bank = SoundConverter.Convert(_log, map.language);

@@ -68,11 +68,15 @@ namespace RTXMnesia.EditorDev
                   "Awake=false: SleepIdle looped (no effects), Idle faded out");
             var neck = FindBone(npc.AnimatedModel.transform, "CenterNeck");
             check(neck != null, "head bone CenterNeck found");
+            // SleepIdle holds its opening pose for over 3 s; sample its moving middle, not that hold.
+            sleepIdle.SetTimePosition(sleepIdle.Length * 0.4f);
+            npc.Animation.Update(0f, null);
             var bones = npc.AnimatedModel.GetComponentInChildren<SkinnedMeshRenderer>().bones.Where(b => b != null).ToArray();
             var before = bones.Select(b => b.localRotation).ToArray();
+            float poseTime = sleepIdle.TimePosition;
             Step(map, 0.7f);
             float moved = bones.Select((b, k) => Quaternion.Angle(before[k], b.localRotation)).Max();
-            check(moved > 0.01f, $"the skeleton is posed by SleepIdle (largest bone turn {moved:0.00}° in 0.7 s)");
+            check(moved > 0.01f, $"the skeleton is posed by SleepIdle (largest bone turn {moved:0.00}° in 0.7 s; active {npc.Active}, time {poseTime:0.00} → {sleepIdle.TimePosition:0.00}, model {npc.AnimatedModel.name})");
 
             CallScript(map, "SetNPCAwake", "agrippa_2", true, true);
             var awake = npc.Animation.Get("Awake");
