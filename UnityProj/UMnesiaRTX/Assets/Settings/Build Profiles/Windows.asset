@@ -31,7 +31,7 @@ MonoBehaviour:
   - m_enabled: 1
     m_path: Assets/AmnesiaImported/Levels/main_menu/ptest/ptest_menu.unity
     m_guid: f5edd03594d92434a8551ed14e0b0bb7
-  - m_enabled: 1
+  - m_enabled: 0
     m_path: Assets/AmnesiaImported/Levels/maps/dev/dev_room.unity
     m_guid: 316635b52c944bb4c938160d2a03da1f
   - m_enabled: 1
