@@ -334,7 +334,8 @@ namespace RTXMnesia.Ui
                 Add("ExitToMainMenu", "В главное меню", MenuControl.ReturnTitle);
                 // Not in Justine (mbPTestActivated), for a dead player or in hard mode.
                 if ((_map.player == null || !_map.player.IsDead) && !extras.hardModeSave && !justine) Add("ExitAndSave", "Сохранить и выйти", MenuControl.ExitAndSave);
-                Add("Exit", "Выход", MenuControl.Quit);
+                // No quit-the-application entry in the game menu: cLuxMainMenu adds "Exit" only without a map (or with
+                // Main ExitMenuDirectly, off by default); the application is quit from the title screen.
             }
             float maxWidth = 0;
             foreach (var label in labels) maxWidth = Mathf.Max(maxWidth, _menuText.font != null ? _menuText.font.GetLength(size, label) : 0);
