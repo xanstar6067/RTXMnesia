@@ -34,9 +34,9 @@ Shader "Hidden/RTXMnesia/HplBoxLight"
             float4 _HplBoxColor[MAX_BOXES];   // HPL2 (gamma) color
             float _HplUnitRadiance;
             // Ray-traced ambient occlusion (HplRayTracing.Ao): HPL2 multiplies the box lights by its SSAO. HDRP keeps
-            // the AO of this frame bound globally after the lighting passes; stored inverted (0 = no occlusion).
+            // the AO of this frame bound globally after the lighting passes (_AmbientOcclusionTexture, declared by the HDRP
+            // includes); stored inverted (0 = no occlusion).
             float _HplBoxAo;
-            TEXTURE2D_X(_AmbientOcclusionTexture);
 
             TEXTURE2D(_BaseColorMap);
             SAMPLER(sampler_BaseColorMap);
