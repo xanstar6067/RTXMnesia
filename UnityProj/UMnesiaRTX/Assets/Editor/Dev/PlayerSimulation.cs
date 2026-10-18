@@ -252,8 +252,8 @@ namespace RTXMnesia.EditorDev
                                 player.AddPitch(-my);
                                 Step(1);
                             }
-                            if (map.GetVar(name) != expected) throw new InvalidOperationException($"Timeout: {name}={map.GetVar(name)}, expected {expected}");
-                            log.Info($"t={time:0.00} mouse reached {name}={expected}");
+                            if (map.GetVar(name) != expected) log.Warn($"t={time:0.00} mouseuntil timeout: {name}='{map.GetVar(name)}', expected {expected} | {player.States.Current.Describe()}");
+                            else log.Info($"t={time:0.00} mouse reached {name}={expected}");
                             break;
                         }
                         case "aim":

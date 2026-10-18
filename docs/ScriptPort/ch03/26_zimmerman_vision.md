@@ -34,7 +34,7 @@
 - Отдельная диагностика прошла состояния 0–10 с точечным снятием TimerMainEvents после каждого шага и сбросом callback голосов между состояниями; OnLeave вызван отдельно. Она не считается межкартовым переходом. Состояние 11 переносит в NaveRedux, PlayerStartArea_AfterVision.
 - Никаких AutoSave/CheckPoint в исходнике нет, они не добавлены.
 - PreloadSound — пустой API. ChangeMap и HplSavedMaps реализованы; CreateDataCache/DestroyDataCache в соседней карте пока ничего не делают.
-- Аудит выявил реальные расхождения матриц ground road/forest, а не missing SkinnedMeshRenderer. Геометрия мешей совпадает с MSH, но размещение этих двух частей требует отдельной задачи импортёра. Общий аудит не PASS.
+- Аудит выявил реальные расхождения матриц ground road/forest, а не missing SkinnedMeshRenderer. Причина: оригинал рисует кэш `.msh` (`ForceCacheLoadingAndSkipSaving` = true, `LuxConfigHandler.cpp:73`), а `.msh` у `zimmarman_ground.dae` записан другой версией загрузчика Collada (знак X узловых сдвигов Z_UP). С 2026-10-18 сборщик ставит подмеш по матрице `.msh`, если вершины совпадают (`HplModelBuilder.ApplyMeshCache`, CLAUDE.md «Кэш `.msh`»); аудит проходит (ниже).
 
 Общие изменения синтаксиса: string &in / string & → string; десятичные литералы → float с f; существующие статические callback-имена → nameof, динамические/пустые/необъявленные остаются строками. Порядок вызовов, исходные литералы, ветви и комментарии сохранены. API/инвентарь/импортёр в этой задаче не исправлялись. Статическая проверка нашла все имена API и совместимые сигнатуры; наличие объявления не означает реализованную механику.
 
@@ -62,9 +62,9 @@
 | `Ch03_Import_26_zimmerman_vision.log/.txt` | ExitCode 0; 3 warnings, 0 errors |
 | `Ch03_Sim_26_zimmerman_events.log/.txt` | ExitCode 0; 0 warnings, 0 errors |
 | `Ch03_Sim_26_zimmerman_start.log/.txt` | ExitCode 0; 0 warnings, 0 errors |
-| `Ch03_Audit_26_zimmerman_vision.log/.txt` | **ExitCode 1, общий аудит не PASS**: Models=21, submeshes=24, geometryFailures=0, prefabMatrixDifferences=2, missingCaches=0, maxVertexError=0, maxPrefabMatrixError=3,11688; Scene: instances=191, submeshMatrices=193, sharedMeshColliders=18, failures=2, maxMatrixError=3,8961; Resource regression: checks=471, failures=0 |
+| `Ch03_Audit_26_zimmerman_vision.log/.txt` | **ExitCode 1, общий аудит не PASS** (до исправления 2026-10-18, повторный — PASS, см. ниже): Models=21, submeshes=24, geometryFailures=0, prefabMatrixDifferences=2, missingCaches=0, maxVertexError=0, maxPrefabMatrixError=3,11688; Scene: instances=191, submeshMatrices=193, sharedMeshColliders=18, failures=2, maxMatrixError=3,8961; Resource regression: checks=471, failures=0 |
 
-Два placement failure road/forest у special_zimmarman_ground_1 — реальная разница матриц до 3.8961, связанная с матрицами модели (prefab max 3.11688). Это остаётся задачей импортёра; скрипт карты её не исправляет.
+Два placement failure road/forest у special_zimmarman_ground_1 — реальная разница матриц до 3.8961, связанная с матрицами модели (prefab max 3.11688). Исправлено в импортёре 2026-10-18 (см. выше). Повторный аудит 2026-10-18 (`HplMeshAudit.Run -amnesiaMap maps/main/ch03/26_zimmerman_vision.map`, ExitCode 0): Models=21, submeshes=24, geometryFailures=0, prefabMatrixDifferences=0, maxPrefabMatrixError=1.2e-7; Scene: instances=191, submeshMatrices=193, failures=0, maxMatrixError=4.3e-6; Resource regression: checks=471, failures=0. Серое «небо» в кадрах — подмеш `Scene_Root` модели земли (оболочка вокруг сцены), HPL2 его тоже затуманивает областями тумана карты.
 
 ### Точные диагностические fixtures
 
