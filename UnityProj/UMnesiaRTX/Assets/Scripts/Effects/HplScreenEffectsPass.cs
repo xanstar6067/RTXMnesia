@@ -18,7 +18,7 @@ namespace RTXMnesia.Effects
     public class HplScreenEffectsPass : CustomPass
     {
         public const string ShaderName = "Hidden/RTXMnesia/HplScreenEffects";
-        const int CopyPass = 0, TrailPass = 1, CompositePass = 2, InsanityPass = 7, GammaPass = 8;
+        const int CopyPass = 0, TrailPass = 1, CompositePass = 2, InsanityPass = 7, GammaPass = 8, HdrDisplayPass = 10;
 
         public Shader shader;
         [NonSerialized] public HplEffects effects;
@@ -83,7 +83,7 @@ namespace RTXMnesia.Effects
                 ReleaseMenu();
             }
             // HDRP's AfterPostProcess custom pass sees linear display-gamut nits. The final blit encodes it.
-            _material.SetVector("_HplEffectHdr", new Vector4(hdr ? 1 : 0, Hpl.HplHdr.PaperWhite, Hpl.HplHdr.Peak, 0));
+            _material.SetVector("_HplEffectHdr", new Vector4(hdr ? 1 : 0, Hpl.HplHdr.PaperWhite, Hpl.HplHdr.Peak, Hpl.HplHdr.DisplayGamma));
             if (hdr && HDROutputUtils.GetColorSpaceForGamut(HDROutputSettings.main.displayColorGamut, out int gamut))
                 _material.SetInteger("_HDRColorspace", gamut);
             RenderEffects(ctx);
@@ -99,6 +99,16 @@ namespace RTXMnesia.Effects
                 props.SetFloat(GammaId, gamma);
                 CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
                 CoreUtils.DrawFullScreen(ctx.cmd, _material, props, GammaPass);
+            }
+            if (hdr && Hpl.HplHdr.DisplayGamma > 0f)
+            {
+                // Last: the HPL2 display curve (pure power below paper white) instead of the piecewise sRGB decode.
+                var props = ctx.propertyBlock;
+                CoreUtils.SetRenderTarget(ctx.cmd, _source, ClearFlag.None);
+                CoreUtils.DrawFullScreen(ctx.cmd, _material, props, CopyPass);
+                props.SetTexture(SourceId, _source);
+                CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
+                CoreUtils.DrawFullScreen(ctx.cmd, _material, props, HdrDisplayPass);
             }
             RenderCalibration(ctx);
         }

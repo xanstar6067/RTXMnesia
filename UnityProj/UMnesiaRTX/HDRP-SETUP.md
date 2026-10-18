@@ -44,3 +44,7 @@ scene as a release player in `Logs/HdrStartup/Player`. Run `HdrStartup.exe -batc
 to check title UI creation, the playing menu music source and HDR options on an unsupported display.
 The probe is included only with `RTXMNESIA_STARTUP_TEST`, writes `StartupResult.txt` and exits.
 This does not verify HDR luminance, physical display output or the unfinished shader readback test.
+
+## HDR display curve
+
+In HDR output HDRP does not tonemap: it multiplies the linear buffer by paper white and only range-reduces (BT2390). HPL2's values were written to a gamma ~2.2 monitor, so the piecewise sRGB decode lifts dark tones several times (code 0.05: 0.0039 vs 0.0014) and black fog / unlit shadows turn grey. `HplScreenEffectsPass` ends with an "HDR display" pass that decodes values below paper white as a pure power (`HplHdr.DisplayGamma`, 2.2; 0 = off) and leaves highlights unchanged. SDR is untouched. Check: `RTXMnesia.EditorDev.HdrTests.RunRenderBatch` (GPU readback, no `-nographics`).

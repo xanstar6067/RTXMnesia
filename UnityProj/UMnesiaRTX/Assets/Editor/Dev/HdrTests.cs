@@ -46,7 +46,7 @@ namespace RTXMnesia.EditorDev
                 var copy = JsonUtility.FromJson<HplUserSettings>(JsonUtility.ToJson(settings));
                 Check(copy.hdrMode == 2 && copy.hdrPeak == 5000 && copy.hdrPaperWhite == 80 && copy.hdrBlack == 0.1f, "JSON round trip");
                 Menu(render);
-                if (render) ShaderReadback();
+                if (render) { DisplayCurve(); ShaderReadback(); }
                 File.WriteAllText(Folder + "/Result.txt", $"PASS: {s_checks} HDR checks; GPU={render}. Physical HDR output requires a display check.\n");
                 Debug.Log($"[HdrTests] PASS: {s_checks} checks; GPU={render}");
                 if (Application.isBatchMode) EditorApplication.Exit(0);
@@ -179,10 +179,49 @@ namespace RTXMnesia.EditorDev
             UnityEngine.Object.DestroyImmediate(material);
         }
 
+        static float SrgbToLinear(float v) => v <= 0.04045f ? v / 12.92f : Mathf.Pow((v + 0.055f) / 1.055f, 2.4f);
+
+        static void DisplayCurve()
+        {
+            var material = Material();
+            var source = new Texture2DArray(8, 8, 1, TextureFormat.RGBAFloat, false, true);
+            try
+            {
+                HDROutputUtils.GetColorSpaceForGamut(ColorGamut.sRGB, out int gamut);
+                material.SetInteger("_HDRColorspace", gamut);
+                var colors = new Color[64];
+                // HDR display curve (pass 10): sRGB values in, nits out; pure power below paper white, piecewise above.
+                float[] values = { 0.0f, 0.02f, 0.061f, 0.2f, 0.5f, 1.0f, 1.4f, 1.8f };
+                for (int i = 0; i < 64; i++) { float v = values[i % 8]; colors[i] = new Color(v, v, v, 1); }
+                source.SetPixels(colors, 0); source.Apply();
+                material.SetTexture("_HplSource", source);
+                material.SetVector("_HplEffectHdr", new Vector4(1, 160, 1000, 2.2f));
+                var display = Draw(material, 10, 8, 8);
+                for (int x = 0; x < 8; x++)
+                {
+                    float v = values[x];
+                    float expected = 160f * (v <= 1f ? Mathf.Pow(v, 2.2f) : Mathf.Pow((v + 0.055f) / 1.055f, 2.4f));
+                    float actual = display.GetPixel(x, 4).r;
+                    Check(Mathf.Abs(actual - expected) < 0.002f + expected * 0.003f, $"HDR display curve at {v}: {actual} nits, expected {expected}");
+                }
+                Check(display.GetPixel(2, 4).r < 160f * SrgbToLinear(0.061f) * 0.5f, "HDR display curve darkens the toe against the piecewise decode");
+                UnityEngine.Object.DestroyImmediate(display);
+                material.SetVector("_HplEffectHdr", new Vector4(1, 160, 1000, 0));
+                var piecewise = Draw(material, 10, 8, 8);
+                Check(Mathf.Abs(piecewise.GetPixel(2, 4).r - 160f * SrgbToLinear(0.061f)) < 0.002f, "display gamma 0 keeps the piecewise decode");
+                UnityEngine.Object.DestroyImmediate(piecewise);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+                UnityEngine.Object.DestroyImmediate(source);
+            }
+        }
+
         static void ShaderReadback()
         {
             var material = Material();
-            var source = new Texture2D(8, 8, TextureFormat.RGBAFloat, false, true);
+            var source = new Texture2DArray(8, 8, 1, TextureFormat.RGBAFloat, false, true);
             try
             {
                 material.SetVector("_HplEffectHdr", new Vector4(1, 160, 1000, 0));
@@ -193,7 +232,7 @@ namespace RTXMnesia.EditorDev
                 // Match Color.hlsl's extended sRGB transfer, not Mathf's >1 gamma-2.2 approximation.
                 float encoded = 1.055f * Mathf.Pow(4, 1f / 2.4f) - 0.055f;
                 for (int i = 0; i < colors.Length; i++) colors[i] = new Color(encoded, encoded, encoded, 1);
-                source.SetPixels(colors); source.Apply();
+                source.SetPixels(colors, 0); source.Apply();
                 material.SetTexture("_HplSource", source);
                 material.SetFloat("_HplFade", 0);
                 material.SetFloat("_HplSepia", 0);

@@ -69,6 +69,20 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
         return float4(SRGBToLinear(pow(saturate(color), 1.0 / max(_HplGamma, 0.01))), 1.0);
     }
 
+    // Last HDR step. The scene reaches here as linear nits; Copy turned it into sRGB values (what the SDR path shows).
+    // HPL2 wrote those values straight to a gamma ~2.2 monitor, but the HDR output decodes with the piecewise sRGB
+    // curve, which is several times brighter in the darks (code 0.05: 0.0039 vs 0.0014, 0.02: 0.0015 vs 0.00018) and
+    // turns black fog and unlit shadows into a grey haze. Below paper white the values are decoded as a pure power
+    // (_HplEffectHdr.w, 0 = off); above it (highlights) the piecewise decode stays, so the curves meet at 1.
+    float4 HdrDisplayFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float3 encoded = max(LoadSource(int2(v.positionCS.xy)), 0);
+        float3 power = pow(encoded, max(_HplEffectHdr.w, 0.001));
+        float3 linearValue = lerp(SRGBToLinear(encoded), power, step(encoded, 1.0) * step(0.001, _HplEffectHdr.w));
+        return float4(min(max(RotateRec709ToOutputSpace(linearValue) * _HplEffectHdr.y, 0), _HplEffectHdr.z), 1.0);
+    }
+
     float4 CopyFrag(Varyings v) : SV_Target
     {
         UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
@@ -307,6 +321,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment CalibrationFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "HDR display"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment HdrDisplayFrag
             ENDHLSL
         }
     }

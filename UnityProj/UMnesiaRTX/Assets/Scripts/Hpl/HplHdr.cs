@@ -46,6 +46,12 @@ namespace RTXMnesia.Hpl
                 catch (System.InvalidOperationException) { return false; }
             }
         }
+        /// <summary>
+        /// Exponent that turns HPL2's screen values into HDR luminance below paper white (<c>HplScreenEffects.shader</c>,
+        /// "HDR display"). HPL2 wrote the values to a gamma 2.2 monitor; HDR output decodes with the piecewise sRGB
+        /// curve, which lifts the darks several times and makes black fog and shadows grey. 0 = piecewise decode.
+        /// </summary>
+        public static float DisplayGamma { get; set; } = 2.2f;
         public static float PaperWhite => s_settings.hdrPaperWhite;
         public static float Peak => s_settings.hdrPeak;
         public static float Black => s_settings.hdrBlack;
