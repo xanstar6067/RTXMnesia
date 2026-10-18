@@ -37,6 +37,8 @@ namespace RTXMnesia.Importer
     /// </summary>
     public class LevelConverter
     {
+        // A bulk repair imports the shared animation bank once before rebuilding all maps.
+        internal static bool ReuseAnimationBank { get; set; }
         public const string LevelsRoot = AmnesiaPaths.ImportedAssetsRoot + "/Levels";
 
         // Spots without a gobo use the "short fade" falloff over the cone: full strength until ~80% of the angle.
@@ -1518,7 +1520,7 @@ namespace RTXMnesia.Importer
             HudEffectsConverter.Convert(_log);
             if (_menuBackground) PreMenuConverter.Convert(_index, _log);
             if (!_menuBackground) CommentaryConverter.Convert(_log);
-            if (!_menuBackground) EnemyConverter.Convert(_index, _log);
+            if (!_menuBackground && !ReuseAnimationBank) EnemyConverter.Convert(_index, _log);
             if (!_menuBackground) InsanityConverter.Convert(_index, _log);
             if (!_menuBackground && File.Exists(_mapAbsolute)) RopeConverter.Convert(_index, _log, new[] { _mapAbsolute });
 

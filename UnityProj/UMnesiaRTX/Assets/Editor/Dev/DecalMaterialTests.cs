@@ -32,6 +32,12 @@ namespace RTXMnesia.EditorDev
 
         static void Surface(Material m)
         {
+            if (m != null && m.shader.name == "HDRP/Lit" && m.GetFloat("_SurfaceType") == 1)
+            {
+                Check(m.GetFloat("_EnableBlendModePreserveSpecularLighting") == 0,
+                      m.name + ": transparent specular follows alpha (including alpha zero)");
+                return;
+            }
             Check(m != null && m.shader.name == "HDRP/Decal", "HDRP decal: " + m?.name);
             Check(m.GetFloat("_AffectMetal") == 0 && m.GetFloat("_AffectSmoothness") == 0 &&
                   m.GetFloat("_AffectAO") == 0 && !m.IsKeywordEnabled("_MATERIAL_AFFECTS_MASKMAP") &&
@@ -48,6 +54,15 @@ namespace RTXMnesia.EditorDev
             return (Material)method.Invoke(null, new object[] { texture });
         }
 
+        static Material CreateTransparent(Texture2D albedo, string blend = "Alpha")
+        {
+            var method = typeof(MaterialConverter).GetMethod("CreateMaterial", BindingFlags.Static | BindingFlags.NonPublic);
+            var source = new AmnesiaMaterial { SourcePath = Path.Combine(AmnesiaPaths.SourceRoot, "test.mat"),
+                Type = AmnesiaMaterial.Kind.Translucent, BlendMode = blend };
+            Func<TextureRole, Texture2D> texture = role => role == TextureRole.Albedo ? albedo : null;
+            return (Material)method.Invoke(null, new object[] { source, texture, new ImportLog() });
+        }
+
         static IEnumerable<Material> LevelCopies()
         {
             string root = AmnesiaPaths.ImportedAssetsRoot + "/Levels";
@@ -55,7 +70,7 @@ namespace RTXMnesia.EditorDev
             {
                 string path = root + "/" + Path.GetRelativePath(AmnesiaPaths.ToAbsolute(root), file).Replace('\\', '/');
                 foreach (var m in AssetDatabase.LoadAllAssetsAtPath(path).OfType<Material>())
-                    if (m.shader.name == "HDRP/Decal") yield return m;
+                    if (m.shader.name == "HDRP/Decal" || (m.shader.name == "HDRP/Lit" && m.GetFloat("_SurfaceType") == 1)) yield return m;
             }
         }
 
@@ -89,14 +104,26 @@ namespace RTXMnesia.EditorDev
                         finally { Object.DestroyImmediate(m); }
                     }
 
+                foreach (string blend in new[] { "Alpha", "PremulAlpha" })
+                {
+                    var m = CreateTransparent(texture, blend);
+                    try
+                    {
+                        Surface(m);
+                        Check(m.GetFloat("_BlendMode") == (blend == "Alpha" ? 0 : 4), blend + ": original blend mode kept");
+                    }
+                    finally { Object.DestroyImmediate(m); }
+                }
+
                 var files = Directory.GetFiles(AmnesiaPaths.SourceRoot, "*.mat", SearchOption.AllDirectories)
                     .Where(f =>
                     {
                         var m = AmnesiaMaterial.Load(f);
                         string blend = (m.BlendMode ?? "").ToLowerInvariant();
-                        return m.Type == AmnesiaMaterial.Kind.Decal && blend is not ("add" or "mul" or "mulx2");
+                        return (m.Type == AmnesiaMaterial.Kind.Decal || m.Type == AmnesiaMaterial.Kind.Translucent) &&
+                               blend is not ("add" or "mul" or "mulx2");
                     }).OrderBy(f => f).ToArray();
-                Check(files.Length > 0, $"found {files.Length} source alpha decal materials");
+                Check(files.Length > 0, $"found {files.Length} source alpha overlay materials");
                 var materials = files.Select(f => AssetDatabase.LoadAssetAtPath<Material>(MaterialConverter.AssetPathFor(f))).ToArray();
                 foreach (var m in materials) Surface(m);
                 var copies = LevelCopies().ToArray();
@@ -138,6 +165,12 @@ namespace RTXMnesia.EditorDev
 
         static void Legacy(Material m)
         {
+            if (m.shader.name == "HDRP/Lit")
+            {
+                m.SetFloat("_EnableBlendModePreserveSpecularLighting", 1);
+                HDMaterial.ValidateMaterial(m);
+                return;
+            }
             m.SetFloat("_AffectMetal", 1);
             m.SetFloat("_AffectSmoothness", 1);
             m.SetFloat("_DecalBlend", 0.5f);
@@ -207,6 +240,26 @@ namespace RTXMnesia.EditorDev
                 Check(oldDifference > 0.002f, "legacy settings reproduce a visible rectangle at alpha zero");
                 Check(fixedDifference < 0.001f, "fixed alpha-zero decal preserves the glossy surface");
 
+                foreach (string blend in new[] { "Alpha", "PremulAlpha" })
+                {
+                    // Premultiplied input must have RGB zero wherever alpha is zero.
+                    texture.SetPixels(Enumerable.Repeat(blend == "Alpha" ? new Color(0.6f, 0.02f, 0.01f, 0) : Color.clear, 16).ToArray());
+                    texture.Apply();
+                    var transparent = CreateTransparent(texture, blend);
+                    var preserved = new Material(transparent);
+                    try
+                    {
+                        Legacy(preserved);
+                        var brightRectangle = Render("5_transparent_" + blend + "_legacy", preserved);
+                        var invisible = Render("6_transparent_" + blend + "_fixed", transparent);
+                        float legacyDifference = Difference(baseline, brightRectangle), alphaDifference = Difference(baseline, invisible);
+                        Debug.Log($"[DecalCheck] {blend} transparent RGB difference: legacy={legacyDifference:F6}, fixed={alphaDifference:F6}");
+                        Check(legacyDifference > 0.002f, blend + ": preserve-specular reproduces the alpha-zero rectangle");
+                        Check(alphaDifference < 0.001f, blend + ": fixed transparent material leaves the glossy surface intact");
+                    }
+                    finally { Object.DestroyImmediate(transparent); Object.DestroyImmediate(preserved); }
+                }
+
                 texture.SetPixels(Enumerable.Repeat(new Color(0.6f, 0.02f, 0.01f, 1), 16).ToArray());
                 texture.Apply();
                 var full = Render("3_opaque_fixed", fixedMaterial);
@@ -246,6 +299,137 @@ namespace RTXMnesia.EditorDev
                     count += 3;
                 }
             return (float)(sum / count);
+        }
+
+        // The room before the note/secret passage: translucent amnesia trails, not HDRP/Decal meshes.
+        public static void RunArchivesRenderBatch()
+        {
+            Directory.CreateDirectory(Folder);
+            EditorSceneManager.OpenScene(AmnesiaPaths.ImportedAssetsRoot + "/Levels/maps/main/ch01/01_old_archives.unity", OpenSceneMode.Single);
+            var camera = Camera.main;
+            camera.transform.SetPositionAndRotation(new Vector3(-30.5f, -0.35f, 26.1f), Quaternion.Euler(10, 180, 0));
+            var renderers = Object.FindObjectsByType<Renderer>();
+            var materials = renderers.SelectMany(r => r.sharedMaterials).Where(m => m != null).Distinct().ToArray();
+            var translucent = materials.Where(m => m.shader.name == "HDRP/Lit" && m.GetFloat("_SurfaceType") == 1).ToArray();
+            var backups = translucent.Select(m => new Material(m)).ToArray();
+            try
+            {
+                foreach (var m in translucent)
+                {
+                    m.SetFloat("_EnableBlendModePreserveSpecularLighting", 1);
+                    HDMaterial.ValidateMaterial(m);
+                }
+                ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_0_imported.png"));
+                foreach (var m in translucent)
+                {
+                    m.SetFloat("_EnableBlendModePreserveSpecularLighting", 0);
+                    HDMaterial.ValidateMaterial(m);
+                }
+                ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_1_alpha_weighted_specular.png"));
+                var multiply = renderers.Where(r => r.enabled && r.sharedMaterials.Any(m => m != null && m.shader.name == MaterialConverter.MultiplyShader)).ToArray();
+                foreach (var r in multiply) r.enabled = false;
+                ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_2_no_multiply.png"));
+                foreach (var r in multiply) r.enabled = true;
+                Debug.Log($"[DecalCheck] Archives: {translucent.Length} transparent materials compared");
+            }
+            finally
+            {
+                for (int i = 0; i < translucent.Length; i++)
+                {
+                    EditorUtility.CopySerialized(backups[i], translucent[i]);
+                    Object.DestroyImmediate(backups[i]);
+                }
+            }
+        }
+
+        // Release player with the same HDRP asset and shader stripping as the game. Does not alter build scenes.
+        public static void BuildRenderPlayerBatch()
+        {
+            string root = AmnesiaPaths.ImportedAssetsRoot + "/Preview/DecalPlayer";
+            Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(root));
+            AssetDatabase.Refresh();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            foreach (var r in Object.FindObjectsByType<Renderer>()) r.gameObject.SetActive(false);
+            foreach (var l in Object.FindObjectsByType<Light>()) l.enabled = false;
+            var camera = Camera.main;
+            camera.transform.SetPositionAndRotation(new Vector3(0, 0, -5), Quaternion.identity);
+            var volume = new GameObject("Decal test exposure").AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 10000;
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            var exposure = profile.Add<Exposure>(true);
+            exposure.mode.Override(ExposureMode.Fixed);
+            exposure.fixedExposure.Override(3);
+            Save(profile, "Exposure");
+            // Volume components are separate objects and must also be persisted for the player.
+            foreach (var component in profile.components) AssetDatabase.AddObjectToAsset(component, profile);
+            volume.sharedProfile = profile;
+            var floor = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            floor.transform.localScale = new Vector3(10, 6, 1);
+            var floorMaterial = new Material(Shader.Find("HDRP/Lit"));
+            floorMaterial.SetColor("_BaseColor", new Color(0.25f, 0.25f, 0.25f));
+            floorMaterial.SetFloat("_Smoothness", 0.95f);
+            HDMaterial.ValidateMaterial(floorMaterial);
+            Save(floorMaterial, "Floor");
+            floor.GetComponent<Renderer>().sharedMaterial = floorMaterial;
+            var light = new GameObject("Decal test light").AddComponent<Light>();
+            light.type = LightType.Point;
+            light.transform.position = new Vector3(-0.5f, 0.5f, -3);
+            light.range = 20;
+            light.gameObject.AddComponent<HDAdditionalLightData>();
+            light.lightUnit = LightUnit.Candela;
+            light.intensity = 1500;
+            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            texture.SetPixels(Enumerable.Repeat(new Color(0.6f, 0.02f, 0.01f, 0), 16).ToArray());
+            texture.Apply();
+            Save(texture, "TransparentTexture");
+            var premultiplied = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            premultiplied.SetPixels(Enumerable.Repeat(Color.clear, 16).ToArray());
+            premultiplied.Apply();
+            Save(premultiplied, "PremultipliedTexture");
+            var overlay = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            overlay.transform.position = new Vector3(0, 0, -0.001f);
+            overlay.transform.localScale = new Vector3(4, 3, 1);
+            var probe = new GameObject("Player render regression").AddComponent<Dev.HplDecalRenderProbe>();
+            probe.captureCamera = camera;
+            probe.overlay = overlay.GetComponent<Renderer>();
+            var tablePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(HplModelBuilder.PrefabPathFor(
+                Path.Combine(AmnesiaPaths.SourceRoot, "entities/furniture/table_wood02/table_wood02.dae")));
+            var table = (GameObject)PrefabUtility.InstantiatePrefab(tablePrefab);
+            table.transform.position = new Vector3(3, -1, -1);
+            table.transform.localScale = Vector3.one * 0.7f;
+            probe.furniture = table.GetComponentsInChildren<MeshRenderer>();
+            var materials = new List<Material>();
+            foreach (string type in new[] { "Decal", "Alpha", "PremulAlpha" })
+            {
+                var fixedMaterial = type == "Decal" ? Create(texture, null) : CreateTransparent(type == "PremulAlpha" ? premultiplied : texture, type);
+                var legacy = new Material(fixedMaterial);
+                Legacy(legacy);
+                Save(legacy, type + "_legacy");
+                Save(fixedMaterial, type + "_fixed");
+                materials.Add(legacy);
+                materials.Add(fixedMaterial);
+            }
+            probe.materials = materials.ToArray();
+            string scene = root + "/DecalPlayer.unity";
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.SaveScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene(), scene);
+            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = new[] { scene },
+                target = BuildTarget.StandaloneWindows64,
+                locationPathName = Path.Combine(Folder, "Player", "DecalCheck.exe"),
+                extraScriptingDefines = new[] { "RTXMNESIA_RENDER_TEST" },
+            });
+            Check(report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded, "release render-test player built");
+
+            void Save(Object asset, string name)
+            {
+                asset.name = name;
+                string path = root + "/" + name + ".asset";
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null) AssetDatabase.DeleteAsset(path);
+                AssetDatabase.CreateAsset(asset, path);
+            }
         }
     }
 }

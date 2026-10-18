@@ -29,7 +29,7 @@ namespace RTXMnesia.Importer
     public static class HplModelBuilder
     {
         /// <summary>Bump when the output changes: prefabs of older versions are rebuilt.</summary>
-        public const int Version = 6;
+        public const int Version = 7;
 
         static readonly Matrix4x4 Mirror = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
 
@@ -43,6 +43,7 @@ namespace RTXMnesia.Importer
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPathFor(daeAbsolute));
             if (prefab == null || !prefab.TryGetComponent(out AmnesiaModel model) || model.builderVersion != Version) return false;
+            if (prefab.GetComponentsInChildren<MeshFilter>(true).Any(f => f.sharedMesh == null)) return false;
             return File.GetLastWriteTimeUtc(AmnesiaPaths.ToAbsolute(PrefabPathFor(daeAbsolute))) >= File.GetLastWriteTimeUtc(daeAbsolute);
         }
 
@@ -155,17 +156,44 @@ namespace RTXMnesia.Importer
                 if (IsCharColliderName(name)) filter.gameObject.layer = HplPhysicsWorld.NoCollideLayer;
             }
 
-            // Save meshes and prefab.
-            AssetDatabase.DeleteAsset(meshPath);
-            if (meshes.Count > 0)
-            {
-                var container = new Mesh { name = root.name + " meshes" };
-                AssetDatabase.CreateAsset(container, meshPath);
-                foreach (var m in meshes) AssetDatabase.AddObjectToAsset(m, container);
-            }
+            // Maps contain unpacked entity models with direct references to these mesh sub-assets.
+            // Deleting/recreating the file changes local IDs and leaves furniture invisible in existing maps.
+            SaveMeshesInPlace(root, meshPath, meshes);
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        static void SaveMeshesInPlace(GameObject root, string path, List<Mesh> meshes)
+        {
+            var container = AssetDatabase.LoadMainAssetAtPath(path);
+            if (container == null)
+            {
+                container = new Mesh { name = root.name + " meshes" };
+                AssetDatabase.CreateAsset(container, path);
+            }
+            var existing = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Mesh>().Where(m => m != container)
+                .GroupBy(m => m.name).ToDictionary(g => g.Key, g => new Queue<Mesh>(g));
+            var replacements = new Dictionary<Mesh, Mesh>();
+            foreach (var mesh in meshes)
+            {
+                if (existing.TryGetValue(mesh.name, out var matches) && matches.Count > 0)
+                {
+                    var saved = matches.Dequeue();
+                    EditorUtility.CopySerialized(mesh, saved);
+                    EditorUtility.SetDirty(saved);
+                    replacements[mesh] = saved;
+                }
+                else AssetDatabase.AddObjectToAsset(mesh, container);
+            }
+            foreach (var filter in root.GetComponentsInChildren<MeshFilter>(true))
+                if (filter.sharedMesh != null && replacements.TryGetValue(filter.sharedMesh, out var saved)) filter.sharedMesh = saved;
+            foreach (var collider in root.GetComponentsInChildren<MeshCollider>(true))
+                if (collider.sharedMesh != null && replacements.TryGetValue(collider.sharedMesh, out var saved)) collider.sharedMesh = saved;
+            EditorUtility.SetDirty(container);
+            // Persist sub-assets now: a later Refresh during another model's material import must not lose them.
+            AssetDatabase.SaveAssetIfDirty(container);
+            foreach (var mesh in replacements.Keys) Object.DestroyImmediate(mesh);
         }
 
         /// <summary>

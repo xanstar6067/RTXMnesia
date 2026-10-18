@@ -168,7 +168,7 @@ namespace RTXMnesia.Importer
 
         static void BuildMaterials(List<Plan> plans, Dictionary<string, string> textures, ImportLog log)
         {
-            bool hasDecals = false;
+            bool updateLevelVariants = false;
             Texture2D Tex(Plan plan, TextureRole role)
             {
                 if (!plan.Jobs.TryGetValue(role, out var job) || !textures.TryGetValue(Key(job), out string path)) return null;
@@ -201,7 +201,8 @@ namespace RTXMnesia.Importer
                         var material = plan.Source.Type == AmnesiaMaterial.Kind.Water
                             ? CreateWater(plan.Source, role => Tex(plan, role), Cube())
                             : CreateMaterial(plan.Source, role => Tex(plan, role), log);
-                        hasDecals |= material.shader.name == "HDRP/Decal";
+                        updateLevelVariants |= material.shader.name == "HDRP/Decal" ||
+                            (material.shader.name == "HDRP/Lit" && material.GetFloat("_SurfaceType") == HdrpTransparent);
                         SaveInPlace(material, plan.AssetPath);
                     }
                     catch (Exception e)
@@ -215,7 +216,7 @@ namespace RTXMnesia.Importer
                 AssetDatabase.StopAssetEditing();
                 EditorUtility.ClearProgressBar();
             }
-            if (hasDecals) UpdateLevelDecalVariants(log);
+            if (updateLevelVariants) UpdateLevelSurfaceVariants(log);
             AssetDatabase.SaveAssets();
         }
 
@@ -247,7 +248,7 @@ namespace RTXMnesia.Importer
                     var m = CreateLit(src, tex);
                     m.SetFloat("_SurfaceType", HdrpTransparent);
                     m.SetFloat("_BlendMode", (float)(blend == "premulalpha" ? HdrpBlend.Premultiply : HdrpBlend.Alpha));
-                    HDMaterial.ValidateMaterial(m);
+                    ConfigureTransparentSurface(m);
                     return m;
                 }
 
@@ -403,25 +404,42 @@ namespace RTXMnesia.Importer
             HDMaterial.ValidateMaterial(material);
         }
 
-        static void UpdateLevelDecalVariants(ImportLog log)
+        static void ConfigureTransparentSurface(Material material)
+        {
+            // HPL2 alpha blending weights the whole fragment. HDRP's default preserves specular even at alpha 0,
+            // making the rectangular meshes of amnesia trails, blood pools, cobwebs, etc. visible in highlights.
+            material.SetFloat("_EnableBlendModePreserveSpecularLighting", 0f);
+            HDMaterial.ValidateMaterial(material);
+        }
+
+        static void UpdateLevelSurfaceVariants(ImportLog log)
         {
             // LevelConverter stores tinted decals as independent sub-assets, not live material variants.
             // Update those in place as well: keep their tint, GUID and local file ID, without rebuilding maps.
             string levels = AmnesiaPaths.ImportedAssetsRoot + "/Levels";
             if (!Directory.Exists(AmnesiaPaths.ToAbsolute(levels))) return;
-            int count = 0;
+            int decals = 0, transparent = 0;
             foreach (string file in Directory.GetFiles(AmnesiaPaths.ToAbsolute(levels), "*_generated.asset", SearchOption.AllDirectories))
             {
                 string path = levels + "/" + Path.GetRelativePath(AmnesiaPaths.ToAbsolute(levels), file).Replace('\\', '/');
                 foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
                 {
-                    if (asset is not Material material || material.shader.name != "HDRP/Decal") continue;
-                    ConfigureDecalSurface(material);
+                    if (asset is not Material material) continue;
+                    if (material.shader.name == "HDRP/Decal")
+                    {
+                        ConfigureDecalSurface(material);
+                        decals++;
+                    }
+                    else if (material.shader.name == "HDRP/Lit" && material.GetFloat("_SurfaceType") == HdrpTransparent)
+                    {
+                        ConfigureTransparentSurface(material);
+                        transparent++;
+                    }
+                    else continue;
                     EditorUtility.SetDirty(material);
-                    count++;
                 }
             }
-            log.Info($"Level decal variants updated in place: {count}");
+            log.Info($"Level surface variants updated in place: {decals} decals, {transparent} transparent");
         }
 
         /// <summary>
