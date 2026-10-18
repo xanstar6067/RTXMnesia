@@ -256,13 +256,14 @@ namespace RTXMnesia.Dev
                 ui.ChooseComboItem(Hpl.HplGraphics.ShadowsHigh);
                 ui.Choose(MenuControl.RtxTab);
                 yield return null;
-                bool rtShadows = false, rtAo = false;
+                bool rtShadows = false, rtAo = false, rtReflections = false;
                 for (int i = 0; i < ui.Menu.ButtonCount; i++)
                 {
                     rtShadows |= ui.Menu.ControlAt(i) == MenuControl.RtShadows;
                     rtAo |= ui.Menu.ControlAt(i) == MenuControl.RtAo;
+                    rtReflections |= ui.Menu.ControlAt(i) == MenuControl.RtReflections;
                 }
-                Check(rtShadows && rtAo, "with ray tracing lighting the RTX tab has the ray-traced shadows and RTAO lists");
+                Check(rtShadows && rtAo && rtReflections, "with ray tracing lighting the RTX tab has the ray-traced shadows, RTAO and reflection lists");
                 ui.Choose(MenuControl.RtShadows);
                 yield return null;
                 int rows = 0;

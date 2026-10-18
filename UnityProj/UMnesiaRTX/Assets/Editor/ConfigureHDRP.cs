@@ -69,6 +69,8 @@ public static class ConfigureHDRP
         // Hardware ray tracing (lighting "Ray tracing", HplRayTracing). Ray-traced shadows of punctual lights are screen
         // space shadows: one slot per light traced in a frame (HplRayTracing.ShadowLights up to 16).
         SetBool(serialized, "m_RenderPipelineSettings.supportRayTracing", true);
+        // RT reflections are HDRP's SSR traced with rays; HplRayTracing enables SSR only on cameras that trace them.
+        SetBool(serialized, "m_RenderPipelineSettings.supportSSR", true);
         SetBool(serialized, "m_RenderPipelineSettings.hdShadowInitParams.supportScreenSpaceShadows", true);
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.maxScreenSpaceShadowSlots", 16);
         serialized.ApplyModifiedPropertiesWithoutUndo();

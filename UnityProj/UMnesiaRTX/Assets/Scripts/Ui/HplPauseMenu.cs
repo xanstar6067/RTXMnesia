@@ -18,7 +18,7 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
@@ -631,10 +631,12 @@ namespace RTXMnesia.Ui
                 Combo(rightX, y, MenuControl.RtShadows, settings);
                 y += comboStep;
                 Combo(rightX, y, MenuControl.RtAo, settings);
+                y += comboStep;
+                Combo(rightX, y, MenuControl.RtReflections, settings);
                 y += comboStep + 4;
-                string traced = !HplRayTracing.Active || HplRayTracing.Shadows != settings.rtShadows || HplRayTracing.Ao != settings.rtAo
+                string traced = !HplRayTracing.Active || HplRayTracing.Shadows != settings.rtShadows || HplRayTracing.Ao != settings.rtAo || HplRayTracing.Reflections != settings.rtReflections
                     ? "Применится после «OK»."
-                    : settings.rtShadows == 0 ? "Тени — картами теней."
+                    : settings.rtShadows == 0 ? "Тени: картами теней."
                     : "С трассировкой: " + HplRayTracing.TracedLights + " из " + HplRayTracing.ShadowedLights + "\nисточников с тенями в кадре.";
                 DrawLines(traced + CompareHint, rightX, y, size, grey);
                 return;
@@ -648,7 +650,7 @@ namespace RTXMnesia.Ui
         }
 
         /// <summary>The comparison key (Effects.HplRtxCompare) under the ray tracing settings.</summary>
-        const string CompareHint = "\n\nВ игре клавиша C — сравнение\nс другим освещением.";
+        const string CompareHint = "\n\nВ игре клавиша C: сравнение\nс другим освещением.";
 
         /// <summary>Text with line breaks (the GUI text draws one line), 20 units per line.</summary>
         void DrawLines(string text, float x, float y, Vector2 size, Color color)

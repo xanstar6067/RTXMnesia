@@ -36,6 +36,8 @@ namespace RTXMnesia.Ui
         public int rtShadows = HplRayTracing.ShadowsDefault;
         /// <summary>Ray-traced ambient occlusion (RTX tab): 0 — off, 1..3 — low, medium, high.</summary>
         public int rtAo = HplRayTracing.AoDefault;
+        /// <summary>Ray-traced reflections (RTX tab): 0 — off, 1..3 — low, medium, high.</summary>
+        public int rtReflections = HplRayTracing.ReflectionsDefault;
         /// <summary>0 — low, 1 — medium, 2 — high (cLuxMainMenu_Options texture quality).</summary>
         public int textureQuality = 2;
         /// <summary>Index of <see cref="HplGraphics.AnisotropyLevels"/> (8× — the import default).</summary>
@@ -163,6 +165,7 @@ namespace RTXMnesia.Ui
             dlssPreset = HplDlss.ValidPreset(dlssPreset);
             rtShadows = Mathf.Clamp(rtShadows, 0, HplRayTracing.ShadowLights.Length - 1);
             rtAo = Mathf.Clamp(rtAo, 0, HplRayTracing.AoLevels - 1);
+            rtReflections = Mathf.Clamp(rtReflections, 0, HplRayTracing.ReflectionLevels - 1);
             textureQuality = Mathf.Clamp(textureQuality, 0, 2);
             anisotropy = Mathf.Clamp(anisotropy, 0, HplGraphics.AnisotropyLevels.Length - 1);
             antialiasing = Mathf.Clamp(antialiasing, 0, (int)HplAntialiasing.Taa);

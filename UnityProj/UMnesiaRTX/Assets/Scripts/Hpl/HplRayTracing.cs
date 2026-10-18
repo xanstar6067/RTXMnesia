@@ -26,6 +26,15 @@ namespace RTXMnesia.Hpl
         /// <summary>How much RTAO darkens the direct light of lamps (HDRP applies AO to indirect light only, which HPL2 maps do not have).</summary>
         public const float AoDirectLighting = 0.35f;
 
+        /// <summary>
+        /// RT reflection choices: off, low, medium, high. HPL2 materials are rough (specular power → smoothness 0.3–0.6),
+        /// so the smoothness from which surfaces reflect goes down with the level (HDRP's default 0.9 reflects nothing);
+        /// low traces at half resolution.
+        /// </summary>
+        public const int ReflectionLevels = 4, ReflectionsDefault = 2;
+        static readonly float[] ReflectionMinSmoothness = { 1f, 0.55f, 0.45f, 0.35f };
+        static readonly float[] ReflectionRayLength = { 0f, 10f, 25f, 50f };
+
         /// <summary>The source radius of a shadowed light while it is traced (HPL2 lights have none; candles, lamps).</summary>
         public const float SourceRadius = 0.04f;
 
@@ -38,6 +47,8 @@ namespace RTXMnesia.Hpl
         public static int Shadows { get; private set; }
         /// <summary>RT ambient occlusion: 0 — off, 1..3 — low, medium, high.</summary>
         public static int Ao { get; private set; }
+        /// <summary>RT reflections: 0 — off, 1..3 — low, medium, high.</summary>
+        public static int Reflections { get; private set; }
         /// <summary>The lights traced in the last frame, of the shadowed lights considered (RTX tab).</summary>
         public static int TracedLights { get; private set; }
         public static int ShadowedLights { get; private set; }
@@ -52,26 +63,50 @@ namespace RTXMnesia.Hpl
             Active = s.lighting == 1 && SystemInfo.supportsRayTracing;
             Shadows = Active ? s.rtShadows : 0;
             Ao = Active ? s.rtAo : 0;
+            Reflections = Active ? s.rtReflections : 0;
             // The next render selects the lights again with the new settings.
             s_frame = -1;
             if (Shadows == 0) ReleaseLights();
         }
 
         static ScreenSpaceAmbientOcclusion s_ao;
+        static ScreenSpaceReflection s_reflection;
 
         /// <summary>
-        /// The ray tracing part of the global settings volume (HplGraphics): RTAO. With the classic lighting the
-        /// component is inactive, so the classic look is unchanged.
+        /// The ray tracing part of the global settings volume (HplGraphics): RTAO and RT reflections. With the classic
+        /// lighting the components are inactive (and the cameras render no SSR), so the classic look is unchanged.
         /// </summary>
         public static void ApplyVolume(VolumeProfile profile)
         {
             if (s_ao == null && !profile.TryGet(out s_ao)) s_ao = profile.Add<ScreenSpaceAmbientOcclusion>(true);
             s_ao.active = Ao > 0;
-            if (Ao == 0) return;
-            s_ao.rayTracing.Override(true);
-            s_ao.quality.Override(Ao - 1);
-            s_ao.intensity.Override(1f);
-            s_ao.directLightingStrength.Override(AoDirectLighting);
+            if (Ao > 0)
+            {
+                s_ao.rayTracing.Override(true);
+                s_ao.quality.Override(Ao - 1);
+                s_ao.intensity.Override(1f);
+                s_ao.directLightingStrength.Override(AoDirectLighting);
+            }
+
+            if (s_reflection == null && !profile.TryGet(out s_reflection))
+            {
+                s_reflection = profile.Add<ScreenSpaceReflection>();
+                // The values below are set through properties (no overrideState of their own).
+                s_reflection.SetAllOverridesTo(true);
+            }
+            s_reflection.active = Reflections > 0;
+            if (Reflections == 0) return;
+            s_reflection.enabled.Override(true);
+            s_reflection.tracing.Override(RayCastingMode.RayTracing);
+            s_reflection.mode.Override(RayTracingMode.Performance);
+            // Custom quality: the values below instead of the asset's quality levels.
+            s_reflection.quality.Override(ScalableSettingLevelParameter.LevelCount);
+            s_reflection.minSmoothness = ReflectionMinSmoothness[Reflections];
+            s_reflection.smoothnessFadeStart = ReflectionMinSmoothness[Reflections] + 0.1f;
+            s_reflection.rayLength = ReflectionRayLength[Reflections];
+            s_reflection.fullResolution = Reflections > 1;
+            s_reflection.denoise = true;
+            s_reflection.denoiserRadius = Reflections > 1 ? 0.75f : 0.5f;
         }
 
         /// <summary>Ray tracing and screen space shadows of a camera (HplGraphics, beginContextRendering).</summary>
@@ -81,6 +116,8 @@ namespace RTXMnesia.Hpl
             if (!data.customRenderingSettings) data.customRenderingSettings = true;
             Override(data, FrameSettingsField.RayTracing, on);
             Override(data, FrameSettingsField.ScreenSpaceShadows, on && Shadows > 0);
+            // The asset supports SSR only for these reflections: never ray marched, never with the classic lighting.
+            Override(data, FrameSettingsField.SSR, on && Reflections > 0);
             if (on && !mirror) SelectLights(camera);
         }
 

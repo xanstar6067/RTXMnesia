@@ -157,6 +157,61 @@ namespace RTXMnesia.Dev
             }
             Check(Difference(aoOff, aoHigh) > 0.0001f, $"RTAO changes the image (mean difference {Difference(aoOff, aoHigh):0.0000})");
 
+            // Box lights (custom pass, × RTAO when it is on): drawn with the classic lighting and with RTAO.
+            var boxVolume = Array.Find(Resources.FindObjectsOfTypeAll<CustomPassVolume>(), v => v.gameObject.name == "HPL Box Lights");
+            var boxes = typeof(HplBoxLightPass).GetField("Boxes", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)?.GetValue(null) as System.Collections.ICollection;
+            if (boxVolume != null && boxes != null && boxes.Count > 0)
+            {
+                float classicBox = 0f;
+                foreach (int lighting in new[] { 0, 1 })
+                {
+                    var s = saved.Copy();
+                    s.lighting = lighting;
+                    s.rtAo = HplRayTracing.AoLevels - 1;
+                    HplGraphics.Apply(s);
+                    Capture(camera, rt, $"{mapName}_box{lighting}_on", out var on);
+                    boxVolume.enabled = false;
+                    Capture(camera, rt, $"{mapName}_box{lighting}_off", out var off);
+                    boxVolume.enabled = true;
+                    float d = Difference(on, off);
+                    _report.AppendLine($"Box lights, {(lighting == 1 ? "ray tracing + RTAO" : "classic")}: mean difference with / without {d:0.0000}");
+                    if (lighting == 0) classicBox = d;
+                    // The view decides how much box light is seen: the ray tracing lighting (× AO) must keep most of it.
+                    else Check(classicBox < 0.0005f || d > classicBox * 0.5f, $"box lights are drawn with the ray tracing lighting and RTAO ({d:0.0000} vs classic {classicBox:0.0000})");
+                }
+            }
+            else _report.AppendLine("No box light on this map: the box light check is skipped");
+
+            // Ray-traced reflections: every level, with the default shadows and AO.
+            byte[] reflOff = null, reflHigh = null;
+            for (int level = 0; level < HplRayTracing.ReflectionLevels; level++)
+            {
+                var s = saved.Copy();
+                s.lighting = 1;
+                s.rtReflections = level;
+                HplGraphics.Apply(s);
+                double ms = Capture(camera, rt, $"{mapName}_refl{level}", out var image);
+                if (level == 0) reflOff = image;
+                if (level == HplRayTracing.ReflectionLevels - 1) reflHigh = image;
+                var profile = HplGraphics.SettingsVolume != null ? HplGraphics.SettingsVolume.sharedProfile : null;
+                ScreenSpaceReflection ssr = null;
+                bool found = profile != null && profile.TryGet(out ssr);
+                hd = HDCamera.GetOrCreate(camera);
+                bool cameraSsr = hd.frameSettings.IsEnabled(FrameSettingsField.SSR);
+                _report.AppendLine($"RT reflections {level}: component {found}, active {ssr?.active}, tracing {ssr?.tracing.value}, min smoothness {ssr?.minSmoothness:0.00}, camera SSR {cameraSsr}, {ms:0.00} ms/frame");
+                Check(found && ssr.active == (level > 0) && cameraSsr == (level > 0) && (level == 0 || ssr.tracing.value == RayCastingMode.RayTracing),
+                      $"RT reflections {level}: {(level > 0 ? "traced by the camera" : "no SSR on the camera")}");
+            }
+            Check(Difference(reflOff, reflHigh) > 0.0001f, $"RT reflections change the image (mean difference {Difference(reflOff, reflHigh):0.0000})");
+            {
+                var s = saved.Copy();
+                s.lighting = 0;
+                HplGraphics.Apply(s);
+                Capture(camera, rt, $"{mapName}_classic_again", out _);
+                hd = HDCamera.GetOrCreate(camera);
+                Check(!hd.frameSettings.IsEnabled(FrameSettingsField.SSR), "classic lighting: the camera renders no SSR");
+            }
+
             // Key C: the comparison switches the lighting with a wipe, from the user's settings without RT and back.
             var ui = map.GameUi;
             if (ui != null)
