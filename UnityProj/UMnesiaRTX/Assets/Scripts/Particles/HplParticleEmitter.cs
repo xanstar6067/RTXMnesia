@@ -564,6 +564,8 @@ namespace RTXMnesia.Particles
             _renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             _renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
             _renderer.allowOcclusionWhenDynamic = false;
+            // No ray tracing pass in HplParticle: out of the acceleration structure (Hpl.HplRayTracing.Exclude).
+            _renderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
             _block = new MaterialPropertyBlock();
         }
 

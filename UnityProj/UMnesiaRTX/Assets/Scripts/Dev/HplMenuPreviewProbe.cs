@@ -256,7 +256,7 @@ namespace RTXMnesia.Dev
                 ui.ChooseComboItem(Hpl.HplGraphics.ShadowsHigh);
                 ui.Choose(MenuControl.RtxTab);
                 yield return null;
-                bool rtShadows = false, rtAo = false, rtReflections = false, rtGi = false, rtAll = false, rtLantern = false;
+                bool rtShadows = false, rtAo = false, rtReflections = false, rtGi = false, rtAll = false, rtLantern = false, rtPath = false;
                 for (int i = 0; i < ui.Menu.ButtonCount; i++)
                 {
                     rtShadows |= ui.Menu.ControlAt(i) == MenuControl.RtShadows;
@@ -265,8 +265,9 @@ namespace RTXMnesia.Dev
                     rtGi |= ui.Menu.ControlAt(i) == MenuControl.RtGi;
                     rtAll |= ui.Menu.ControlAt(i) == MenuControl.RtAllShadows;
                     rtLantern |= ui.Menu.ControlAt(i) == MenuControl.RtLanternShadows;
+                    rtPath |= ui.Menu.ControlAt(i) == MenuControl.RtPathTracing;
                 }
-                Check(rtShadows && rtAo && rtReflections && rtGi && rtAll && rtLantern, "with ray tracing lighting the RTX tab has the lists of RT shadows, shadows from all lights, lantern shadows, RTAO, reflections and RTGI");
+                Check(rtShadows && rtAo && rtReflections && rtGi && rtAll && rtLantern && rtPath, "with ray tracing lighting the RTX tab has the lists of RT shadows, shadows from all lights, lantern shadows, RTAO, reflections, RTGI and path tracing");
                 ui.Choose(MenuControl.RtShadows);
                 yield return null;
                 int rows = 0;

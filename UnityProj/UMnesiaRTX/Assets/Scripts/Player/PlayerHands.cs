@@ -371,7 +371,10 @@ namespace RTXMnesia.Player
             if (State == HandsState.Disabled || camera == null) return;
             Vector3 add = _player.GetHeadPosAdd(HeadPosAdd.Bob) + _player.GetHeadPosAdd(HeadPosAdd.ScreenShake) + _player.GetHeadPosAdd(HeadPosAdd.Hurt);
             Vector3 world = camera.right * add.x + camera.up * add.y + camera.forward * add.z;
-            _hands.SetPositionAndRotation(camera.position + world * _posAddMul, _smoothedRotation);
+            Vector3 position = camera.position + world * _posAddMul;
+            // Only a real move: any write marks the hands and their lights changed (HDRP's path tracer restarts).
+            if ((_hands.position - position).sqrMagnitude > 1e-8f || Quaternion.Angle(_hands.rotation, _smoothedRotation) > 0.001f)
+                _hands.SetPositionAndRotation(position, _smoothedRotation);
         }
 
         /// <summary>cLuxHandObject_LightSource::Update (and the alpha setup when restored after a map change).</summary>

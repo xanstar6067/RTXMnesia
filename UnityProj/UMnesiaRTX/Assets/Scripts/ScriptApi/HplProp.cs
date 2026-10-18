@@ -707,6 +707,7 @@ namespace RTXMnesia.ScriptApi
         readonly List<Particles.HplParticleSystem> _particleSystems = new();
         readonly List<(string name, string dataName, Matrix4x4 local, Transform parent)> _psData = new();
         readonly List<(Renderer renderer, int index, Color emissive)> _illumination = new();
+        float _illuminationAmount = float.NaN;
         MaterialPropertyBlock _block;
 
         void SetupEffectData()
@@ -850,7 +851,9 @@ namespace RTXMnesia.ScriptApi
         /// <summary>cMeshEntity::SetIlluminationAmount: emission × amount (property blocks).</summary>
         void SetIlluminationAmount(float amount)
         {
-            if (_illumination.Count == 0) return;
+            // Only a change: every property block write marks the material changed for HDRP's path tracer.
+            if (_illumination.Count == 0 || amount == _illuminationAmount) return;
+            _illuminationAmount = amount;
             _block ??= new MaterialPropertyBlock();
             foreach (var (renderer, index, emissive) in _illumination)
             {

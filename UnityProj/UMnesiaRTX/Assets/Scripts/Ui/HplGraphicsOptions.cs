@@ -23,7 +23,7 @@ namespace RTXMnesia.Ui
         /// <summary>Translation: category, entry, fallback text.</summary>
         public delegate string Translate(string category, string entry, string fallback);
 
-        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.RtLanternShadows;
+        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.RtPathTracing;
 
         /// <summary>DLSS is chosen and runs on this GPU: it replaces the anti-aliasing of the graphics tab.</summary>
         public static bool DlssOn(HplUserSettings s) => s.dlssMode != (int)HplDlssMode.Off && HplDlss.Available;
@@ -133,6 +133,12 @@ namespace RTXMnesia.Ui
                     for (int i = 1; i < HplRayTracing.GiLevels; i++) items.Add(new HplComboItem(RtLevel(i, t)));
                     current = s.rtGi;
                     break;
+                case MenuControl.RtPathTracing:
+                    items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
+                    for (int i = 1; i < HplRayTracing.PathTracingSamples.Length; i++)
+                        items.Add(new HplComboItem(HplRayTracing.PathTracingSamples[i] + " сэмплов на кадр"));
+                    current = s.rtPathTracing;
+                    break;
                 case MenuControl.RtAllShadows:
                 case MenuControl.RtLanternShadows:
                     items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
@@ -159,6 +165,7 @@ namespace RTXMnesia.Ui
             MenuControl.DlssMode => "NVIDIA DLSS",
             MenuControl.DlssPreset => "Модель DLSS",
             MenuControl.RtShadows => "Тени (трассировка)",
+            MenuControl.RtPathTracing => "Path tracing",
             MenuControl.RtAllShadows => "Тени от всех источников",
             MenuControl.RtLanternShadows => "Тени от фонаря",
             MenuControl.RtGi => "Глобальное освещение (RTGI)",
@@ -223,6 +230,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.RtReflections: s.rtReflections = index; break;
                 case MenuControl.RtGi: s.rtGi = index; break;
                 case MenuControl.RtAllShadows: s.rtAllShadows = index == 1; break;
+                case MenuControl.RtPathTracing: s.rtPathTracing = index; break;
                 case MenuControl.RtLanternShadows: s.rtLanternShadows = index == 1; break;
             }
         }

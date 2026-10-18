@@ -44,6 +44,8 @@ namespace RTXMnesia.Ui
         public bool rtAllShadows = true;
         /// <summary>RTX tab: the lantern in the hand casts ray-traced shadows.</summary>
         public bool rtLanternShadows = true;
+        /// <summary>RTX tab: path tracing, index of <see cref="HplRayTracing.PathTracingSamples"/> (0 — off).</summary>
+        public int rtPathTracing;
         /// <summary>0 — low, 1 — medium, 2 — high (cLuxMainMenu_Options texture quality).</summary>
         public int textureQuality = 2;
         /// <summary>Index of <see cref="HplGraphics.AnisotropyLevels"/> (8× — the import default).</summary>
@@ -173,6 +175,7 @@ namespace RTXMnesia.Ui
             rtAo = Mathf.Clamp(rtAo, 0, HplRayTracing.AoLevels - 1);
             rtReflections = Mathf.Clamp(rtReflections, 0, HplRayTracing.ReflectionLevels - 1);
             rtGi = Mathf.Clamp(rtGi, 0, HplRayTracing.GiLevels - 1);
+            rtPathTracing = Mathf.Clamp(rtPathTracing, 0, HplRayTracing.PathTracingSamples.Length - 1);
             textureQuality = Mathf.Clamp(textureQuality, 0, 2);
             anisotropy = Mathf.Clamp(anisotropy, 0, HplGraphics.AnisotropyLevels.Length - 1);
             antialiasing = Mathf.Clamp(antialiasing, 0, (int)HplAntialiasing.Taa);

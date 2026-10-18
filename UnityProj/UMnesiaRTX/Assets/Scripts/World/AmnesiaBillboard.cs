@@ -37,6 +37,9 @@ namespace RTXMnesia.World
 
         void OnEnable()
         {
+            // A billboard is a fake glow: never in the ray tracing acceleration structure (its color changes with the
+            // light every step, which also made HDRP's path tracer start its accumulation again).
+            if (TryGetComponent(out Renderer own)) own.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
             if (kind == Kind.FixedAxis || mesh == null) return;
             var go = new GameObject(name + " (camera facing)") { hideFlags = HideFlags.HideAndDontSave };
             go.transform.SetParent(transform, false);
@@ -45,6 +48,7 @@ namespace RTXMnesia.World
             var quadRenderer = go.AddComponent<MeshRenderer>();
             quadRenderer.sharedMaterial = material;
             quadRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            quadRenderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
             quadRenderer.enabled = visible;
             _quad = go.transform;
             if (_runtimeColor) ApplyColor();

@@ -235,6 +235,35 @@ namespace RTXMnesia.Dev
                 Check(!hd.frameSettings.IsEnabled(FrameSettingsField.SSR) && !hd.frameSettings.IsEnabled(FrameSettingsField.SSGI), "classic lighting: the camera renders no SSR and no SSGI");
             }
 
+            // Path tracing: 64 samples accumulated by a camera that stands still, then denoised.
+            {
+                var s = saved.Copy();
+                s.lighting = 1;
+                s.rtPathTracing = 0;
+                HplGraphics.Apply(s);
+                Capture(camera, rt, $"{mapName}_pt0", out var raster);
+                s.rtPathTracing = 1;
+                HplGraphics.Apply(s);
+                // HDRP accumulates one sample per frame of the player loop (manual renders in one frame do not add up).
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                for (int i = 0; i < HplRayTracing.PathTracingSamples[1] + 16; i++) yield return null;
+                double accumulate = watch.Elapsed.TotalSeconds;
+                // The denoiser runs asynchronously after the last sample.
+                yield return new WaitForSecondsRealtime(1f);
+                SaveFrame(rt, $"{mapName}_pt1");
+                var traced = ReadFrame(rt);
+                var profile = HplGraphics.SettingsVolume != null ? HplGraphics.SettingsVolume.sharedProfile : null;
+                UnityEngine.Rendering.HighDefinition.PathTracing pt = null;
+                bool found = profile != null && profile.TryGet(out pt);
+                _report.AppendLine($"Path tracing: component {found}, active {pt?.active}, samples {pt?.maximumSamples.value}, denoiser {pt?.denoising.value}, {HplRayTracing.PathTracingSamples[1] + 16} frames in {accumulate:0.0} s (player loop), mean difference with raster RT {Difference(raster, traced):0.0000}, brightness {Brightness(raster):0.0000} → {Brightness(traced):0.0000}");
+                Check(found && pt.active && pt.enable.value && pt.maximumSamples.value == HplRayTracing.PathTracingSamples[1], "path tracing: the settings volume path traces 64 samples");
+                Check(Difference(raster, traced) > 0.0005f, $"path tracing changes the image (mean difference {Difference(raster, traced):0.0000})");
+                s.rtPathTracing = 0;
+                HplGraphics.Apply(s);
+                Capture(camera, rt, $"{mapName}_pt0_again", out _);
+                Check(!pt.active, "path tracing off: the component is inactive");
+            }
+
             // Shadows from all lights: the lights HPL2 drew without shadows join the choice (ultra: 16 slots).
             {
                 var s = saved.Copy();
@@ -388,6 +417,19 @@ namespace RTXMnesia.Dev
             File.WriteAllBytes(Path.Combine(folder, name + ".png"), image.EncodeToPNG());
             Destroy(image);
             return watch.Elapsed.TotalMilliseconds / 20;
+        }
+
+        /// <summary>What the camera last rendered to its target, RGB24.</summary>
+        static byte[] ReadFrame(RenderTexture rt)
+        {
+            var previous = RenderTexture.active;
+            RenderTexture.active = rt;
+            var image = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
+            image.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            RenderTexture.active = previous;
+            var pixels = image.GetRawTextureData();
+            Destroy(image);
+            return pixels;
         }
 
         /// <summary>Saves what the camera last rendered to its target.</summary>

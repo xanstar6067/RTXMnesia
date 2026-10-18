@@ -720,13 +720,22 @@ namespace RTXMnesia.Player
         void UpdateCameraTransform(float alpha)
         {
             if (playerCamera == null) return;
-            playerCamera.transform.SetPositionAndRotation(
-                Body.InterpolatedCameraPosition(alpha),
-                Quaternion.Euler(_pitch * Mathf.Rad2Deg, _yaw * Mathf.Rad2Deg, (_roll + _leanRoll) * Mathf.Rad2Deg));
+            Vector3 position = Body.InterpolatedCameraPosition(alpha);
+            var rotation = Quaternion.Euler(_pitch * Mathf.Rad2Deg, _yaw * Mathf.Rad2Deg, (_roll + _leanRoll) * Mathf.Rad2Deg);
+            // A standing player keeps the exact camera: the body's sub-millimetre noise between steps would change the
+            // view matrix every frame, and HDRP's path tracer starts its accumulation again on any change.
+            var t = playerCamera.transform;
+            if ((t.position - position).sqrMagnitude > 1e-8f || Quaternion.Angle(t.rotation, rotation) > 0.001f)
+                t.SetPositionAndRotation(position, rotation);
             // FOV is vertical in both engines; the aspect multiplier squeezes the view (FadePlayerAspectMulTo).
-            playerCamera.fieldOfView = _fov * _fovMul;
-            if (_aspectMul == 1f) playerCamera.ResetAspect();
-            else playerCamera.aspect = (float)playerCamera.pixelWidth / Mathf.Max(1, playerCamera.pixelHeight) * _aspectMul;
+            float fov = _fov * _fovMul;
+            if (Mathf.Abs(playerCamera.fieldOfView - fov) > 1e-4f) playerCamera.fieldOfView = fov;
+            float aspect = (float)playerCamera.pixelWidth / Mathf.Max(1, playerCamera.pixelHeight) * _aspectMul;
+            if (Mathf.Abs(playerCamera.aspect - aspect) > 1e-5f)
+            {
+                if (_aspectMul == 1f) playerCamera.ResetAspect();
+                else playerCamera.aspect = aspect;
+            }
         }
 
         // ------------------------------------------------------------------ input actions

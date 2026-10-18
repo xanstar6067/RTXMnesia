@@ -162,7 +162,9 @@ namespace RTXMnesia.Player
             float extLightLevel = _player.LightLevel.ExtendedLightLevel;
             float normalLightLevel = _player.LightLevel.NormalLightLevel;
 
-            _ambientLight.transform.position = _player.LogicCameraPosition - new Vector3(0f, 0.3f, 0f);
+            // Only a real move: any write marks the light's transform changed, and HDRP's path tracer then restarts.
+            Vector3 position = _player.LogicCameraPosition - new Vector3(0f, 0.3f, 0f);
+            if ((_ambientLight.transform.position - position).sqrMagnitude > 1e-8f) _ambientLight.transform.position = position;
             // A world light of HPL2 (cWorld updates it); not in the map's light list here.
             _ambientLight.UpdateLight(timeStep);
 

@@ -18,7 +18,7 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows, RtPathTracing,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
@@ -624,7 +624,15 @@ namespace RTXMnesia.Ui
                 info = "Рендер " + render.x + " x " + render.y + "\nВывод " + output.x + " x " + output.y;
             else info = "Применится после «OK».";
             DrawLines(info, leftX, y, size, grey);
-            if (SystemInfo.supportsRayTracing) DrawLines(CompareHint, leftX, y + 60, size, grey);
+            y += 48;
+            if (SystemInfo.supportsRayTracing && settings.lighting == 1)
+            {
+                Combo(leftX, y, MenuControl.RtPathTracing, settings);
+                y += comboStep + 4;
+                if (settings.rtPathTracing > 0) { DrawLines(PathTracingNote, leftX, y, size, grey); y += 48; }
+            }
+            if (SystemInfo.supportsRayTracing) { DrawLines(CompareHint, leftX, y, size, grey); y += 48; }
+            if (HplDlss.Available) DrawLines(FrameGenerationNote, leftX, y, size, grey);
 
             y = top;
             if (SystemInfo.supportsRayTracing && settings.lighting == 1)
@@ -659,7 +667,11 @@ namespace RTXMnesia.Ui
         }
 
         /// <summary>The comparison key (Effects.HplRtxCompare) under the ray tracing settings.</summary>
-        const string CompareHint = "В игре клавиша C: сравнение\nс другим освещением.";
+        /// <summary>What the path tracer of HDRP does not give (HplRayTracing.PathTracingSamples).</summary>
+        const string PathTracingNote = "Чисто, пока в кадре всё стоит;\nбез окружающего света и тумана.";
+        /// <summary>Frame generation: Unity has none of its own; NVIDIA's driver one is turned on in the NVIDIA App.</summary>
+        const string FrameGenerationNote = "Генерация кадров: NVIDIA Smooth\nMotion в NVIDIA App (RTX 40/50).";
+        const string CompareHint ="В игре клавиша C: сравнение\nс другим освещением.";
 
         /// <summary>Text with line breaks (the GUI text draws one line), 20 units per line.</summary>
         void DrawLines(string text, float x, float y, Vector2 size, Color color)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RTXMnesia.Ui;
 using RTXMnesia.World;
@@ -45,6 +46,14 @@ namespace RTXMnesia.Hpl
         /// <summary>Lights found by the rays (reflections, GI) within this distance of the camera (HDRP: 10 m).</summary>
         public const float LightClusterRange = 40f;
 
+        /// <summary>
+        /// Path tracing choices: off, or the samples accumulated while the camera stands still (HDRP's path tracer
+        /// starts again whenever the view changes, so a moving camera sees a noisy image), then denoised (OptiX).
+        /// It replaces the rasterized lighting: the custom passes (box lights, fog) and the HPL shaders (particles,
+        /// halos, Mul decals, water) are not path traced.
+        /// </summary>
+        public static readonly int[] PathTracingSamples = { 0, 64, 256, 1024 };
+
         /// <summary>The source radius of a shadowed light while it is traced (HPL2 lights have none; candles, lamps).</summary>
         public const float SourceRadius = 0.04f;
 
@@ -61,6 +70,8 @@ namespace RTXMnesia.Hpl
         public static int Reflections { get; private set; }
         /// <summary>RTGI: 0 — off, 1..3 — low, medium, high.</summary>
         public static int Gi { get; private set; }
+        /// <summary>Path tracing: index of <see cref="PathTracingSamples"/>, 0 — off.</summary>
+        public static int PathTracing { get; private set; }
         /// <summary>Lights without CastShadows in the map (candles) also get ray-traced shadows (remaster).</summary>
         public static bool AllShadows { get; private set; }
         /// <summary>The lantern in the hand casts ray-traced shadows (remaster).</summary>
@@ -86,6 +97,7 @@ namespace RTXMnesia.Hpl
             Ao = Active ? s.rtAo : 0;
             Reflections = Active ? s.rtReflections : 0;
             Gi = Active ? s.rtGi : 0;
+            PathTracing = Active ? s.rtPathTracing : 0;
             AllShadows = Shadows > 0 && s.rtAllShadows;
             LanternShadows = Active && s.rtLanternShadows;
             // The next render selects the lights again with the new settings.
@@ -97,6 +109,7 @@ namespace RTXMnesia.Hpl
         static ScreenSpaceReflection s_reflection;
         static GlobalIllumination s_gi;
         static LightCluster s_cluster;
+        static UnityEngine.Rendering.HighDefinition.PathTracing s_pathTracing;
 
         /// <summary>
         /// The ray tracing part of the global settings volume (HplGraphics): RTAO, RT reflections and RTGI. With the classic
@@ -121,6 +134,7 @@ namespace RTXMnesia.Hpl
                 s_reflection.SetAllOverridesTo(true);
             }
             ApplyGi(profile);
+            ApplyPathTracing(profile);
             s_reflection.active = Reflections > 0;
             if (Reflections == 0) return;
             s_reflection.enabled.Override(true);
@@ -134,6 +148,19 @@ namespace RTXMnesia.Hpl
             s_reflection.fullResolution = Reflections > 1;
             s_reflection.denoise = true;
             s_reflection.denoiserRadius = Reflections > 1 ? 0.75f : 0.5f;
+        }
+
+        static void ApplyPathTracing(VolumeProfile profile)
+        {
+            if (s_pathTracing == null && !profile.TryGet(out s_pathTracing)) s_pathTracing = profile.Add<UnityEngine.Rendering.HighDefinition.PathTracing>();
+            s_pathTracing.active = PathTracing > 0;
+            if (PathTracing == 0) return;
+            s_pathTracing.enable.Override(true);
+            s_pathTracing.maximumSamples.Override(PathTracingSamples[PathTracing]);
+            s_pathTracing.maximumDepth.Override(4);
+            s_pathTracing.maximumIntensity.Override(10f);
+            // The NVIDIA denoiser of com.unity.rendering.denoising, once the samples are accumulated.
+            if (Enum.TryParse("Optix", out HDDenoiserType optix)) s_pathTracing.denoising.Override(optix);
         }
 
         /// <summary>RTGI and the light cluster the rays of the reflections and of the GI see.</summary>
@@ -164,13 +191,39 @@ namespace RTXMnesia.Hpl
             s_gi.denoiserRadius = 0.66f;
         }
 
+        /// <summary>
+        /// Renderers of the HPL shaders (RTXMnesia/*: particles, halos, Mul decals, water) and mesh decals (HDRP/Decal)
+        /// have no ray tracing pass: in the acceleration structure the path tracer drew them black (it takes transparent
+        /// materials too; the dirt decals covered the floors). They are transparent or decals, so the raster RT
+        /// effects never needed them either.
+        /// </summary>
+        public static void Exclude(Renderer renderer)
+        {
+            if (renderer == null || renderer.rayTracingMode == UnityEngine.Experimental.Rendering.RayTracingMode.Off) return;
+            foreach (var material in renderer.sharedMaterials)
+                if (material != null && material.shader != null &&
+                    (material.shader.name.StartsWith("RTXMnesia/", StringComparison.Ordinal) || material.FindPass("DBufferMesh") >= 0))
+                {
+                    renderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
+                    return;
+                }
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void HookScenes() => UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, _) =>
+        {
+            foreach (var root in scene.GetRootGameObjects())
+                foreach (var renderer in root.GetComponentsInChildren<Renderer>(true)) Exclude(renderer);
+        };
+
         /// <summary>The ray tracing settings of <paramref name="s"/> are the applied ones (RTX tab: "applies after OK").</summary>
         public static bool Applied(HplUserSettings s)
         {
             bool active = s.lighting == 1 && SystemInfo.supportsRayTracing;
             if (active != Active) return false;
             return !active || Shadows == s.rtShadows && Ao == s.rtAo && Reflections == s.rtReflections && Gi == s.rtGi &&
-                   AllShadows == (s.rtShadows > 0 && s.rtAllShadows) && LanternShadows == s.rtLanternShadows;
+                   AllShadows == (s.rtShadows > 0 && s.rtAllShadows) && LanternShadows == s.rtLanternShadows &&
+                   PathTracing == s.rtPathTracing;
         }
 
         /// <summary>Ray tracing and screen space shadows of a camera (HplGraphics, beginContextRendering).</summary>

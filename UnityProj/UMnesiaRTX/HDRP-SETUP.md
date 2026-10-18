@@ -12,7 +12,7 @@ Open this folder with Unity **6000.6.2f1**.
   with gradient sky, fixed exposure and ACES tonemapping.
 
 This is a desktop HDRP baseline. Hardware ray tracing (DXR) is supported by the asset: `supportRayTracing`, screen space
-shadows with 16 slots (ray-traced shadows of punctual lights use them), SSR and SSGI (only for ray-traced reflections and GI), 16 lights per light cluster cell. Cameras only trace rays with the "Ray tracing"
+shadows with 16 slots (ray-traced shadows of punctual lights use them), SSR and SSGI (only for ray-traced reflections and GI), 16 lights per light cluster cell. Path tracing denoises with `com.unity.rendering.denoising` (OptiX). Cameras only trace rays with the "Ray tracing"
 lighting of the graphics options (`HplRayTracing`); check: `RTXMnesia.EditorDev.RtPreview.RunBatch`, results in `Logs/RtCheck`.
 
 NVIDIA DLSS (built-in module `com.unity.modules.nvidia`): the setup enables hardware dynamic resolution with DLSS as
