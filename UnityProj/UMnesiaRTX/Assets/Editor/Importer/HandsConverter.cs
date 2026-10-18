@@ -121,6 +121,51 @@ namespace RTXMnesia.Importer
         }
 
         /// <summary>
+        /// Unity's Collada import renames a node whose id repeats another's (the hands model's "hand" bone became
+        /// "elbow_hand"), so the clips' paths "shoulder/elbow/hand/…" matched nothing: the wrist and every finger stayed
+        /// in the bind pose (flat open palm instead of the grip on the lantern). Each unresolved path segment is
+        /// replaced with the model's child whose name ends with "_" + segment.
+        /// </summary>
+        static void RetargetCurvePaths(AnimationClip clip, string modelAsset, ImportLog log)
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelAsset);
+            if (model == null) return;
+            var skeleton = model.transform;
+            var cache = new Dictionary<string, string>();
+            string Resolve(string path)
+            {
+                if (cache.TryGetValue(path, out var done)) return done;
+                var current = skeleton;
+                var parts = new List<string>();
+                foreach (string segment in path.Split('/'))
+                {
+                    Transform next = current != null ? current.Find(segment) : null;
+                    if (next == null && current != null)
+                        foreach (Transform child in current)
+                            if (child.name.EndsWith("_" + segment, StringComparison.Ordinal)) { next = child; break; }
+                    parts.Add(next != null ? next.name : segment);
+                    current = next;
+                }
+                return cache[path] = string.Join("/", parts);
+            }
+
+            int moved = 0;
+            foreach (var binding in AnimationUtility.GetCurveBindings(clip))
+            {
+                if (string.IsNullOrEmpty(binding.path)) continue;
+                string path = Resolve(binding.path);
+                if (path == binding.path) continue;
+                var curve = AnimationUtility.GetEditorCurve(clip, binding);
+                AnimationUtility.SetEditorCurve(clip, binding, null);
+                var changed = binding;
+                changed.path = path;
+                AnimationUtility.SetEditorCurve(clip, changed, curve);
+                moved++;
+            }
+            if (moved > 0) log.Info($"Hands animation {clip.name}: {moved} curve paths retargeted to the model's bone names");
+        }
+
+        /// <summary>
         /// The hands' animations: each .dae_anim is a whole Collada file of the rig; copied as .dae next to the hands
         /// model and imported with legacy clips; the clip is saved under the .ent's animation name.
         /// </summary>
@@ -165,6 +210,7 @@ namespace RTXMnesia.Importer
                 clip.name = name;
                 clip.legacy = true;
                 if (speed != 1f) log.Warn($"Hands animation {name}: speed {speed} is not applied");
+                RetargetCurvePaths(clip, handsAsset, log);
                 AssetDatabase.DeleteAsset(clipPath);
                 AssetDatabase.CreateAsset(clip, clipPath);
                 clips.Add(clip);
