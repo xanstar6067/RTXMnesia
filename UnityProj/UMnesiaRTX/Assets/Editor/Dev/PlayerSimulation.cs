@@ -28,6 +28,7 @@ namespace RTXMnesia.EditorDev
     /// body Entity (bodies and joints) | call Function args (script or engine function).
     /// "watch" steps like idle and logs the script state every interval.
     /// until Var value timeout | expectvar Var value: wait for / assert a local script variable.
+    /// walkto Name [maxDrop]: walk on foot to an entity or area (JustineWalkthrough.WalkTo).
     /// </summary>
     public static class PlayerSimulation
     {
@@ -97,6 +98,7 @@ namespace RTXMnesia.EditorDev
                     map.scriptDebug = ImportMenu.HasArg("-scriptDebug");
                     map.runScript = !ImportMenu.HasArg("-noScript");
                     map.logDebugMessages = true;
+                    map.disableEnemyAI = ImportMenu.HasArg("-noEnemyAI");
                     map.Build();
                     map.Begin();
                     log.Info($"Map {map.mapFile}: script {map.Script?.GetType().Name ?? "none"}, {map.Entities.Count} script entities, " +
@@ -254,6 +256,23 @@ namespace RTXMnesia.EditorDev
                             }
                             if (map.GetVar(name) != expected) log.Warn($"t={time:0.00} mouseuntil timeout: {name}='{map.GetVar(name)}', expected {expected} | {player.States.Current.Describe()}");
                             else log.Info($"t={time:0.00} mouse reached {name}={expected}");
+                            break;
+                        }
+                        case "walkto":
+                        {
+                            // walkto Name [maxDrop]: on foot (grid search + the real controller) to an entity or area.
+                            if (map == null) { log.Warn("walkto needs an HplMap"); continue; }
+                            int walkFails = JustineWalkthrough.WalkTo(map, player, p.Length > 1 ? p[1] : "", m => log.Info(m), Arg(2, 0.6f));
+                            if (walkFails > 0) log.Warn($"walkto {p[1]} FAILED");
+                            Step(1);
+                            break;
+                        }
+                        case "pull":
+                        {
+                            // pull Lever: walk to the lever, grab the handle and pull it with the mouse until its state changes.
+                            if (map == null) { log.Warn("pull needs an HplMap"); continue; }
+                            if (JustineWalkthrough.PullLever(map, player, p.Length > 1 ? p[1] : "", m => log.Info(m)) != 0) log.Warn($"pull {p[1]} FAILED");
+                            Step(1);
                             break;
                         }
                         case "aim":
