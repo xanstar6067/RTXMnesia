@@ -16,11 +16,36 @@ namespace RTXMnesia.Hpl
         bool? _requested;
         bool _available, _lastActive;
         float _requestTime;
-        public static bool Available => (SystemInfo.hdrDisplaySupportFlags & HDRDisplaySupportFlags.Supported) != 0 &&
-            HDROutputSettings.main != null && HDROutputSettings.main.available;
-        public static bool Active => Available && HDROutputSettings.main.active;
-        // The native getter throws in SDR-only players, even though 'main' is non-null.
-        public static bool Pending => Available && HDROutputSettings.main.HDRModeChangeRequested;
+        // Unity reports HDR as available only with Player Settings > "Use HDR Display Output" (useHDRDisplay) enabled;
+        // without it the display getters throw InvalidOperationException even though 'main' is non-null.
+        public static bool Available
+        {
+            get
+            {
+                try
+                {
+                    return (SystemInfo.hdrDisplaySupportFlags & HDRDisplaySupportFlags.Supported) != 0 &&
+                        HDROutputSettings.main != null && HDROutputSettings.main.available;
+                }
+                catch (System.InvalidOperationException) { return false; }
+            }
+        }
+        public static bool Active
+        {
+            get
+            {
+                try { return Available && HDROutputSettings.main.active; }
+                catch (System.InvalidOperationException) { return false; }
+            }
+        }
+        public static bool Pending
+        {
+            get
+            {
+                try { return Available && HDROutputSettings.main.HDRModeChangeRequested; }
+                catch (System.InvalidOperationException) { return false; }
+            }
+        }
         public static float PaperWhite => s_settings.hdrPaperWhite;
         public static float Peak => s_settings.hdrPeak;
         public static float Black => s_settings.hdrBlack;

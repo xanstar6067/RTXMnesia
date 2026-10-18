@@ -920,10 +920,15 @@ namespace RTXMnesia.Ui
         {
             bool top = _layer == 2;
             var list = top ? _topPieces : _popupPieces;
-            if (top && _topPieceIndex == list.Count) list.Add(Image(_screen, "Message piece"));
-            if (!top && _popupPieceIndex == list.Count) list.Add(Image(_screen, "Drop-down list piece"));
+            // A new piece goes just below its layer's text. An existing one must keep its place: SetSiblingIndex to the
+            // text's index moves a piece that is already below the text to above it (the text is hidden by the piece).
+            if (_topPieceIndex == list.Count && top || _popupPieceIndex == list.Count && !top)
+            {
+                var created = Image(_screen, top ? "Message piece" : "Drop-down list piece");
+                created.transform.SetSiblingIndex((top ? _topText : _popupText).transform.GetSiblingIndex());
+                list.Add(created);
+            }
             var target = list[top ? _topPieceIndex++ : _popupPieceIndex++];
-            target.transform.SetSiblingIndex((top ? _topText : _popupText).transform.GetSiblingIndex());
             var piece = type != null && _assets != null ? _assets.Find(type) : default;
             target.texture = piece.texture != null ? piece.texture : Texture2D.whiteTexture;
             target.color = (piece.texture != null ? piece.color * color : color) * new Color(1, 1, 1, _opacity);

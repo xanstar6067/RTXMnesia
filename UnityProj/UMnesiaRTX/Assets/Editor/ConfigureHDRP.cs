@@ -18,7 +18,7 @@ public static class ConfigureHDRP
     {
         PlayerSettings.colorSpace = ColorSpace.Linear;
         PlayerSettings.allowHDRDisplaySupport = true;
-        PlayerSettings.useHDRDisplay = false; // HplHdr selects the saved mode at runtime.
+        PlayerSettings.useHDRDisplay = true; // Required: without it HDROutputSettings reports HDR unavailable. HplHdr then switches to the saved mode.
         var setLightmapQuality = typeof(PlayerSettings).GetMethod("SetLightmapEncodingQualityForPlatform",
             BindingFlags.Static | BindingFlags.NonPublic);
         if (setLightmapQuality != null)

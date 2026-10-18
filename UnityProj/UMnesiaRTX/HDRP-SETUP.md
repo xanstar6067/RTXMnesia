@@ -30,6 +30,10 @@ Setup completion is recorded in `Logs/HDRP-Setup-Result.txt`.
 ## Native HDR output (in progress)
 
 `HplHdr` selects native HDR output at runtime and exposes calibration in the HDR options tab.
+Player Settings > "Use HDR Display Output" (`useHDRDisplay`) must stay **on**: with it off Unity reports
+`HDROutputSettings.available = false` and the display getters throw `InvalidOperationException` ("HDR is not enabled
+in the player settings") on an HDR-capable system (checked with a standalone D3D12 player; with it on HDR activates
+within ~2 s and HplHdr then applies the saved mode). `Editor/EnsureHdrDisplay.cs` keeps the setting on.
 SDR-only players must not query `HDROutputSettings.HDRModeChangeRequested` or request a mode change:
 Unity throws even when `HDROutputSettings.main` is non-null. Check display availability first;
 without it the HDR volume stays inactive and startup continues in SDR. Runtime mode changes
