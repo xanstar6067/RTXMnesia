@@ -109,6 +109,15 @@ namespace RTXMnesia.Hpl
             Shader.SetGlobalVector(FogColorId, new Vector4(color.r, color.g, color.b, color.a));
         }
 
+        /// <summary>
+        /// The camera background: black without a sky box (HPL2 clears to black), else the sky box color. A gamma
+        /// color shown as is: the color buffer holds pre-exposed values and HDRP does not expose the clear color.
+        /// </summary>
+        public static Color BackgroundColor { get; private set; } = Color.black;
+
+        public static void SetBackground(bool skyBoxActive, Color skyBoxColor) =>
+            BackgroundColor = skyBoxActive ? new Color(skyBoxColor.r, skyBoxColor.g, skyBoxColor.b, 1f).linear : Color.black;
+
         static readonly int TranslucentFogId = Shader.PropertyToID("_HplTranslucentFog");
         static readonly int FogColorId = Shader.PropertyToID("_HplFogColor");
 

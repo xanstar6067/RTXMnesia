@@ -45,6 +45,7 @@ Shader "RTXMnesia/HplHalo"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
             #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+            #include "Assets/Shaders/HplFogAreas.hlsl"
 
             TEXTURE2D(_BaseColorMap);
             SAMPLER(sampler_BaseColorMap);
@@ -74,6 +75,7 @@ Shader "RTXMnesia/HplHalo"
                 float2 uv : TEXCOORD0;
                 float4 color : COLOR;
                 float viewDepth : TEXCOORD1;
+                float fogAreaVisibility : TEXCOORD2;
             };
 
             // A world point → (pixel, device depth); false behind the camera or off screen.
@@ -137,6 +139,15 @@ Shader "RTXMnesia/HplHalo"
                 return totalArea > 0.0 ? alpha * max(inside.x, 0.0) * max(inside.y, 0.0) / totalArea : 0.0;
             }
 
+            // iRenderer::GetFogAreaVisibilityForObject: the ray from the camera to the center of the bounding volume.
+            float FogAreaVisibility()
+            {
+                float3 boundsMin, boundsMax;
+                GetAbsoluteWorldRendererBounds(boundsMin, boundsMax);
+                float3 center = all(boundsMin == boundsMax) ? GetAbsolutePositionWS(GetObjectToWorldMatrix()._m03_m13_m23) : (boundsMin + boundsMax) * 0.5;
+                return HplFogAreaVisibility(center, GetAbsolutePositionWS(GetCurrentViewPosition()));
+            }
+
             Varyings Vert(Attributes input)
             {
                 Varyings output;
@@ -145,6 +156,7 @@ Shader "RTXMnesia/HplHalo"
                 output.uv = TRANSFORM_TEX(input.uv, _BaseColorMap);
                 output.color = _HplColor * HaloAlpha();
                 output.viewDepth = -TransformWorldToView(positionRWS).z;
+                output.fogAreaVisibility = FogAreaVisibility();
                 return output;
             }
 
@@ -161,6 +173,8 @@ Shader "RTXMnesia/HplHalo"
                     fogAmount = pow(fogAmount, _HplTranslucentFog.w);
                     finalAlpha = _HplTranslucentFog.z * fogAmount + (1.0 - fogAmount);
                 }
+
+                finalAlpha *= input.fogAreaVisibility;
 
                 int mode = (int)(_HplBlendMode + 0.5);
                 if (mode == 0)      { color *= finalAlpha; alpha = 1.0; }

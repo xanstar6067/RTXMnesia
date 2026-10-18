@@ -1310,6 +1310,13 @@ namespace RTXMnesia.ScriptApi
             }
             HplLighting.SetMultiplyFog(FogActive, FogColor, FogEnd);
             HplLighting.SetTranslucentFog(FogActive, FogColor, FogStart, FogEnd, FogFalloffExp);
+            if (_level != null)
+            {
+                SkyBoxActive = _level.skyBoxActive;
+                SkyBoxColor = _level.skyBoxColor;
+                SkyBoxTexture = _level.skyBoxTexture ?? "";
+            }
+            ApplySkyBox();
             var volume = GetComponentInChildren<Volume>(true);
             // Only in play mode: Volume.profile copies the shared profile there, edits must not reach the asset.
             if (volume != null && Application.isPlaying && volume.profile.TryGet(out Fog fog)) _fog = fog;
@@ -1324,6 +1331,38 @@ namespace RTXMnesia.ScriptApi
             FogFalloffExp = falloffExp ?? FogFalloffExp;
             HplLighting.SetTranslucentFog(FogActive, FogColor, FogStart, FogEnd, FogFalloffExp);
             if (_fog != null) HplLighting.ApplyFog(_fog, FogActive, FogColor, FogEnd);
+        }
+
+        // ------------------------------------------------------------------ sky box (cWorld)
+
+        public bool SkyBoxActive { get; private set; }
+        public Color SkyBoxColor { get; private set; } = Color.white;
+        /// <summary>The cube map name; no map of the game sets one, so only the color is drawn.</summary>
+        public string SkyBoxTexture { get; private set; } = "";
+
+        public void SetSkyBox(bool? active = null, Color? color = null, string texture = null)
+        {
+            SkyBoxActive = active ?? SkyBoxActive;
+            SkyBoxColor = color ?? SkyBoxColor;
+            SkyBoxTexture = texture ?? SkyBoxTexture;
+            ApplySkyBox();
+        }
+
+        /// <summary>
+        /// iRenderer::RenderBasicSkyBox: a cube at the far plane around the camera, vertex color × texture (none:
+        /// the color), depth tested and drawn after the fog, so only the background shows it unfogged. Here the
+        /// camera background (also of the water reflections, which HPL2 renders with the same renderer).
+        /// </summary>
+        void ApplySkyBox()
+        {
+            if (SkyBoxActive && SkyBoxTexture != "") HplLog.Warn($"sky box texture '{SkyBoxTexture}' is not converted: only its color");
+            HplLighting.SetBackground(SkyBoxActive, SkyBoxColor);
+            var camera = PlayerCamera;
+            if (camera != null && camera.TryGetComponent(out HDAdditionalCameraData data))
+            {
+                data.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color;
+                data.backgroundColorHDR = HplLighting.BackgroundColor;
+            }
         }
 
         /// <summary>The player as a collide callback owner: one body, the current character shape.</summary>

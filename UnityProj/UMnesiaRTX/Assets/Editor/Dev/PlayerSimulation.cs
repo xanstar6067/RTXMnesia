@@ -239,6 +239,23 @@ namespace RTXMnesia.EditorDev
                             }
                             break;
                         }
+                        case "mouseuntil":
+                        {
+                            // mouseuntil x y Var value [t]: move the mouse every step until the script variable has the
+                            // value (a player turning a wheel until the click), at most t seconds (default 10).
+                            float mx = Arg(1, 0f), my = Arg(2, 0f);
+                            string name = p.Length > 3 ? p[3] : "", expected = p.Length > 4 ? p[4] : "";
+                            int limit = Mathf.CeilToInt(Arg(5, 10f) / dt);
+                            while (map.GetVar(name) != expected && limit-- > 0)
+                            {
+                                player.AddYaw(-mx);
+                                player.AddPitch(-my);
+                                Step(1);
+                            }
+                            if (map.GetVar(name) != expected) throw new InvalidOperationException($"Timeout: {name}={map.GetVar(name)}, expected {expected}");
+                            log.Info($"t={time:0.00} mouse reached {name}={expected}");
+                            break;
+                        }
                         case "aim":
                         {
                             // aim Entity [Body]: look at the body (or entity) center.
@@ -302,7 +319,7 @@ namespace RTXMnesia.EditorDev
                         }
                         case "hide":
                         {
-                            // hide lights|passes|volumes|<shader name part>: turn off the lights, custom passes, volumes
+                            // hide lights|passes|fogareas|volumes|<shader name part>: turn off the lights, custom passes, fog areas, volumes
                             // or the renderers using a matching shader (bisecting render problems).
                             string what = p.Length > 1 ? p[1] : "";
                             int count = 0;
@@ -310,6 +327,8 @@ namespace RTXMnesia.EditorDev
                                 foreach (var l in UnityEngine.Object.FindObjectsByType<Light>(FindObjectsInactive.Exclude)) { l.enabled = false; count++; }
                             else if (what == "passes")
                                 foreach (var pass in UnityEngine.Object.FindObjectsByType<UnityEngine.Rendering.HighDefinition.CustomPassVolume>(FindObjectsInactive.Exclude)) { pass.enabled = false; count++; }
+                            else if (what == "fogareas")
+                                foreach (var fog in UnityEngine.Object.FindObjectsByType<RTXMnesia.World.AmnesiaFogArea>(FindObjectsInactive.Exclude)) { fog.enabled = false; count++; }
                             else if (what == "volumes")
                                 foreach (var vol in UnityEngine.Object.FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsInactive.Exclude)) { vol.enabled = false; count++; }
                             else

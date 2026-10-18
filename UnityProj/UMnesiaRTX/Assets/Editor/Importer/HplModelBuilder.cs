@@ -29,7 +29,7 @@ namespace RTXMnesia.Importer
     public static class HplModelBuilder
     {
         /// <summary>Bump when the output changes: prefabs of older versions are rebuilt.</summary>
-        public const int Version = 5;
+        public const int Version = 6;
 
         static readonly Matrix4x4 Mirror = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
 
@@ -141,6 +141,8 @@ namespace RTXMnesia.Importer
                 // No texture: HPL2 gives the sub mesh no material and never draws it.
             }
 
+            ApplyMeshCache(daeAbsolute, root, rel, log);
+
             // Mesh colliders (CreateStaticObjectEntity).
             foreach (var filter in root.GetComponentsInChildren<MeshFilter>(true))
             {
@@ -164,6 +166,47 @@ namespace RTXMnesia.Importer
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        /// <summary>
+        /// The game draws the .msh cache, not the .dae (<see cref="HplMsh"/>). Some caches were written by another
+        /// version of the Collada loader: the same vertices with another sub mesh matrix (zimmarman_ground.dae: the x of
+        /// its Z_UP node translations negated, while zimmarman_shrubb_dead.dae matches MeshLoaderCollada of the source).
+        /// Where a sub mesh's vertices match the cache, the cache's matrix wins; children keep their place.
+        /// </summary>
+        static void ApplyMeshCache(string daeAbsolute, GameObject root, string rel, ImportLog log)
+        {
+            string msh = Path.ChangeExtension(daeAbsolute, ".msh");
+            if (!File.Exists(msh)) return;
+            List<HplMsh.SubMesh> cache;
+            Dictionary<string, Matrix4x4> nodes;
+            try { cache = HplMsh.Read(msh, out nodes); }
+            catch (Exception e) { log.Info($"{rel}: mesh cache not compared ({e.Message})"); return; }
+            var filters = root.GetComponentsInChildren<MeshFilter>(true).ToList();
+            foreach (var sub in cache)
+            {
+                var filter = filters.FirstOrDefault(f => f.name == sub.Name);
+                if (filter == null || filter.sharedMesh == null) continue;
+                filters.Remove(filter);
+                var vertices = filter.sharedMesh.vertices;
+                if (sub.Positions == null || vertices.Length != sub.Positions.Length) continue;
+                bool sameVertices = true;
+                for (int v = 0; v < vertices.Length && sameVertices; v++)
+                    sameVertices = (vertices[v] - new Vector3(-sub.Positions[v].x, sub.Positions[v].y, sub.Positions[v].z)).sqrMagnitude <= 1e-6f;
+                if (!sameVertices) continue;
+                var t = filter.transform;
+                Matrix4x4 expected = ToUnity(nodes[sub.Name]);
+                Matrix4x4 actual = root.transform.worldToLocalMatrix * t.localToWorldMatrix;
+                float error = 0f;
+                for (int j = 0; j < 16; j++) error = Mathf.Max(error, Mathf.Abs(expected[j] - actual[j]));
+                if (error <= 0.001f) continue;
+                var children = new List<Transform>();
+                foreach (Transform child in t) children.Add(child);
+                foreach (var child in children) child.SetParent(root.transform, true);
+                SetLocalMatrix(t, t.parent.worldToLocalMatrix * root.transform.localToWorldMatrix * expected, log, $"{rel} sub mesh '{sub.Name}' from the mesh cache");
+                foreach (var child in children) child.SetParent(t, true);
+                log.Info($"{rel}: sub mesh '{sub.Name}' placed as in the mesh cache (matrix differs by {error:G4})");
+            }
         }
 
         /// <summary>WorldLoaderHplMap: a char collider body has SetCollide(false), only the character is stopped by it.</summary>

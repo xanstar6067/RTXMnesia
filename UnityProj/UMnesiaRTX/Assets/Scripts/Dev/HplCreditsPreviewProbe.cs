@@ -117,7 +117,8 @@ namespace RTXMnesia.Dev
             Check(SceneManager.GetActiveScene().path == menuScene && ui != null && ui.IsTitleScreen && Time.timeScale == 1, "the last fade returns to the main menu");
             Check(!HplCredits.Active && !HplGame.GlobalVars.ContainsKey("credits_reset_probe"), "the game is reset, the credits gone");
             Check(HplCredits.KeyParts.Count == 0, "AddKeyPart buffer is reset");
-            Check(ui.Choose(MenuControl.NewGame) && ui.Choose(MenuControl.ConfirmNewGame), "new game accepted after ending");
+            // New game → the start game window (cLuxMainMenu_StartGame) → its confirmation.
+            Check(ui.Choose(MenuControl.NewGame) && ui.Choose(MenuControl.StartGameStart) && ui.Choose(MenuControl.ConfirmNewGame), "new game accepted after ending");
             wait = Time.realtimeSinceStartup + 60f;
             while (SceneManager.GetActiveScene().path != HplGameUi.FirstLevelScene && Time.realtimeSinceStartup < wait) yield return null;
             yield return null; yield return null;

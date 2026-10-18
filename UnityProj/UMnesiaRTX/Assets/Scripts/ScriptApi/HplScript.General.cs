@@ -139,11 +139,12 @@ namespace RTXMnesia.ScriptApi
 
         protected void SetMapDisplayNameEntry(string asNameEntry) => Map.DisplayNameEntry = asNameEntry ?? "";
 
-        protected void SetSkyBoxActive(bool abActive) => NotPorted(nameof(SetSkyBoxActive), "sky boxes");
+        protected void SetSkyBoxActive(bool abActive) => Map.SetSkyBox(active: abActive);
 
-        protected void SetSkyBoxTexture(string asTexture) => NotPorted(nameof(SetSkyBoxTexture), "sky boxes");
+        /// <summary>cWorld::SetSkyBox(CreateCubeMap): the name is kept, the cube map is not drawn (no map uses one).</summary>
+        protected void SetSkyBoxTexture(string asTexture) => Map.SetSkyBox(texture: asTexture ?? "");
 
-        protected void SetSkyBoxColor(float afR, float afG, float afB, float afA) => NotPorted(nameof(SetSkyBoxColor), "sky boxes");
+        protected void SetSkyBoxColor(float afR, float afG, float afB, float afA) => Map.SetSkyBox(color: new Color(afR, afG, afB, afA));
 
         protected void UnlockAchievement(string asName) => Debug.Log($"[Script] Achievement '{asName}'");
 

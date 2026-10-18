@@ -259,6 +259,10 @@ namespace RTXMnesia.Save
         public bool fogActive;
         public Color fogColor;
         public float fogStart, fogEnd, fogFalloffExp;
+        // cLuxSavedMap mbSkyBoxActive / msSkyboxTexture / mSkyBoxColor; skyBoxSaved false: a file from before them.
+        public bool skyBoxSaved, skyBoxActive;
+        public Color skyBoxColor = Color.white;
+        public string skyBoxTexture = "";
         public string checkPointName = "", checkPointStartPos = "", checkPointCallback = "", checkPointMusic = "";
         public int checkPointCount, checkPointMusicPrio;
         public bool checkPointMusicResume;

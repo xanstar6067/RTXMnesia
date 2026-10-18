@@ -273,6 +273,8 @@ namespace RTXMnesia.World
         /// <summary>The main camera's view mirrored in the surface plane, its projection with the near plane on the water.</summary>
         void PlaceMirror(Camera main, Surface s)
         {
+            // HPL2 renders the reflection with the world renderer: the sky box too.
+            if (_mirror.TryGetComponent(out HDAdditionalCameraData mirrorData)) mirrorData.backgroundColorHDR = Hpl.HplLighting.BackgroundColor;
             var r = s.renderer;
             Vector3 n = r.localToWorldMatrix.MultiplyVector(s.localNormal).normalized;
             Vector3 p = r.localToWorldMatrix.MultiplyPoint3x4(s.localPoint);

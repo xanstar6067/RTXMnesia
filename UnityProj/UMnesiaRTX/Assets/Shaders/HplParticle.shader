@@ -43,6 +43,7 @@ Shader "RTXMnesia/HplParticle"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
             #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+            #include "Assets/Shaders/HplFogAreas.hlsl"
 
             TEXTURE2D(_BaseColorMap);
             SAMPLER(sampler_BaseColorMap);
@@ -79,6 +80,7 @@ Shader "RTXMnesia/HplParticle"
                 float2 uv : TEXCOORD0;
                 float4 color : COLOR;
                 float viewDepth : TEXCOORD1;
+                float fogAreaVisibility : TEXCOORD2;
             };
 
             // UpdateGraphicsForViewport: alpha by the distance of the system to the camera.
@@ -96,6 +98,15 @@ Shader "RTXMnesia/HplParticle"
                 }
                 if (_HplMulRgbByAlpha > 0.0) mul.rgb *= mul.a;
                 return mul;
+            }
+
+            // iRenderer::GetFogAreaVisibilityForObject: the ray from the camera to the center of the bounding volume.
+            float FogAreaVisibility()
+            {
+                float3 boundsMin, boundsMax;
+                GetAbsoluteWorldRendererBounds(boundsMin, boundsMax);
+                float3 center = all(boundsMin == boundsMax) ? GetAbsolutePositionWS(GetObjectToWorldMatrix()._m03_m13_m23) : (boundsMin + boundsMax) * 0.5;
+                return HplFogAreaVisibility(center, GetAbsolutePositionWS(GetCurrentViewPosition()));
             }
 
             Varyings Vert(Attributes input)
@@ -124,6 +135,7 @@ Shader "RTXMnesia/HplParticle"
                 output.uv = TRANSFORM_TEX(input.uv, _BaseColorMap);
                 output.color = input.color * mul;
                 output.viewDepth = -positionVS.z;
+                output.fogAreaVisibility = FogAreaVisibility();
                 return output;
             }
 
@@ -140,6 +152,8 @@ Shader "RTXMnesia/HplParticle"
                     fogAmount = pow(fogAmount, _HplTranslucentFog.w);
                     finalAlpha = _HplTranslucentFog.z * fogAmount + (1.0 - fogAmount);
                 }
+
+                finalAlpha *= input.fogAreaVisibility;
 
                 int mode = (int)(_HplBlendMode + 0.5);
                 if (mode == 0)      // Add (One, One)

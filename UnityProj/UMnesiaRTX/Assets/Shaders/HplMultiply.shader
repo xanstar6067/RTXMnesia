@@ -8,7 +8,8 @@
 // factor is computed there: t_gamma × color (× 2 for MulX2), clamped like the 8-bit target for Mul, and
 // linearized; dst_lin × factor_lin then matches dst_gamma × factor_gamma.
 // Fog is applied after decals in HPL2, here before: the factor is faded to 1 by the fog opacity (_HplFog, set by
-// HplLighting.ApplyFog with the same formula as the HDRP fog).
+// HplLighting.ApplyFog with the same formula as the HDRP fog), and likewise by the fog areas over the pixel
+// (HplFogAreas.hlsl).
 Shader "RTXMnesia/HplMultiply"
 {
     Properties
@@ -44,6 +45,7 @@ Shader "RTXMnesia/HplMultiply"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
             #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+            #include "Assets/Shaders/HplFogAreas.hlsl"
 
             TEXTURE2D(_BaseColorMap);
             SAMPLER(sampler_BaseColorMap);
@@ -100,6 +102,16 @@ Shader "RTXMnesia/HplMultiply"
                 {
                     float d = min(length(input.positionRWS), _HplFog.z);
                     factor = lerp(factor, 1.0, 1.0 - exp(-d * _HplFog.y));
+                }
+                // The fog areas are drawn after the decals too (RenderFog): the same fade by their opacity here.
+                if (_HplFogAreaCount > 0)
+                {
+                    float viewDepth = max(-TransformWorldToView(input.positionRWS).z, 1e-6);
+                    float3 cameraRWS = GetCurrentViewPosition();
+                    float3 areaColor;
+                    float transmittance;
+                    HplFogAreasAlongRay(GetAbsolutePositionWS(cameraRWS), (input.positionRWS - cameraRWS) / viewDepth, viewDepth, false, 1.0, areaColor, transmittance);
+                    factor = lerp(factor, 1.0, 1.0 - transmittance);
                 }
                 return float4(factor, 1.0);
             }

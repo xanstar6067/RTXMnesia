@@ -83,6 +83,10 @@ namespace RTXMnesia.ScriptApi
                 fogStart = map.FogStart,
                 fogEnd = map.FogEnd,
                 fogFalloffExp = map.FogFalloffExp,
+                skyBoxSaved = true,
+                skyBoxActive = map.SkyBoxActive,
+                skyBoxColor = map.SkyBoxColor,
+                skyBoxTexture = map.SkyBoxTexture,
             };
             foreach (var pair in map.Vars) s.vars.Add(new SavedVar { name = pair.Key, value = pair.Value });
             if (map.Script != null)
@@ -293,6 +297,7 @@ namespace RTXMnesia.ScriptApi
             map.TotalCompletionAmount = s.totalCompletionAmount;
             map.CurrentCompletionAmount = s.currentCompletionAmount;
             map.SetFog(s.fogActive, s.fogColor, s.fogStart, s.fogEnd, s.fogFalloffExp);
+            if (s.skyBoxSaved) map.SetSkyBox(s.skyBoxActive, s.skyBoxColor, s.skyBoxTexture ?? "");
             if (s.full)
             {
                 map.LanternLitCallback = s.lanternLitCallback;

@@ -6,6 +6,8 @@
 
 ## Нужны для главы 1 (по частоте)
 
+Небо (2026-10-18): `SetSkyBoxActive`, `SetSkyBoxColor` — ✓ (цвет фона камеры и зеркал воды, кэш карты и сохранения); `SetSkyBoxTexture` — ~ (имя хранится, кубкарта не рисуется; ни одна карта её не задаёт).
+
 Подготовка Justine (2026-10-17): `SetPlayerPermaDeathSound` — ✓, хранит выбранную .snt у игрока и переносит между картами. В режиме Justine смерть проигрывает её и завершает приложение без загрузки checkpoint; основной режим смерти сохранён. `StartCredits` и `AddKeyPart` — ✓ с 2026-10-17 (титры, CLAUDE.md «Титры, NPC, анимации, прикреплённые пропы и критеры»). Проверки и границы: `justine/README.md`.
 
 | Функция | гл.1 | всего | Статус | Сигнатура |
@@ -122,7 +124,7 @@
 | `FadeGlobalSoundSpeed` | 4 | 10 | ✓ | `void FadeGlobalSoundSpeed(float afDestSpeed, float afTime)` |
 | `ClearSavedMaps` | 4 | 10 | ✓ | `void ClearSavedMaps()` |
 | `StringSub` | 3 | 12 | ✓ | `string& StringSub(string &in asString, int alStart, int alCount)` |
-| `SetSkyBoxActive` | 3 | 3 | — | `void SetSkyBoxActive(bool abActive)` |
+| `SetSkyBoxActive` | 3 | 3 | ✓ | `void SetSkyBoxActive(bool abActive)` |
 | `SetPropEffectActive` | 3 | 6 | ✓ | `void SetPropEffectActive(string &in asName, bool abActive, bool abFadeAndPlaySounds)` |
 | `SetPlayerHealth` | 3 | 7 | ✓ | `void SetPlayerHealth(float afHealth)` |
 | `GetLanternActive` | 3 | 4 | ✓ | `bool GetLanternActive()` |
@@ -143,7 +145,7 @@
 | `AddPlayerHealth` | 2 | 8 | ✓ | `void AddPlayerHealth(float afHealth)` |
 | `StartEffectEmotionFlash` | 1 | 8 | ~ | `void StartEffectEmotionFlash(string &in asTextCat, string &in asTextEntry, string &in asSound)` |
 | `SetWheelAngle` | 1 | 1 | ✓ | `void SetWheelAngle(string &in asName, float afAngle, bool abAutoMove)` |
-| `SetSkyBoxColor` | 1 | 1 | — | `void SetSkyBoxColor(float afR, float afG, float afB, float afA)` |
+| `SetSkyBoxColor` | 1 | 1 | ✓ | `void SetSkyBoxColor(float afR, float afG, float afB, float afA)` |
 | `SetPlayerSanity` | 1 | 9 | ✓ | `void SetPlayerSanity(float afSanity)` |
 | `ReturnOpenJournal` | 1 | 3 | ✓ | `void ReturnOpenJournal(bool abOpenJournal)` |
 | `RemoveHint` | 1 | 1 | ✓ | `void RemoveHint(string &in asName)` |

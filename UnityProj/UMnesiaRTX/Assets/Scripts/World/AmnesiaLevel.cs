@@ -15,5 +15,11 @@ namespace RTXMnesia.World
         public float fogEnd = 40f;
         public float fogFalloffExp = 1f;
         public bool fogCulling = true;
+
+        [Header("Sky box of the map (cWorld: the background after the fog; scripts change it at runtime)")]
+        public bool skyBoxActive;
+        public Color skyBoxColor = Color.white;
+        [Tooltip("Cube map of the sky box (empty on all maps of the game: only the color)")]
+        public string skyBoxTexture = "";
     }
 }

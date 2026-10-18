@@ -180,6 +180,9 @@ namespace RTXMnesia.Importer
             level.fogEnd = mapData.Float("FogEnd", 40f);
             level.fogFalloffExp = mapData.Float("FogFalloffExp", 1f);
             level.fogCulling = mapData.Bool("FogCulling", true);
+            level.skyBoxActive = mapData.Bool("SkyBoxActive");
+            level.skyBoxColor = mapData.Color("SkyBoxColor", Color.white);
+            level.skyBoxTexture = mapData.Str("SkyBoxTexture");
             Transform Group(string name)
             {
                 var group = new GameObject(name).transform;
@@ -189,7 +192,7 @@ namespace RTXMnesia.Importer
 
             Transform statics = Group("StaticObjects"), primitives = Group("Primitives"), decals = Group("Decals"),
                 entities = Group("Entities"), lights = Group("Lights"), billboards = Group("Billboards"),
-                particles = Group("ParticleSystems"), sounds = Group("Sounds"), areas = Group("Areas");
+                particles = Group("ParticleSystems"), sounds = Group("Sounds"), areas = Group("Areas"), fogAreas = Group("FogAreas");
 
             ForEach(contents.Child("StaticObjects"), "StaticObject", e => PlaceStatic(e, statics));
             ForEach(contents.Child("Primitives"), "Plane", e => BuildPlane(e, primitives));
@@ -205,6 +208,7 @@ namespace RTXMnesia.Importer
                         case "Billboard": BuildWorldEntity(e, billboards, "", Vector3.one); break;
                         case "ParticleSystem": BuildWorldEntity(e, particles, "", Vector3.one); break;
                         case "Sound": BuildWorldEntity(e, sounds, "", Vector3.one); break;
+                        case "FogArea": BuildWorldEntity(e, fogAreas, "", Vector3.one); break;
                         default: BuildWorldEntity(e, lights, "", Vector3.one); break;
                     }
                 }
@@ -1073,6 +1077,22 @@ namespace RTXMnesia.Importer
                     FinishChild(e, go, "sounds");
                     return go;
                 }
+                case "FogArea":
+                {
+                    // cEngineFileLoading::LoadFogArea + SetupWorldEntity: the matrix R·S, the unit box; Active is not read.
+                    var go = Child(e, parent, namePrefix, positionScale, HplSpace.Rotation(e.Vec3("Rotation")));
+                    go.transform.localScale = Vector3.Scale(e.Vec3("Scale", Vector3.one), positionScale);
+                    var fog = go.AddComponent<AmnesiaFogArea>();
+                    fog.color = e.Color("Color", Color.white);
+                    fog.start = e.Float("Start");
+                    fog.end = e.Float("End");
+                    fog.falloffExp = e.Float("FalloffExp");
+                    fog.showBacksideWhenInside = e.Bool("ShownBacksideWhenInside", true);
+                    fog.showBacksideWhenOutside = e.Bool("ShownBacksideWhenOutside", true);
+                    fog.shader = AssetDatabase.LoadAssetAtPath<Shader>("Assets/Shaders/HplFogArea.shader");
+                    Count("fog areas");
+                    return go;
+                }
                 default:
                     WarnOnce($"'{e.Name}' is not supported yet (skipped)");
                     return null;
@@ -1368,10 +1388,12 @@ namespace RTXMnesia.Importer
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, VolumePath);
 
-            // HPL2 has no ambient light or sky lighting unless the map has a sky box.
+            // HPL2 has no ambient light or sky lighting; its sky box only draws the background (AmnesiaLevel.skyBox*,
+            // the camera background color at runtime).
             var environment = profile.Add<VisualEnvironment>(true);
             environment.skyType.Override(0);
-            if (mapData.Bool("SkyBoxActive")) _log.Warn("Map has a sky box: not converted yet (black background)");
+            if (mapData.Bool("SkyBoxActive") && mapData.Str("SkyBoxTexture") != "")
+                _log.Warn("Map sky box texture is not converted yet (only its color)");
 
             var exposure = profile.Add<Exposure>(true);
             exposure.mode.Override(ExposureMode.Fixed);
