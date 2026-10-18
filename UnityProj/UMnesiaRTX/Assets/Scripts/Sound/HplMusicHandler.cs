@@ -136,6 +136,8 @@ namespace RTXMnesia.Sound
         /// </summary>
         void UpdateDangerMusic(float timeStep)
         {
+            // HARDMODE: no danger music.
+            if (ScriptApi.HplDifficulty.HardMode) return;
             for (int i = 0; i < EnemyMusicTypes; i++) if (_enemyPlaying[i]) return;
             var map = HplMap.Current;
             if (map == null) return;

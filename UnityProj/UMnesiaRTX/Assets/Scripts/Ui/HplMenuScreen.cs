@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using RTXMnesia.Hpl;
 using RTXMnesia.Save;
 using RTXMnesia.ScriptApi;
 using UnityEngine;
@@ -23,8 +24,17 @@ namespace RTXMnesia.Ui
         /// <summary>The key config window (cLuxMainMenu_KeyConfig), opened from the input options; null: closed.</summary>
         public HplKeyConfig KeyConfig => _keyConfig;
         public bool ShowingKeyConfig => _keyConfig != null;
-        /// <summary>A key config slot waits for an input: the keys go to it, not to the game UI.</summary>
-        public bool CapturingInput => _keyConfig != null && _keyConfig.IsWaiting;
+        /// <summary>A key config slot waits for an input, or a profile name is typed: the keys go there, not to the game UI.</summary>
+        public bool CapturingInput => _keyConfig != null && _keyConfig.IsWaiting || EnteringName && !ConfirmingQuit;
+        /// <summary>The profile window (cLuxMainMenu_Profile) is open.</summary>
+        public bool ShowingProfiles => _extras.profiles != null;
+        /// <summary>The enter name window of the profiles is open.</summary>
+        public bool EnteringName => _extras.enteringName;
+        /// <summary>The start game window (cLuxMainMenu_StartGame) is open.</summary>
+        public bool ShowingStartGame => _extras.startGame;
+        public HplMenuExtras Extras => _extras;
+        /// <summary>Tests: the title screen asks for a profile in batch runs too.</summary>
+        public static bool RequireProfileInBatch;
         /// <summary>The open drop-down list of the graphics options; null: none.</summary>
         public HplMenuCombo OpenCombo => _combo;
 
@@ -37,6 +47,14 @@ namespace RTXMnesia.Ui
         MenuControl? _dragSlider;
         HplKeyConfig _keyConfig;
         HplMenuCombo _combo;
+        readonly HplMenuExtras _extras = new();
+        readonly List<string> _profileNames = new();
+        readonly List<char> _typed = new();
+        bool _typingHooked;
+        /// <summary>The pause (HplGameUi.PauseGeneration) whose menu made a hard mode save: its Save is disabled.</summary>
+        int _hardSavedPause = -1;
+        /// <summary>The control to focus after the next drawing (its index is known only then).</summary>
+        MenuControl? _focus;
 
         public HplMenuScreen(HplGameUi ui, HplPauseMenu menu)
         {
@@ -52,6 +70,12 @@ namespace RTXMnesia.Ui
             _selected = 0;
             if (_ui.IsTitleScreen) _menu.HasSave = HplSaveHandler.SaveFileExists(_map.Campaign);
             _menu.SetVisible(true);
+            // cLuxMainMenu::OnEnterContainer: no user config yet — the title screen starts with the profiles.
+            if (_ui.IsTitleScreen && !HplProfiles.ChosenThisRun && (!Application.isBatchMode || RequireProfileInBatch))
+            {
+                OpenProfiles();
+                return;
+            }
             Refresh();
         }
 
@@ -64,6 +88,10 @@ namespace RTXMnesia.Ui
             _dragSlider = null;
             _keyConfig = null;
             _combo = null;
+            _extras.profiles = null;
+            _extras.startGame = false;
+            _extras.message = null;
+            CloseEnterName();
         }
 
         /// <summary>cLuxMainMenu::ExitPressed: closes a window, or the menu itself in game.</summary>
@@ -83,15 +111,36 @@ namespace RTXMnesia.Ui
                 else CloseKeyConfig();
                 return;
             }
+            // Pop ups of the profile and start game windows close back to their window, then the windows close.
+            if (ShowingProfiles || ShowingStartGame)
+            {
+                if (ConfirmingQuit) { ConfirmingQuit = false; _selected = 0; }
+                else if (EnteringName) { CloseEnterName(); _selected = 0; }
+                else if (ShowingProfiles) CloseProfiles();
+                else Show();
+                Refresh();
+                return;
+            }
             // A confirmation of the load window goes back to the window, as its pop up does.
             if (ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad) OpenLoadGame(_selectedSave);
             else if (ConfirmingQuit || ShowingOptions || ShowingLoad) Show();
             else if (!_ui.IsTitleScreen) _ui.BeginClose();
         }
 
-        public void Refresh() => _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
-            _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad || ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad ? _saveLabels : null, _selectedSave,
-            _keyConfig, _combo);
+        public void Refresh()
+        {
+            UpdateHardModeExtras();
+            _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
+                _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad || ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad ? _saveLabels : null, _selectedSave,
+                _keyConfig, _combo, _extras);
+            if (_focus.HasValue)
+            {
+                for (int i = 0; i < _menu.ButtonCount; i++)
+                    if (_menu.ControlAt(i) == _focus.Value) { _selected = i; break; }
+                _focus = null;
+                Refresh();
+            }
+        }
 
         /// <summary>cLuxMainMenu_LoadGame::OnSetActive → PopulateSavedGameList.</summary>
         public void OpenLoadGame(int select = -1)
@@ -119,7 +168,7 @@ namespace RTXMnesia.Ui
             Refresh();
             if (_ui.IsClosing) return;
             // A slot waiting for an input takes the next key or mouse button (not the click that started it).
-            if (CapturingInput)
+            if (_keyConfig != null && _keyConfig.IsWaiting)
             {
                 if (Time.frameCount > _keyConfig.WaitingFrame)
                 {
@@ -134,6 +183,7 @@ namespace RTXMnesia.Ui
                 UpdateCombo(mouse, keyboard);
                 return;
             }
+            if (EnteringName && !ConfirmingQuit) Type(keyboard);
             if (mouse != null && ShowingOptions && !ShowingKeyConfig) DragSlider(mouse);
             int hovered = mouse != null ? _menu.HitTest(mouse.position.ReadValue()) : -1;
             if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0f && hovered >= 0) _selected = hovered;
@@ -151,8 +201,166 @@ namespace RTXMnesia.Ui
             Refresh();
 
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && hovered >= 0) Activate(hovered);
+            // The name text box takes Enter (create) and Space (a character) itself.
+            else if (EnteringName && !ConfirmingQuit) { }
             else if (keyboard != null && (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame))
                 Activate(_selected);
+        }
+
+        // ------------------------------------------------------------------ profiles
+
+        /// <summary>cLuxMainMenu_Profile::OnSetActive: the list; without profiles the enter name window at once.</summary>
+        public void OpenProfiles()
+        {
+            Reset();
+            ReloadProfiles();
+            string pick = HplProfiles.ChosenThisRun ? HplProfiles.Current : HplProfiles.Last;
+            _extras.selectedProfile = pick != null ? _profileNames.IndexOf(pick) : -1;
+            if (_extras.selectedProfile < 0 && _profileNames.Count > 0) _extras.selectedProfile = 0;
+            _selected = 0;
+            if (_profileNames.Count == 0) OpenEnterName();
+            Refresh();
+        }
+
+        void ReloadProfiles()
+        {
+            _profileNames.Clear();
+            _profileNames.AddRange(HplProfiles.List());
+            _extras.profiles = _profileNames;
+        }
+
+        /// <summary>cLuxMainMenu_Profile::WindowCloses: back to the menu with a profile in use, else the quit question.</summary>
+        void CloseProfiles()
+        {
+            if (HplProfiles.ChosenThisRun && HplProfiles.Current != null)
+            {
+                Show();
+                return;
+            }
+            PendingConfirmation = MenuControl.ConfirmQuit;
+            ConfirmingQuit = true;
+            _selected = 1;
+        }
+
+        /// <summary>cLuxMainMenu_Profile::SelectProfile: SetProfile, InitUserConfig and the menu again.</summary>
+        void SelectProfile(int row)
+        {
+            if (row < 0 || row >= _profileNames.Count) return;
+            HplProfiles.Select(_profileNames[row]);
+            HplKeyBindings.Reload();
+            _ui.Settings = HplUserSettings.Load(_map);
+            if (Application.isPlaying) _ui.Settings.Apply(_map);
+            Show();
+        }
+
+        /// <summary>cLuxMainMenu_Profile::PressCreateProfile: the default name ("New Player"), all selected.</summary>
+        void OpenEnterName()
+        {
+            _extras.enteringName = true;
+            _extras.nameText = _menu.Translate("MainMenu", "New Player", "Новый игрок");
+            _extras.nameSelected = true;
+            _typed.Clear();
+            var keyboard = Keyboard.current;
+            if (keyboard != null && !_typingHooked)
+            {
+                keyboard.onTextInput += OnTextInput;
+                _typingHooked = true;
+            }
+            _selected = 0;
+        }
+
+        void CloseEnterName()
+        {
+            _extras.enteringName = false;
+            _typed.Clear();
+            if (_typingHooked && Keyboard.current != null) Keyboard.current.onTextInput -= OnTextInput;
+            _typingHooked = false;
+        }
+
+        void OnTextInput(char c)
+        {
+            if (EnteringName) _typed.Add(c);
+        }
+
+        /// <summary>
+        /// cWidgetTextBox of the name: typed characters (not the illegal ones, up to 20) replace the selected text or
+        /// go to the end, Backspace deletes, Enter creates (SetForceCallBackOnEnter).
+        /// </summary>
+        void Type(Keyboard keyboard)
+        {
+            foreach (char c in _typed)
+            {
+                if (char.IsControl(c) || HplProfiles.IllegalChars.IndexOf(c) >= 0) continue;
+                if (_extras.nameSelected)
+                {
+                    _extras.nameText = "";
+                    _extras.nameSelected = false;
+                }
+                if (_extras.nameText.Length < HplProfiles.MaxNameLength) _extras.nameText += c;
+            }
+            _typed.Clear();
+            if (keyboard == null) return;
+            if (keyboard.backspaceKey.wasPressedThisFrame)
+            {
+                if (_extras.nameSelected) _extras.nameText = "";
+                else if (_extras.nameText.Length > 0) _extras.nameText = _extras.nameText.Substring(0, _extras.nameText.Length - 1);
+                _extras.nameSelected = false;
+            }
+            if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame) CreateProfile();
+        }
+
+        /// <summary>
+        /// cLuxMainMenu_Profile::PressEnterNameCreate: spaces trimmed; an empty or existing name — "The profile name
+        /// already exists" (the original shows it for an empty name too); else the list with the new one selected.
+        /// </summary>
+        void CreateProfile()
+        {
+            string name = HplProfiles.CleanName(_extras.nameText);
+            bool first = HplProfiles.List().Count == 0;
+            if (name == "" || !HplProfiles.Create(name))
+            {
+                Message(_menu.Translate("MainMenu", "The profile name already exists", "Профиль с таким именем уже существует"));
+                return;
+            }
+            if (first)
+            {
+                // The first profile keeps the options and keys chosen before profiles existed.
+                HplUserSettings.CopyGlobalToProfile(name);
+                HplKeyBindings.CopyGlobalToProfile(name);
+            }
+            CloseEnterName();
+            ReloadProfiles();
+            _extras.selectedProfile = _profileNames.IndexOf(name);
+            _focus = MenuControl.ProfileSelect;
+        }
+
+        /// <summary>cGuiPopUpMessageBox with one OK button over the current window.</summary>
+        void Message(string text)
+        {
+            _extras.message = text;
+            PendingConfirmation = MenuControl.MessageOk;
+            ConfirmingQuit = true;
+            _selected = 0;
+        }
+
+        // ------------------------------------------------------------------ start game and hard mode
+
+        /// <summary>cLuxMainMenu::PressStartGame with AllowHardMode (the main campaign): the start game window, normal mode.</summary>
+        void OpenStartGame()
+        {
+            Reset();
+            _extras.startGame = true;
+            _extras.hardMode = false;
+            // OnSetActive: the focus on Start game.
+            _focus = MenuControl.StartGameStart;
+        }
+
+        /// <summary>The in-game menu of a hard mode game: Save and the tinderboxes.</summary>
+        void UpdateHardModeExtras()
+        {
+            _extras.hardModeSave = !_ui.IsTitleScreen && HplDifficulty.HardMode && !_map.Campaign.IsJustine && _map.player != null;
+            _extras.tinderboxes = _map.player != null ? _map.player.tinderboxes : 0;
+            _extras.hardModeSaved = _hardSavedPause == _ui.PauseGeneration;
         }
 
         /// <summary>
@@ -280,6 +488,10 @@ namespace RTXMnesia.Ui
             {
                 case MenuControl.Resume: _ui.BeginClose(); break;
                 case MenuControl.Options: OpenOptions(); break;
+                // The main campaign asks for the mode first (cLuxMainMenu_StartGame); Justine has no hard mode.
+                case MenuControl.NewGame when _ui.IsTitleScreen && !_map.Campaign.IsJustine:
+                    OpenStartGame();
+                    break;
                 case MenuControl.Quit:
                 case MenuControl.NewGame:
                 case MenuControl.ReturnTitle:
@@ -296,7 +508,87 @@ namespace RTXMnesia.Ui
                     ConfirmingQuit = true;
                     _selected = 1;
                     break;
-                case MenuControl.ConfirmNewGame: LoadScene(_map.Campaign.FirstScene, true); break;
+                case MenuControl.ConfirmNewGame:
+                    HplDifficulty.HardMode = ShowingStartGame && _extras.hardMode;
+                    LoadScene(_map.Campaign.FirstScene, true);
+                    break;
+                case MenuControl.StartNormal: _extras.hardMode = false; break;
+                case MenuControl.StartHard: _extras.hardMode = true; break;
+                case MenuControl.StartGameStart:
+                    PendingConfirmation = MenuControl.ConfirmNewGame;
+                    ConfirmingQuit = true;
+                    _selected = 1;
+                    break;
+                case MenuControl.HardSave:
+                    if (_extras.hardModeSaved || _map.player == null || _map.player.tinderboxes < HplDifficulty.SaveCost) break;
+                    PendingConfirmation = MenuControl.ConfirmHardSave;
+                    ConfirmingQuit = true;
+                    _selected = 1;
+                    break;
+                // cLuxMainMenu::ClickedSaveGamePopup: the cost from the inventory, a "HardMode" save, Save disabled.
+                case MenuControl.ConfirmHardSave:
+                    ConfirmingQuit = false;
+                    if (_map.player == null || _map.player.tinderboxes < HplDifficulty.SaveCost) break;
+                    _map.player.tinderboxes = Mathf.Max(0, _map.player.tinderboxes - HplDifficulty.SaveCost);
+                    HplSaveHandler.HardModeSave(_map);
+                    _hardSavedPause = _ui.PauseGeneration;
+                    _selected = 0;
+                    break;
+                case MenuControl.Justine: LoadScene(HplCampaign.Justine.MenuScene, false); break;
+                case MenuControl.MainCampaign: LoadScene(HplCampaign.Main.MenuScene, false); break;
+                case MenuControl.ChangeProfile: OpenProfiles(); break;
+                case MenuControl.ProfileRow:
+                {
+                    int profileRow = _menu.DataAt(index);
+                    // A click on the selected row again chooses it (the list's double click).
+                    if (profileRow == _extras.selectedProfile && direction == 0) SelectProfile(profileRow);
+                    else _extras.selectedProfile = profileRow;
+                    break;
+                }
+                case MenuControl.ProfileSelect: SelectProfile(_extras.selectedProfile); break;
+                case MenuControl.ProfileCreate: OpenEnterName(); break;
+                case MenuControl.ProfileDelete:
+                    if (_extras.selectedProfile < 0) Message(_menu.Translate("MainMenu", "No profile to be deleted!", "Нет профиля для удаления!"));
+                    else
+                    {
+                        PendingConfirmation = MenuControl.ConfirmProfileDelete;
+                        ConfirmingQuit = true;
+                        _selected = 1;
+                    }
+                    break;
+                case MenuControl.ConfirmProfileDelete:
+                {
+                    ConfirmingQuit = false;
+                    int deleted = _extras.selectedProfile;
+                    if (deleted < 0 || deleted >= _profileNames.Count) break;
+                    if (!HplProfiles.Delete(_profileNames[deleted]))
+                    {
+                        Message(_menu.Translate("MainMenu", "Could not remove profile", "Не удалось удалить профиль"));
+                        break;
+                    }
+                    if (!HplProfiles.ChosenThisRun)
+                    {
+                        // The profile in use was deleted: back to the global settings and keys.
+                        HplKeyBindings.Reload();
+                        _ui.Settings = HplUserSettings.Load(_map);
+                    }
+                    ReloadProfiles();
+                    // PressDeleteProfilePopupClose: the row above (−1 of the first: nothing selected).
+                    _extras.selectedProfile = Mathf.Min(deleted - 1, _profileNames.Count - 1);
+                    _selected = 0;
+                    break;
+                }
+                case MenuControl.ProfileClose: CloseProfiles(); break;
+                case MenuControl.NameCreate: CreateProfile(); break;
+                case MenuControl.NameCancel:
+                    CloseEnterName();
+                    _selected = 0;
+                    break;
+                case MenuControl.MessageOk:
+                    ConfirmingQuit = false;
+                    _extras.message = null;
+                    _selected = 0;
+                    break;
                 case MenuControl.ConfirmReturnTitle: LoadScene(_map.Campaign.MenuScene, false); break;
                 // eLuxMainMenuExit_ContinueGame → cLuxSaveHandler::AutoLoad: the newest save.
                 case MenuControl.ConfirmContinue: LoadSave(HplSaveHandler.GetNewestSaveFile(_map.Campaign)); break;
@@ -329,6 +621,10 @@ namespace RTXMnesia.Ui
                         else CloseKeyConfig();
                     }
                     else if (PendingConfirmation == MenuControl.ConfirmLoad && ConfirmingQuit) OpenLoadGame(_selectedSave);
+                    // A pop up over the profiles or the start game window goes back to the window.
+                    else if (ConfirmingQuit && (ShowingProfiles || ShowingStartGame)) ConfirmingQuit = false;
+                    // A pop up of the in-game menu (the hard mode save) goes back to the list.
+                    else if (ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmHardSave) ConfirmingQuit = false;
                     else Show();
                     break;
                 case MenuControl.KeyConfig:

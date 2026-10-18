@@ -314,6 +314,33 @@ namespace RTXMnesia.Enemies
             WaterStepSpeedMisc = VarFloat("WaterStepSpeedMisc");
 
             NormalAttackDistance = VarFloat("NormalAttackDistance");
+            // HARDMODE (iLuxEnemyLoader::Load): sharper senses, longer search, faster movement and turning.
+            if (HplDifficulty.HardMode)
+            {
+                SightRange *= 1.15f;
+                DarknessSightRange *= 1.15f;
+                HearVolume *= 0.6f;
+                Fov *= 1.1f;
+                FovXMul *= 1.1f;
+                PlayerSearchMaxAngle *= 1.1f;
+                PlayerSearchMinDistMul *= 1.25f;
+                PlayerSearchMaxDistMul *= 1.25f;
+                PlayerSearchTime *= 2.5f;
+                PlayerPatrolMaxAngle *= 1.25f;
+                PlayerPatrolMinDist *= 1.5f;
+                PlayerPatrolMaxDist *= 1.5f;
+                for (int i = 0; i < 2; i++)
+                {
+                    float mul = i == 0 ? 1.1f : 1.2f;
+                    _defaultForwardSpeed[i] *= mul;
+                    _defaultBackwardSpeed[i] *= mul;
+                    _defaultForwardAcc[i] *= mul;
+                    _defaultForwardDeacc[i] *= mul;
+                }
+                TurnSpeedMul *= 1.35f;
+                WaterStepSpeedWalk *= 1.5f;
+                WaterStepSpeedRun *= 1.5f;
+            }
             LoadAttackDamage("Normal", NormalAttackDamage);
             LoadAttackDamage("BreakDoor", BreakDoorAttackDamage);
             NormalAttackSize.size = VarVector3("NormalDamageSize", Vector3.zero);
@@ -378,6 +405,12 @@ namespace RTXMnesia.Enemies
             data.strength = VarInt(prefix + "AttackStrength", 0);
             data.minDamage = damage.x;
             data.maxDamage = damage.y;
+            // HARDMODE (iLuxEnemyLoader::LoadAttackDamageData): double damage.
+            if (HplDifficulty.HardMode)
+            {
+                data.minDamage *= 2f;
+                data.maxDamage *= 2f;
+            }
             data.force = force.x;
             data.maxImpulse = force.y;
             data.damageType = ToDamageType(VarString(prefix + "DamageType", "bloodsplat"));

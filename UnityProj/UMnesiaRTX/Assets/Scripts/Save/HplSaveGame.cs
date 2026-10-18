@@ -15,6 +15,7 @@ namespace RTXMnesia.Save
             {
                 campaign = map.Campaign.Id,
                 date = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                hardMode = HplDifficulty.HardMode,
                 mapFile = map.mapFile,
                 map = HplSavedMaps.CaptureCurrent(map),
             };

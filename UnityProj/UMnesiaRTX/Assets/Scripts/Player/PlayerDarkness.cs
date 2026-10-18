@@ -121,10 +121,12 @@ namespace RTXMnesia.Player
             _ambientLight = go.AddComponent<AmnesiaLight>();
             _ambientLight.excludeFromLightLevel = true;
             _ambientLight.diffuseColor = Color.clear;
-            _ambientLight.radius = _ambientLightRadius;
+            // HARDMODE: half the radius.
+            float radius = _ambientLightRadius * (ScriptApi.HplDifficulty.HardMode ? 0.5f : 1f);
+            _ambientLight.radius = radius;
             _ambientLight.InitRuntime();
-            _ambientLight.Apply(Color.clear, _ambientLightRadius);
-            light.shapeRadius = _ambientLightRadius;
+            _ambientLight.Apply(Color.clear, radius);
+            light.shapeRadius = radius;
             _ambientLight.onApplied = ScaleNearField;
         }
 
@@ -175,7 +177,11 @@ namespace RTXMnesia.Player
             else if (!_ambientLightIsOn)
             {
                 _ambientLightIsOn = true;
-                _ambientLight.FadeTo(_ambientLightColor * _ambientLightIntensity, _ambientLight.CurrentRadius, _ambientLightFadeInTime);
+                // HARDMODE: 0.75 of the light, fading in 2.5 times slower.
+                if (ScriptApi.HplDifficulty.HardMode)
+                    _ambientLight.FadeTo(_ambientLightColor * _ambientLightIntensity * 0.75f, _ambientLight.CurrentRadius, _ambientLightFadeInTime * 2.5f);
+                else
+                    _ambientLight.FadeTo(_ambientLightColor * _ambientLightIntensity, _ambientLight.CurrentRadius, _ambientLightFadeInTime);
             }
 
             if (extLightLevel > _minDarknessLightLevel)

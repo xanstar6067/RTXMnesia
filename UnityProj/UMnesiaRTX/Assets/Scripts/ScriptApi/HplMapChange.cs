@@ -18,6 +18,8 @@ namespace RTXMnesia.ScriptApi
         public sealed class Arrival
         {
             public string MapName, StartPos, EndSound;
+            /// <summary>The map left (cLuxMapHandler::CheckMapChange pLastMap).</summary>
+            public string FromMap;
             public float LoadStartTime;
             public Player.AmnesiaPlayer.Carry Player;
             public Effects.HplEffects.Carry Effects;
@@ -58,6 +60,7 @@ namespace RTXMnesia.ScriptApi
             var arrival = new Arrival
             {
                 MapName = mapName,
+                FromMap = from.MapName,
                 StartPos = startPos ?? "",
                 EndSound = endSound ?? "",
                 LoadStartTime = Time.realtimeSinceStartup,

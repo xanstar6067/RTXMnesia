@@ -46,13 +46,30 @@ namespace RTXMnesia.Dev
             var map = HplMap.Current;
             var title = map.GetComponent<HplMainMenu>(); var ui = title.Ui;
             Check(SceneManager.GetActiveScene().path == HplGameUi.MainMenuScene && map.menuBackground && map.player == null && map.Script == null, "Startup is not the decorative main menu");
-            Check(ui.IsTitleScreen && !map.IsMenuPaused && map.GameTime > 0 && Time.timeScale == 1, "Title world does not update independently of UI");
+            Check(ui.IsTitleScreen && !map.IsMenuPaused && map.GameTime > 0 && Time.timeScale == 1, $"Title world does not update independently of UI (title {ui.IsTitleScreen}, menu paused {map.IsMenuPaused}, time {map.GameTime}, scale {Time.timeScale})");
             Check(map.sound.Music.CurrentSongName == "game_menu.ogg" && !map.sound.MenuPaused, "Original title music did not start");
             CaptureSetup(map.PlayerCamera, ui.Menu.Canvas);
             yield return new WaitForSecondsRealtime(0.3f); Capture("MainMenu.png");
             Check(ui.Choose(MenuControl.Options), "Cannot open title options");
             yield return new WaitForSecondsRealtime(0.2f); Capture("MainMenuOptions.png"); ui.Choose(MenuControl.Cancel);
-            Check(ui.Choose(MenuControl.NewGame) && ui.PendingConfirmation == MenuControl.ConfirmNewGame, "New game confirmation missing");
+            // Profiles of this run in their own folder.
+            string profiles = Path.Combine(Folder, "Profiles");
+            if (Directory.Exists(profiles)) Directory.Delete(profiles, true);
+            RTXMnesia.Save.HplProfiles.RootOverride = profiles;
+            RTXMnesia.Save.HplProfiles.ResetForTests();
+            RTXMnesia.Save.HplProfiles.Create("Даниэль");
+            RTXMnesia.Save.HplProfiles.Create("Новый игрок");
+            Check(ui.Choose(MenuControl.ChangeProfile) && ui.MenuScreen.ShowingProfiles && ui.MenuScreen.Extras.profiles.Count == 2, "Change profile did not list the profiles");
+            yield return new WaitForSecondsRealtime(0.2f); Capture("Profiles.png");
+            Check(ui.Choose(MenuControl.ProfileCreate) && ui.MenuScreen.EnteringName, "Create did not open the name window");
+            yield return new WaitForSecondsRealtime(0.2f); Capture("ProfileName.png");
+            ui.Choose(MenuControl.NameCancel);
+            Check(ui.Choose(MenuControl.ProfileSelect) && RTXMnesia.Save.HplProfiles.Current == "Даниэль" && !ui.MenuScreen.ShowingProfiles, "Select did not choose the profile");
+            Check(ui.Choose(MenuControl.NewGame) && ui.MenuScreen.ShowingStartGame, "New game did not open the start game window");
+            ui.Choose(MenuControl.StartHard);
+            yield return new WaitForSecondsRealtime(0.2f); Capture("StartGameHard.png");
+            ui.Choose(MenuControl.StartNormal);
+            Check(ui.Choose(MenuControl.StartGameStart) && ui.PendingConfirmation == MenuControl.ConfirmNewGame, "New game confirmation missing");
             yield return new WaitForSecondsRealtime(0.2f); Capture("NewGameConfirmation.png");
             var oldSound = map.sound;
             HplGame.Items.Add(new HplGame.Item { name = "old_inventory" }); HplGame.SetGlobalVar("old_progress", "1");
@@ -81,7 +98,31 @@ namespace RTXMnesia.Dev
             map = HplMap.Current; title = map != null ? map.GetComponent<HplMainMenu>() : null; ui = title != null ? title.Ui : null;
             Check(ui != null && ui.IsTitleScreen && Time.timeScale == 1 && !map.IsMenuPaused && !HplGame.GlobalVars.ContainsKey("return_cancel"), "Return did not unload gameplay / restore title clock");
             CaptureSetup(map.PlayerCamera, ui.Menu.Canvas); yield return new WaitForSecondsRealtime(1.2f); Capture("ReturnedMainMenu.png"); CaptureCleanup();
-            HplGame.SetGlobalVar("second_game", "1"); ui.Choose(MenuControl.NewGame); ui.Choose(MenuControl.ConfirmNewGame);
+
+            // The Justine campaign's title screen and back (own menu entries).
+            Check(ui.Choose(MenuControl.Justine) && ui.IsTransitioning, "Justine did not load its title screen");
+            deadline = Time.realtimeSinceStartupAsDouble + 45;
+            while (SceneManager.GetActiveScene().path != RTXMnesia.Hpl.HplCampaign.Justine.MenuScene && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+            yield return new WaitForSecondsRealtime(1.2f);
+            map = HplMap.Current; title = map != null ? map.GetComponent<HplMainMenu>() : null; ui = title != null ? title.Ui : null;
+            Check(ui != null && map.Campaign.IsJustine && ui.IsTitleScreen && ui.Menu.ControlAt(0) == MenuControl.NewGame, "Justine title screen did not start");
+            bool hasContinue = false, hasMain = false;
+            ui.MenuScreen.Show();
+            for (int i = 0; i < ui.Menu.ButtonCount; i++)
+            {
+                hasContinue |= ui.Menu.ControlAt(i) == MenuControl.Continue || ui.Menu.ControlAt(i) == MenuControl.LoadGame;
+                hasMain |= ui.Menu.ControlAt(i) == MenuControl.MainCampaign;
+            }
+            Check(!hasContinue && hasMain && map.sound.Music.CurrentSongName == "22_amb.ogg", "Justine title has Continue / Load game, no way back or not its music");
+            CaptureSetup(map.PlayerCamera, ui.Menu.Canvas); yield return new WaitForSecondsRealtime(0.3f); Capture("JustineMenu.png"); CaptureCleanup();
+            Check(ui.Choose(MenuControl.MainCampaign), "Main campaign entry missing");
+            deadline = Time.realtimeSinceStartupAsDouble + 45;
+            while (SceneManager.GetActiveScene().path != HplGameUi.MainMenuScene && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+            yield return new WaitForSecondsRealtime(1.2f);
+            map = HplMap.Current; title = map != null ? map.GetComponent<HplMainMenu>() : null; ui = title != null ? title.Ui : null;
+            Check(ui != null && !map.Campaign.IsJustine && ui.IsTitleScreen, "Main campaign title did not come back");
+
+            HplGame.SetGlobalVar("second_game", "1"); ui.Choose(MenuControl.NewGame); ui.Choose(MenuControl.StartGameStart); ui.Choose(MenuControl.ConfirmNewGame);
             deadline = Time.realtimeSinceStartupAsDouble + 45;
             while (SceneManager.GetActiveScene().path != HplGameUi.FirstLevelScene && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
             yield return null; yield return null;
@@ -118,7 +159,7 @@ namespace RTXMnesia.Dev
             Check(Mathf.Abs(map.player.health - 61f) < 1f && Vector3.Distance(map.player.Body.FeetPosition, savedFeet) < 0.1f,
                   $"Continue lost the player (health {map.player.health:0}, at {map.player.Body.FeetPosition} vs {savedFeet})");
             Check(Time.timeScale == 1 && !map.IsMenuPaused && !RTXMnesia.Save.HplSaveHandler.LoadPending, "Loaded game is paused or the save still pending");
-            string report = $"PASS: {_checks} Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game, exit and save, continue, load game); screenshots {Folder}";
+            string report = $"PASS: {_checks} Play-mode main menu checks (startup, live background / music, options, profiles, start game window, new game, cleanup, return, cancellation, Justine title and back, second new game, exit and save, continue, load game); screenshots {Folder}";
             File.WriteAllText(Path.Combine(Folder, "PlayTests.txt"), report); Debug.Log(report);
         }
         void CaptureSetup(Camera camera, Canvas canvas)
@@ -145,7 +186,9 @@ namespace RTXMnesia.Dev
         }
         void Finish(int code)
         {
-            CaptureCleanup(); RTXMnesia.Save.HplSaveHandler.FolderOverride = null; UnityEditor.SessionState.SetInt("RTXMnesia.MainMenuPreview.ExitCode", code); UnityEditor.EditorApplication.isPlaying = false;
+            CaptureCleanup(); RTXMnesia.Save.HplSaveHandler.FolderOverride = null;
+            RTXMnesia.Save.HplProfiles.RootOverride = null;
+            UnityEditor.SessionState.SetInt("RTXMnesia.MainMenuPreview.ExitCode", code); UnityEditor.EditorApplication.isPlaying = false;
         }
     }
 }

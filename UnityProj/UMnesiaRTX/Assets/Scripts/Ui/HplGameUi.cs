@@ -175,6 +175,32 @@ namespace RTXMnesia.Ui
 
         internal void BeginClose() => IsClosing = true;
         internal bool BeginSceneLoad(string path, bool newGame) => _transition.Begin(path, newGame);
+
+        /// <summary>The menu windows (tests): profiles, start game, messages.</summary>
+        public HplMenuScreen MenuScreen => _menuScreen;
+
+        /// <summary>The game reset and the campaign's title screen (the hard mode death without a save, Justine's death).</summary>
+        public bool ReturnToTitle()
+        {
+            Menu?.SetVisible(true);
+            return BeginSceneLoad(_map.Campaign.MenuScene, false);
+        }
+
+        /// <summary>
+        /// cLuxSaveHandler::AutoLoad from the game (the hard mode death): the save waits for its map scene; false when
+        /// the file or its scene cannot be loaded.
+        /// </summary>
+        public bool LoadSaveFile(string file)
+        {
+            var save = file != null ? RTXMnesia.Save.HplSaveHandler.ReadFile(file) : null;
+            string scene = save != null ? HplMapChange.FindScene(save.mapFile) : null;
+            if (scene == null) return false;
+            RTXMnesia.Save.HplSaveHandler.BeginLoad(save);
+            Menu?.SetVisible(true);
+            if (BeginSceneLoad(scene, false)) return true;
+            RTXMnesia.Save.HplSaveHandler.ClearPending();
+            return false;
+        }
         internal void ShowMenu() => _menuScreen.Show();
         internal void RefreshMenu() => _menuScreen.Refresh();
         internal void RefreshLoading(float alpha) => Menu.RefreshLoading(alpha);

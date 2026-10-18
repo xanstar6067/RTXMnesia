@@ -99,8 +99,16 @@ namespace RTXMnesia.EditorDev
                 Check(grunt.CurrentState == EnemyState.HuntPause || grunt.CurrentState == EnemyState.AttackMeleeShort, $"after a hit: hunt pause ({grunt.CurrentStateName})");
 
                 t = 0f;
-                while (t < 10f && !player.IsDead) { Step(map, 1f / 60f); t += 1f / 60f; }
-                Check(player.IsDead, "the second attack kills the player");
+                var trace = new System.Text.StringBuilder();
+                string lastTrace = "";
+                // NormalAttackDamage is random (30–60): two hits may leave the player alive, the next one kills.
+                while (t < 20f && !player.IsDead)
+                {
+                    Step(map, 1f / 60f); t += 1f / 60f;
+                    string now = $"{grunt.CurrentStateName}/{grunt.CurrentAnimationName}";
+                    if (now != lastTrace) { trace.Append($" {t:0.00}:{now} d{Vector3.Distance(grunt.Body.FeetPosition, player.transform.position):0.0} hp{player.health:0}"); lastTrace = now; }
+                }
+                Check(player.IsDead, "further attacks kill the player" + (player.IsDead ? "" : ":" + trace));
                 Step(map, 0.5f);
                 Check(grunt.CurrentState == EnemyState.Idle, "PlayerDead: the grunt goes idle");
 

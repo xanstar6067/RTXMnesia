@@ -11,7 +11,7 @@ namespace RTXMnesia.Ui
     /// The configurable actions of cLuxInputHandler (LuxInputHandler.cpp gvPlayerActions with mbConfigurable) and
     /// their two inputs, written as in default_user_keys.cfg: "Keyboard.W", "MouseButton.LeftMouse". Defaults come
     /// from default_user_keys.cfg (the map's keys config); the user's choice (the key config screen) is kept in
-    /// PlayerPrefs. Gamepad inputs are not used (no gamepad support), and "Lean" (lean with the mouse while held,
+    /// the profile (user_keys.json, as user_keys.cfg of HPL2), without a profile in PlayerPrefs. Gamepad inputs are not used (no gamepad support), and "Lean" (lean with the mouse while held,
     /// left Alt in HPL2) is not ported, so it is not listed.
     /// </summary>
     public static class HplKeyBindings
@@ -124,9 +124,17 @@ namespace RTXMnesia.Ui
             }
             try
             {
-                if (PlayerPrefs.HasKey(PrefsKey))
+                // user_keys.cfg of the profile; without a profile (or its file yet) the global choice.
+                var saved = new SavedBindings();
+                bool read = Save.HplProfiles.ReadJson(ProfileFile, saved, out bool missing);
+                // A profile without the file (just created) keeps the defaults.
+                if (!read && !missing && PlayerPrefs.HasKey(PrefsKey))
                 {
-                    var saved = JsonUtility.FromJson<SavedBindings>(PlayerPrefs.GetString(PrefsKey));
+                    saved = JsonUtility.FromJson<SavedBindings>(PlayerPrefs.GetString(PrefsKey));
+                    read = true;
+                }
+                if (read)
+                {
                     if (saved != null)
                         foreach (var b in saved.actions)
                             if (b != null && b.name != null && s_byName.TryGetValue(b.name, out var a))
@@ -151,8 +159,28 @@ namespace RTXMnesia.Ui
                 }
             var saved = new SavedBindings();
             foreach (var a in s_actions) saved.actions.Add(new SavedBinding { name = a.name, primary = a.primary, secondary = a.secondary });
-            PlayerPrefs.SetString(PrefsKey, JsonUtility.ToJson(saved));
-            PlayerPrefs.Save();
+            if (!Save.HplProfiles.WriteJson(ProfileFile, saved))
+            {
+                PlayerPrefs.SetString(PrefsKey, JsonUtility.ToJson(saved));
+                PlayerPrefs.Save();
+            }
+        }
+
+        public const string ProfileFile = "user_keys.json";
+
+        /// <summary>Another profile: its keys are read on the next use.</summary>
+        public static void Reload() => s_actions = null;
+
+        /// <summary>The first profile takes over the keys chosen before profiles existed.</summary>
+        public static void CopyGlobalToProfile(string profile)
+        {
+            if (!PlayerPrefs.HasKey(PrefsKey)) return;
+            try
+            {
+                var saved = JsonUtility.FromJson<SavedBindings>(PlayerPrefs.GetString(PrefsKey));
+                if (saved != null) Save.HplProfiles.WriteJson(profile, ProfileFile, saved);
+            }
+            catch (ArgumentException) { }
         }
 
         // ------------------------------------------------------------------ input state

@@ -19,6 +19,30 @@ namespace RTXMnesia.Ui
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
         Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
+        // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
+        ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
+        NameCreate, NameCancel, MessageOk,
+        // Start game window (cLuxMainMenu_StartGame), the hard mode save, the Justine campaign.
+        StartNormal, StartHard, StartGameStart, HardSave, ConfirmHardSave, Justine, MainCampaign,
+    }
+
+    /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>
+    public sealed class HplMenuExtras
+    {
+        /// <summary>The profile window is open with these names (null: closed); the selected row, −1 none.</summary>
+        public IReadOnlyList<string> profiles;
+        public int selectedProfile = -1;
+        /// <summary>The enter name window over the profiles: its text, all of it selected (typing replaces it).</summary>
+        public bool enteringName;
+        public string nameText = "";
+        public bool nameSelected;
+        /// <summary>The text of a message box with one OK button (<see cref="MenuControl.MessageOk"/>).</summary>
+        public string message;
+        /// <summary>The start game window is open; the chosen mode.</summary>
+        public bool startGame, hardMode;
+        /// <summary>In game in hard mode: the save button, the player's tinderboxes and whether this menu saved.</summary>
+        public bool hardModeSave, hardModeSaved;
+        public int tinderboxes;
     }
 
     /// <summary>The open drop-down list (cWidgetComboBox menu): its control, first shown choice and the highlighted one.</summary>
@@ -37,21 +61,24 @@ namespace RTXMnesia.Ui
         readonly HplMenuAssets _assets;
         readonly GameObject _root;
         readonly RectTransform _screen;
-        readonly HplGuiText _menuText, _guiText, _loadingText, _popupText;
+        readonly HplGuiText _menuText, _guiText, _loadingText, _popupText, _topText;
         readonly RawImage _shade, _cursor, _logo, _loadFade;
         readonly bool _titleScreen;
-        readonly List<RawImage> _pieces = new(), _popupPieces = new();
+        readonly List<RawImage> _pieces = new(), _popupPieces = new(), _topPieces = new();
         readonly Dictionary<MenuControl, Rect> _comboRects = new();
         readonly List<(Rect rect, MenuControl control)> _buttons = new();
         readonly List<int> _buttonData = new();
         readonly List<(Rect rect, MenuControl control)> _sliders = new();
-        int _pieceIndex, _popupPieceIndex, _selected, _popupStart = -1;
+        int _pieceIndex, _popupPieceIndex, _topPieceIndex, _selected, _popupStart = -1;
         float _opacity;
         static readonly Color Highlight = new(232f / 255f, 201f / 255f, 28f / 255f, 1f);
         /// <summary>gui_main_menu.skin: the Default font size and TextBoxSelectedTextBack (the list selection).</summary>
         const float SkinFontSize = 14;
         static readonly Color SelectionColor = new(0.51f, 0.427f, 0.318f, 1f);
-        bool _popupLayer;
+        /// <summary>The layer drawn into: 0 — the window, 1 — a pop up / list over it, 2 — a message over a pop up.</summary>
+        int _layer;
+        /// <summary>A disabled button (drawn grey, not pressable): the hard mode save without tinderboxes.</summary>
+        bool _disabled;
         public int ButtonCount => _buttons.Count;
         public bool HasCursor => _cursor.texture != Texture2D.whiteTexture;
         public Canvas Canvas => _root.GetComponent<Canvas>();
@@ -91,6 +118,7 @@ namespace RTXMnesia.Ui
             _guiText = Text("GUI font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
             // An open drop-down list is drawn over the window, its own pieces and text above the window's text.
             _popupText = Text("Drop-down list font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
+            _topText = Text("Message font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
             _cursor = Image(_screen, "Original menu cursor");
             var pointer = _assets != null ? _assets.Find("PointerNormal").texture : null;
             _cursor.texture = pointer != null ? pointer : Texture2D.whiteTexture;
@@ -148,12 +176,15 @@ namespace RTXMnesia.Ui
 
         public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer,
                             MenuControl confirmation = MenuControl.ConfirmQuit, IReadOnlyList<string> saves = null, int selectedSave = -1,
-                            HplKeyConfig keyConfig = null, HplMenuCombo combo = null)
+                            HplKeyConfig keyConfig = null, HplMenuCombo combo = null, HplMenuExtras extras = null)
         {
+            extras ??= new HplMenuExtras();
             _loadFade.color = Color.clear; _loadingText.Clear();
             _menuText.Clear();
             _guiText.Clear();
             _popupText.Clear();
+            _topText.Clear();
+            _topPieceIndex = 0;
             _buttons.Clear();
             _buttonData.Clear();
             _sliders.Clear();
@@ -164,7 +195,8 @@ namespace RTXMnesia.Ui
             _selected = selected;
             _opacity = opacity;
             _shade.color = new Color(0, 0, 0, _titleScreen ? 0 : 0.5f * opacity);
-            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options && saves == null && keyConfig == null;
+            _logo.enabled = _titleScreen && _logo.texture != null && !confirmQuit && !options && saves == null && keyConfig == null &&
+                            extras.profiles == null && !extras.startGame;
             if (_logo.enabled)
             {
                 float width = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
@@ -176,21 +208,48 @@ namespace RTXMnesia.Ui
             }
             if (confirmQuit)
             {
-                // cGuiPopUpMessageBox opens over the window that asked (load game, key config); that window is
-                // drawn but not pressable, the pop up goes on the top layer.
-                if (keyConfig != null || saves != null)
+                // cGuiPopUpMessageBox opens over the window that asked (load game, key config, profiles, start
+                // game); that window is drawn but not pressable, the pop up goes on the layer above it.
+                bool window = keyConfig != null || saves != null || extras.profiles != null || extras.startGame;
+                if (window)
                 {
                     _selected = -1;
                     if (keyConfig != null) KeyConfig(keyConfig);
-                    else LoadGame(saves, selectedSave);
+                    else if (saves != null) LoadGame(saves, selectedSave);
+                    else if (extras.profiles != null)
+                    {
+                        Profiles(extras);
+                        if (extras.enteringName)
+                        {
+                            _layer = 1;
+                            EnterName(extras);
+                        }
+                    }
+                    else StartGame(extras);
                     _buttons.Clear();
                     _buttonData.Clear();
                     _selected = selected;
                 }
-                _popupLayer = true;
-                Confirmation(confirmation);
-                _popupLayer = false;
+                _layer = extras.profiles != null && extras.enteringName ? 2 : 1;
+                Confirmation(confirmation, extras);
+                _layer = 0;
             }
+            else if (extras.profiles != null)
+            {
+                if (extras.enteringName)
+                {
+                    _selected = -1;
+                    Profiles(extras);
+                    _buttons.Clear();
+                    _buttonData.Clear();
+                    _selected = selected;
+                    _layer = 1;
+                    EnterName(extras);
+                    _layer = 0;
+                }
+                else Profiles(extras);
+            }
+            else if (extras.startGame) StartGame(extras);
             else if (keyConfig != null) KeyConfig(keyConfig);
             else if (options)
             {
@@ -198,9 +257,10 @@ namespace RTXMnesia.Ui
                 if (combo != null && tab == 1) ComboList(combo, settings);
             }
             else if (saves != null) LoadGame(saves, selectedSave);
-            else Main();
+            else Main(extras);
             for (int i = _pieceIndex; i < _pieces.Count; i++) _pieces[i].enabled = false;
             for (int i = _popupPieceIndex; i < _popupPieces.Count; i++) _popupPieces[i].enabled = false;
+            for (int i = _topPieceIndex; i < _topPieces.Count; i++) _topPieces[i].enabled = false;
             if (HasCursor)
             {
                 _cursor.enabled = true;
@@ -218,7 +278,7 @@ namespace RTXMnesia.Ui
             if (alpha >= 0.99f) _loadingText.DrawFont(T("LoadingScreen", "Loading", "Загрузка…"), new Vector2(400, 550), Vector2.one * 18, Color.white, HplFontAlign.Center);
         }
 
-        void Main()
+        void Main(HplMenuExtras extras)
         {
             Vector2 size = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", "TopMenuFontRelativeSize", Vector2.one * 0.05f) : Vector2.one * 0.05f;
             size = Vector2.Scale(size, new Vector2(800, 600));
@@ -233,20 +293,39 @@ namespace RTXMnesia.Ui
                 labels.Add(T("MainMenu", key, fallback));
                 controls.Add(control);
             }
+            void AddOwn(string label, MenuControl control)
+            {
+                labels.Add(label);
+                controls.Add(control);
+            }
+            bool justine = _map.Campaign.IsJustine;
+            int saveIndex = -1;
             if (_titleScreen)
             {
-                if (HasSave) Add("Continue", "Продолжить", MenuControl.Continue);
+                // Justine (mbPTestActivated) has no Continue / Load game: it does not save.
+                if (HasSave && !justine) Add("Continue", "Продолжить", MenuControl.Continue);
                 Add("Start Game", "Новая игра", MenuControl.NewGame);
-                if (HasSave) Add("Load Game", "Загрузить игру", MenuControl.LoadGame);
+                if (HasSave && !justine) Add("Load Game", "Загрузить игру", MenuControl.LoadGame);
+                // Own entries (in HPL2 Justine is a separate launch): the other campaign's title screen.
+                if (!justine) AddOwn(JustineLabel, MenuControl.Justine);
                 Add("Options", "Настройки", MenuControl.Options);
+                Add("Change Profile", "Сменить профиль", MenuControl.ChangeProfile);
+                if (justine) AddOwn(MainCampaignLabel, MenuControl.MainCampaign);
                 Add("Exit", "Выход", MenuControl.Quit);
             }
             else
             {
                 Add("Back To Game", "Вернуться в игру", MenuControl.Resume);
+                // HARDMODE: Save for tinderboxes (disabled with fewer than the cost, or once saved in this menu).
+                if (extras.hardModeSave)
+                {
+                    saveIndex = labels.Count;
+                    Add("Save", "Сохранить", MenuControl.HardSave);
+                }
                 Add("Options", "Настройки", MenuControl.Options);
                 Add("ExitToMainMenu", "В главное меню", MenuControl.ReturnTitle);
-                if (_map.player == null || !_map.player.IsDead) Add("ExitAndSave", "Сохранить и выйти", MenuControl.ExitAndSave);
+                // Not in Justine (mbPTestActivated), for a dead player or in hard mode.
+                if ((_map.player == null || !_map.player.IsDead) && !extras.hardModeSave && !justine) Add("ExitAndSave", "Сохранить и выйти", MenuControl.ExitAndSave);
                 Add("Exit", "Выход", MenuControl.Quit);
             }
             float maxWidth = 0;
@@ -258,20 +337,41 @@ namespace RTXMnesia.Ui
             {
                 float y = pos.y + i * size.y * 1.3f;
                 float width = _menuText.font != null ? _menuText.font.GetLength(size, labels[i]) : 300;
+                _disabled = i == saveIndex && (extras.hardModeSaved || extras.tinderboxes < HplDifficulty.SaveCost);
                 Button(new Rect(pos.x - width / 2 - 8, y, width + 16, size.y), labels[i], controls[i], _menuText, size);
+                _disabled = false;
+            }
+            if (saveIndex >= 0)
+            {
+                // cLuxMainMenu::CreateTopMenuGui: the cost and the tinderboxes in the inventory, centered over the
+                // menu (2.5 rows above its start), grey.
+                float rowAdd = size.y * 1.3f;
+                var grey = new Color(0.5f, 0.5f, 0.5f, 1);
+                string cost = HplDifficulty.Text(Translate, "HardModeSaveCost").Replace("#", HplDifficulty.SaveCost.ToString(CultureInfo.InvariantCulture));
+                Draw(_menuText, cost, new Vector2(pos.x, pos.y - 2.5f * rowAdd), size * 0.85f, grey, HplFontAlign.Center);
+                string count = HplDifficulty.Text(Translate, "HardModeTinderboxInInventory").Replace("#", extras.tinderboxes.ToString(CultureInfo.InvariantCulture));
+                Draw(_menuText, count, new Vector2(pos.x, pos.y - 2.5f * rowAdd + rowAdd * 0.65f), size * 0.75f, grey, HplFontAlign.Center);
             }
         }
+
+        /// <summary>Own texts: the menu entries switching campaigns (HPL2 starts Justine as a separate game).</summary>
+        public const string JustineLabel = "Дополнение «Жюстина»", MainCampaignLabel = "Основная игра";
 
         /// <summary>
         /// cGuiPopUpMessageBox: a window as wide as its text + 40 (at least 200) and 90 + font high, centered, the
         /// text at (20, 30) in the skin's default font (14), two skin buttons 80 × 30, 20 apart, at y 50 + font.
         /// The main menu's questions have no label; load game and key config pop ups are "Warning".
         /// </summary>
-        void Confirmation(MenuControl action)
+        void Confirmation(MenuControl action, HplMenuExtras extras)
         {
             var size = Vector2.one * SkinFontSize;
             var question = action switch
             {
+                MenuControl.MessageOk => extras.message ?? "",
+                MenuControl.ConfirmProfileDelete => T("MainMenu", "Sure you want to delete profile", "Удалить профиль?"),
+                // cLuxMainMenu_StartGame::PressStartGame: the hard mode question.
+                MenuControl.ConfirmNewGame when extras.startGame && extras.hardMode => HplDifficulty.Text(Translate, "HardModeStartNewGame"),
+                MenuControl.ConfirmHardSave => HplDifficulty.Text(Translate, "HardModeSavePopup").Replace("#", HplDifficulty.SaveCost.ToString(CultureInfo.InvariantCulture)),
                 MenuControl.ConfirmNewGame => T("MainMenu", "Start a new game?", "Начать новую игру?"),
                 MenuControl.ConfirmReturnTitle => T("MainMenu", "Sure you want to exit to main menu?", "Выйти в главное меню?"),
                 MenuControl.ConfirmContinue => T("MainMenu", "Continue old game?", "Продолжить прошлую игру?"),
@@ -288,9 +388,126 @@ namespace RTXMnesia.Ui
             var window = new Rect(400 - width / 2, 300 - height / 2, width, height);
             Window(window, label);
             Draw(_guiText, question, window.position + new Vector2(20, 30), size, Color.white);
-            float x = window.x + width / 2 - (80 * 2 + 20) / 2f, y = window.y + 50 + size.y;
-            SkinButton(new Rect(x, y, 80, 30), okCancel ? T("Global", "OK", "OK") : T("MainMenu", "Yes", "Да"), action);
-            SkinButton(new Rect(x + 100, y, 80, 30), okCancel ? T("Global", "Cancel", "Отмена") : T("MainMenu", "No", "Нет"), MenuControl.Cancel);
+            float y = window.y + 50 + size.y;
+            // A message box: one OK button in the middle.
+            if (action == MenuControl.MessageOk)
+            {
+                SkinButton(new Rect(window.x + width / 2 - 40, y, 80, 30), T("MainMenu", "OK", "OK"), MenuControl.MessageOk);
+                return;
+            }
+            float x = window.x + width / 2 - (80 * 2 + 20) / 2f;
+            string yes = action == MenuControl.ConfirmHardSave ? T("MainMenu", "Save", "Сохранить") : okCancel ? T("Global", "OK", "OK") : T("MainMenu", "Yes", "Да");
+            string no = okCancel || action == MenuControl.ConfirmHardSave ? T("Global", "Cancel", "Отмена") : T("MainMenu", "No", "Нет");
+            SkinButton(new Rect(x, y, 80, 30), yes, action);
+            SkinButton(new Rect(x + 100, y, 80, 30), no, MenuControl.Cancel);
+        }
+
+        /// <summary>
+        /// cLuxMainMenu_Profile::CreateMainGui: the window (menu.cfg Profiles WindowSize) centered with the close
+        /// cross, the list box at (35, 75) of the window width − 70 and height − 75 − 40 − 70 (rows of ListFontSize
+        /// + 2), Select / Create / Delete skin buttons a third of the list wide, 35 under it.
+        /// </summary>
+        void Profiles(HplMenuExtras extras)
+        {
+            Vector2 size = _map.menuConfig != null ? _map.menuConfig.GetVector2("Profiles", "WindowSize", new Vector2(500, 360)) : new Vector2(500, 360);
+            float infoWidth = _map.menuConfig != null ? _map.menuConfig.GetFloat("Profiles", "InformationWidth", 0) : 0;
+            Vector2 font = _map.menuConfig != null ? _map.menuConfig.GetVector2("Profiles", "ListFontSize", Vector2.one * 18) : Vector2.one * 18;
+            var window = new Rect(400 - size.x / 2, 300 - size.y / 2, size.x, size.y);
+            Window(window, T("MainMenu", "Profiles", "Профили"));
+            const float border = 35;
+            var list = new Rect(window.x + border, window.y + 40 + border, size.x - infoWidth - border * 2, size.y - (40 + border) - 40 - border * 2);
+            Piece("ListBoxBackground", list, Color.white);
+            float rowHeight = font.y + 2;
+            int rows = Mathf.Max(1, Mathf.FloorToInt((list.height - 2) / rowHeight));
+            var names = extras.profiles;
+            int first = Mathf.Clamp(extras.selectedProfile - rows + 1, 0, Mathf.Max(0, names.Count - rows));
+            for (int i = first; i < names.Count && i < first + rows; i++)
+            {
+                Rect rect = new(list.x, list.y + 2 + (i - first) * rowHeight, list.width, font.y);
+                if (i == extras.selectedProfile) Piece(null, rect, SelectionColor);
+                int index = _buttons.Count;
+                _buttons.Add((rect, MenuControl.ProfileRow));
+                _buttonData.Add(i);
+                Draw(_guiText, names[i], new Vector2(rect.x + 3, rect.y), font, index == _selected && i != extras.selectedProfile ? Highlight : Color.white);
+            }
+            float y = list.yMax + border, width = list.width / 3f - 3, x = list.x;
+            SkinButton(new Rect(x, y, width, 30), T("MainMenu", "Select", "Выбрать"), MenuControl.ProfileSelect);
+            SkinButton(new Rect(x + width + 3, y, width, 30), T("MainMenu", "Create", "Создать"), MenuControl.ProfileCreate);
+            SkinButton(new Rect(x + (width + 3) * 2, y, width, 30), T("MainMenu", "Delete", "Удалить"), MenuControl.ProfileDelete);
+            CloseCross(window, MenuControl.ProfileClose);
+        }
+
+        /// <summary>
+        /// cLuxMainMenu_Profile::CreateEnterNameGui: the window (EnterNameWindowSize) centered, the label at (5, 35),
+        /// the text box under it (width − 10, 20) with the selection background and the blinking marker, Create and
+        /// Cancel (EnterNameButtonLength × 30) at the bottom corners, 5 from the borders.
+        /// </summary>
+        void EnterName(HplMenuExtras extras)
+        {
+            Vector2 size = _map.menuConfig != null ? _map.menuConfig.GetVector2("Profiles", "EnterNameWindowSize", new Vector2(250, 150)) : new Vector2(250, 150);
+            float buttonLength = _map.menuConfig != null ? _map.menuConfig.GetFloat("Profiles", "EnterNameButtonLength", 80) : 80;
+            var window = new Rect(400 - size.x / 2, 300 - size.y / 2, size.x, size.y);
+            Window(window, T("MainMenu", "Create Profile", "Создать профиль"));
+            const float border = 5;
+            var font = Vector2.one * SkinFontSize;
+            float y = window.y + 35;
+            Draw(_guiText, T("MainMenu", "Enter name of Profile", "Введите имя профиля"), new Vector2(window.x + border, y), font, Color.white);
+            y += font.y + border;
+            var box = new Rect(window.x + border, y, size.x - border * 2, 20);
+            Piece("TextBoxBackground", box, Color.white);
+            float textWidth = _guiText.font != null ? _guiText.font.GetLength(font, extras.nameText) : extras.nameText.Length * 7;
+            var textPos = new Vector2(box.x + 3, box.y + (box.height - font.y) / 2);
+            if (extras.nameSelected && extras.nameText != "") Piece(null, new Rect(textPos.x, textPos.y, textWidth, font.y), SelectionColor);
+            Draw(_guiText, extras.nameText, textPos, font, Color.white);
+            // TextBoxMarker: animated, 0.5 s per frame.
+            if (Mathf.FloorToInt(Time.unscaledTime / 0.5f) % 2 == 0)
+                Piece("TextBoxMarker", new Rect(textPos.x + textWidth, textPos.y, 2, font.y), Color.white);
+            float buttonY = window.yMax - 30 - border;
+            SkinButton(new Rect(window.x + border, buttonY, buttonLength, 30), T("MainMenu", "Create", "Создать"), MenuControl.NameCreate);
+            SkinButton(new Rect(window.xMax - border - buttonLength, buttonY, buttonLength, 30), T("MainMenu", "Cancel", "Отмена"), MenuControl.NameCancel);
+            CloseCross(window, MenuControl.NameCancel);
+        }
+
+        /// <summary>
+        /// cLuxMainMenu_StartGame::CreateGui: a 400 × 220 window, Normal / Hard (120 × 30, the chosen in the highlight
+        /// color) on the left, the description on a dark background on the right, Cancel and Start game at the bottom.
+        /// </summary>
+        void StartGame(HplMenuExtras extras)
+        {
+            var size = new Vector2(400, 220);
+            var window = new Rect(400 - size.x / 2, 300 - size.y / 2, size.x, size.y);
+            Window(window, T("MainMenu", "Start Game", "Новая игра"));
+            const float border = 15, buttonWidth = 120, sepp = 3;
+            float right = size.x - (buttonWidth * 2 + sepp * 4);
+            float bottom = window.y + size.y - 35;
+            float leftX = window.x + right / 2 - buttonWidth / 2;
+            float modeY = window.y + border + size.y / 4 - 15;
+            ModeButton(new Rect(leftX, modeY, buttonWidth, 30), T("MainMenu", "NormalMode", "Обычный"), MenuControl.StartNormal, !extras.hardMode);
+            ModeButton(new Rect(leftX, modeY + 35 + sepp, buttonWidth, 30), T("MainMenu", "HardMode", "Сложный режим"), MenuControl.StartHard, extras.hardMode);
+            var description = new Rect(window.x + right, window.y + 30 + border, size.x - right - sepp * 4, size.y - border * 2 - 60);
+            Piece(null, description, new Color(0, 0, 0, 0.5f));
+            string text = extras.hardMode ? T("MainMenu", "HardModeDescription", "") : T("MainMenu", "NormalModeDescription", "");
+            var font = Vector2.one * SkinFontSize;
+            var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(description.width, font, text) : new List<string> { text };
+            for (int r = 0; r < rows.Count && (r + 1) * font.y <= description.height; r++)
+                Draw(_guiText, rows[r], new Vector2(description.center.x, description.y + r * font.y), font, Color.white, HplFontAlign.Center);
+            SkinButton(new Rect(leftX, bottom, buttonWidth, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
+            SkinButton(new Rect(window.x + right, bottom, buttonWidth * 2 + sepp, 30), T("MainMenu", "Start Game", "Новая игра"), MenuControl.StartGameStart);
+        }
+
+        /// <summary>A mode button of the start game window: its text in the highlight color when chosen.</summary>
+        void ModeButton(Rect r, string label, MenuControl action, bool chosen)
+        {
+            SkinButton(r, label, action, chosen);
+        }
+
+        /// <summary>cWidgetWindow close button: the skin's WindowButtonCross (WindowButtonSize 18) 5 from the top right.</summary>
+        void CloseCross(Rect window, MenuControl action)
+        {
+            var r = new Rect(window.xMax - 18 - 5, window.y + 5, 18, 18);
+            _buttons.Add((r, action));
+            _buttonData.Add(-1);
+            Piece("WindowButtonCross", r, _buttons.Count - 1 == _selected ? Highlight : Color.white);
         }
 
         /// <summary>
@@ -361,8 +578,8 @@ namespace RTXMnesia.Ui
                     Button(new Rect(140, 380, keyWidth + 20, 25), keyConfig, MenuControl.KeyConfig, null, default, HplFontAlign.Left);
                     break;
             }
-            Button(new Rect(500, 485, 80, 30), T("MainMenu", "OK", "OK"), MenuControl.Apply);
-            Button(new Rect(590, 485, 95, 30), T("MainMenu", "Cancel", "Отмена"), MenuControl.Cancel);
+            SkinButton(new Rect(500, 485, 80, 30), T("MainMenu", "OK", "OK"), MenuControl.Apply);
+            SkinButton(new Rect(590, 485, 95, 30), T("MainMenu", "Cancel", "Отмена"), MenuControl.Cancel);
         }
 
         /// <summary>
@@ -427,10 +644,10 @@ namespace RTXMnesia.Ui
             }
             string defaults = T("KeyConfig", "SetDefault", "Задать клавиши по умолчанию");
             float defaultsWidth = (_guiText.font != null ? _guiText.font.GetLength(Vector2.one * 18, defaults) : 200) + 20;
-            Button(new Rect(window.x + 40, bottom - 35, defaultsWidth, 25), defaults, MenuControl.KeyDefaults);
+            SkinButton(new Rect(window.x + 40, bottom - 35, defaultsWidth, 25), defaults, MenuControl.KeyDefaults);
             float okX = window.x + window.width - 80 * 2 - 3 - 5;
-            Button(new Rect(okX, bottom, 80, 30), T("Global", "OK", "OK"), MenuControl.KeyOk);
-            Button(new Rect(okX + 83, bottom, 80, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
+            SkinButton(new Rect(okX, bottom, 80, 30), T("Global", "OK", "OK"), MenuControl.KeyOk);
+            SkinButton(new Rect(okX + 83, bottom, 80, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
         }
 
         /// <summary>
@@ -575,10 +792,12 @@ namespace RTXMnesia.Ui
         void Button(Rect rect, string label, MenuControl action, HplGuiText layer = null, Vector2 size = default, HplFontAlign align = HplFontAlign.Center)
         {
             int index = _buttons.Count;
-            _buttons.Add((rect, action));
+            // A disabled button is not pressable: it gets an empty rectangle.
+            _buttons.Add((_disabled ? Rect.zero : rect, action));
             _buttonData.Add(-1);
             if (size == default) size = Vector2.one * 18;
-            Draw(layer != null ? layer : _guiText, label, new Vector2(align == HplFontAlign.Left ? rect.x : rect.center.x, rect.y), size, index == _selected ? Highlight : Color.white, align);
+            var color = _disabled ? new Color(0.5f, 0.5f, 0.5f, 1) : index == _selected ? Highlight : Color.white;
+            Draw(layer != null ? layer : _guiText, label, new Vector2(align == HplFontAlign.Left ? rect.x : rect.center.x, rect.y), size, color, align);
         }
 
         /// <summary>cWidgetWindow with a label: the skin's WindowLabel font (25) at WindowLabelTextOffset (35, −20).</summary>
@@ -592,7 +811,7 @@ namespace RTXMnesia.Ui
         /// cWidgetButton: ButtonUp background and borders inside the rect (iWidget::DrawBordersAndCorners), the text
         /// in the default font centered (the focused button in the highlight color).
         /// </summary>
-        void SkinButton(Rect r, string label, MenuControl action)
+        void SkinButton(Rect r, string label, MenuControl action, bool highlighted = false)
         {
             int index = _buttons.Count;
             _buttons.Add((r, action));
@@ -614,7 +833,7 @@ namespace RTXMnesia.Ui
             Piece("ButtonUpCornerRD", new Rect(r.xMax - rd.x, r.yMax - rd.y, rd.x, rd.y), Color.white);
             Piece("ButtonUpCornerLD", new Rect(r.x, r.yMax - ld.y, ld.x, ld.y), Color.white);
             Draw(_guiText, label, new Vector2(r.center.x, r.y + r.height / 2 - SkinFontSize / 2f), Vector2.one * SkinFontSize,
-                 index == _selected ? Highlight : Color.white, HplFontAlign.Center);
+                 index == _selected || highlighted ? Highlight : Color.white, HplFontAlign.Center);
         }
 
         void Window(Rect r)
@@ -637,9 +856,12 @@ namespace RTXMnesia.Ui
 
         void PopupPiece(string type, Rect rect, Color color)
         {
-            if (_popupPieceIndex == _popupPieces.Count) _popupPieces.Add(Image(_screen, "Drop-down list piece"));
-            var target = _popupPieces[_popupPieceIndex++];
-            target.transform.SetSiblingIndex(_popupText.transform.GetSiblingIndex());
+            bool top = _layer == 2;
+            var list = top ? _topPieces : _popupPieces;
+            if (top && _topPieceIndex == list.Count) list.Add(Image(_screen, "Message piece"));
+            if (!top && _popupPieceIndex == list.Count) list.Add(Image(_screen, "Drop-down list piece"));
+            var target = list[top ? _topPieceIndex++ : _popupPieceIndex++];
+            target.transform.SetSiblingIndex((top ? _topText : _popupText).transform.GetSiblingIndex());
             var piece = type != null && _assets != null ? _assets.Find(type) : default;
             target.texture = piece.texture != null ? piece.texture : Texture2D.whiteTexture;
             target.color = (piece.texture != null ? piece.color * color : color) * new Color(1, 1, 1, _opacity);
@@ -649,7 +871,7 @@ namespace RTXMnesia.Ui
 
         void Piece(string type, Rect rect, Color color)
         {
-            if (_popupLayer)
+            if (_layer > 0)
             {
                 PopupPiece(type, rect, color);
                 return;
@@ -671,7 +893,7 @@ namespace RTXMnesia.Ui
         void Draw(HplGuiText layer, string text, Vector2 pos, Vector2 size, Color color, HplFontAlign align = HplFontAlign.Left)
         {
             color.a *= _opacity;
-            if (_popupLayer) layer = _popupText;
+            if (_layer > 0) layer = _layer == 2 ? _topText : _popupText;
             layer.DrawFont(text, pos, size, color, align);
         }
         static RawImage Image(Transform parent, string name)

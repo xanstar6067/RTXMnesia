@@ -1,11 +1,16 @@
 using System;
 using RTXMnesia.Hpl;
+using RTXMnesia.Save;
 using RTXMnesia.ScriptApi;
 using UnityEngine;
 
 namespace RTXMnesia.Ui
 {
-    /// <summary>User preferences, separate from inventory / map saves. Only implemented Unity options are exposed.</summary>
+    /// <summary>
+    /// User preferences, separate from inventory / map saves. Only implemented Unity options are exposed. As in HPL2,
+    /// the game and input options belong to the profile (user_settings.cfg of the profile → <see cref="ProfilePart"/>
+    /// in user_settings.json); graphics, volume and gamma are global (main settings → PlayerPrefs).
+    /// </summary>
     [Serializable]
     public sealed class HplUserSettings
     {
@@ -57,6 +62,7 @@ namespace RTXMnesia.Ui
                 if (PlayerPrefs.HasKey(PrefsKey)) JsonUtility.FromJsonOverwrite(PlayerPrefs.GetString(PrefsKey), s);
             }
             catch (ArgumentException) { }
+            s.ReadProfile();
             s.Validate();
             return s;
         }
@@ -71,8 +77,54 @@ namespace RTXMnesia.Ui
             }
             catch (ArgumentException) { }
             s.gamma = value;
-            s.Save();
+            // Gamma is global: the profile part is not touched.
+            s.Validate();
+            PlayerPrefs.SetString(PrefsKey, JsonUtility.ToJson(s));
+            PlayerPrefs.Save();
         }
+
+        /// <summary>The options of user_settings.cfg (Game, Input) kept in the profile folder.</summary>
+        [Serializable]
+        sealed class ProfilePart
+        {
+            public float mouseSensitivity = 1f;
+            public bool invertMouse, smoothMouse = true, subtitles = true, hints = true, crosshair = true, commentary;
+        }
+
+        public const string ProfileFile = "user_settings.json";
+
+        /// <summary>The profile's options over the global ones (nothing without a profile or its file).</summary>
+        void ReadProfile()
+        {
+            var p = new ProfilePart();
+            // A profile without the file (just created) starts with the defaults (default_user_settings.cfg).
+            if (!HplProfiles.ReadJson(ProfileFile, p, out bool missing) && !missing) return;
+            mouseSensitivity = p.mouseSensitivity; invertMouse = p.invertMouse; smoothMouse = p.smoothMouse;
+            subtitles = p.subtitles; hints = p.hints; crosshair = p.crosshair; commentary = p.commentary;
+        }
+
+        /// <summary>The first profile takes over the options chosen before profiles existed.</summary>
+        public static void CopyGlobalToProfile(string profile)
+        {
+            var s = new HplUserSettings();
+            try
+            {
+                if (PlayerPrefs.HasKey(PrefsKey)) JsonUtility.FromJsonOverwrite(PlayerPrefs.GetString(PrefsKey), s);
+            }
+            catch (ArgumentException) { }
+            s.Validate();
+            HplProfiles.WriteJson(profile, ProfileFile, s.ProfileValues());
+        }
+
+        ProfilePart ProfileValues() => new() {
+            mouseSensitivity = mouseSensitivity, invertMouse = invertMouse, smoothMouse = smoothMouse,
+            subtitles = subtitles, hints = hints, crosshair = crosshair, commentary = commentary,
+        };
+
+        void WriteProfile() => HplProfiles.WriteJson(ProfileFile, new ProfilePart {
+            mouseSensitivity = mouseSensitivity, invertMouse = invertMouse, smoothMouse = smoothMouse,
+            subtitles = subtitles, hints = hints, crosshair = crosshair, commentary = commentary,
+        });
 
         public HplUserSettings Copy() => (HplUserSettings)MemberwiseClone();
 
@@ -109,6 +161,7 @@ namespace RTXMnesia.Ui
                 if (PlayerPrefs.HasKey(PrefsKey)) JsonUtility.FromJsonOverwrite(PlayerPrefs.GetString(PrefsKey), settings);
             }
             catch (ArgumentException) { Debug.LogWarning("[RTXMnesia] Invalid user settings; using current defaults."); }
+            settings.ReadProfile();
             settings.Validate();
             return settings;
         }
@@ -139,6 +192,7 @@ namespace RTXMnesia.Ui
             Validate();
             PlayerPrefs.SetString(PrefsKey, JsonUtility.ToJson(this));
             PlayerPrefs.Save();
+            WriteProfile();
         }
     }
 }

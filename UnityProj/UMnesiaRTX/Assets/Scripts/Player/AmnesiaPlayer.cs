@@ -985,7 +985,12 @@ namespace RTXMnesia.Player
 
         bool SanityDisabled => ScriptApi.HplMap.Current != null && ScriptApi.HplMap.Current.disableInsanity;
 
-        public void SetSanity(float x) => sanity = SanityDisabled ? 100f : x;
+        public void SetSanity(float x)
+        {
+            sanity = SanityDisabled ? 100f : x;
+            // HARDMODE: no sanity is death.
+            if (ScriptApi.HplDifficulty.HardMode && sanity <= 0f) SetHealth(0f);
+        }
 
         /// <summary>cLuxPlayer::AddSanity: capped at 100, below 0 starts the insanity collapse.</summary>
         public void AddSanity(float x, bool showEffect = true)
@@ -997,6 +1002,8 @@ namespace RTXMnesia.Player
             {
                 sanity = 0f;
                 StartInsanityCollapse();
+                // HARDMODE: losing the sanity kills.
+                if (ScriptApi.HplDifficulty.HardMode) SetHealth(0f);
             }
             if (x > 0f && showEffect) SanityGained?.Invoke();
         }
@@ -1025,6 +1032,8 @@ namespace RTXMnesia.Player
             {
                 sanity = 0f;
                 StartInsanityCollapse();
+                // HARDMODE: losing the sanity kills.
+                if (ScriptApi.HplDifficulty.HardMode) SetHealth(0f);
             }
             if (useEffect) SanityHelper?.SetSanityLost();
         }
@@ -1069,8 +1078,11 @@ namespace RTXMnesia.Player
             sound.PlayGuiSoundData(name, RTXMnesia.Sound.SoundEntryType.World, out var data, out _);
             // Enemies hear the step at the feet (cLuxMap::BroadcastEnemySoundMessage with the .snt volume and distances).
             var map = ScriptApi.HplMap.Current;
+            // HARDMODE: running steps are twice as loud and heard 1.25 times further.
+            bool loud = ScriptApi.HplDifficulty.HardMode && moveType == "run";
             if (map != null && data != null)
-                map.BroadcastEnemySoundMessage(Body.FeetPosition + new Vector3(0f, 0.1f, 0f), data.volume, data.minDistance, data.maxDistance);
+                map.BroadcastEnemySoundMessage(Body.FeetPosition + new Vector3(0f, 0.1f, 0f), data.volume * (loud ? 2f : 1f),
+                                               data.minDistance, data.maxDistance * (loud ? 1.25f : 1f));
         }
 
         void SetFreeCamera(bool active)

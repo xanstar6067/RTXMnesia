@@ -321,6 +321,8 @@ namespace RTXMnesia.Player
             var hud = HplMap.Current != null ? HplMap.Current.hud : null;
             string Translate(string cat, string entry) => hud != null ? hud.Translate(cat, entry) : entry;
             CurrentHintText = HintCat != "" ? Translate(HintCat, HintEntry) : Translate("Hints", "DefaultDeath");
+            // HARDMODE: "You died..." (but the scripted death of the chancel).
+            if (ScriptApi.HplDifficulty.HardMode && HintEntry != "DeathGrunt_22_Chancel") CurrentHintText = Translate("Hints", "HardModeDeath");
 
             var sound = _player.sound;
             if (sound != null)
@@ -400,13 +402,19 @@ namespace RTXMnesia.Player
             if (_state == 4 && !Terminal && (_player.sound == null || !_player.sound.IsValid(_permaVoice, _permaVoiceId)))
             {
                 Terminal = true;
+                // Deviation: HPL2 exits the game (Justine was a separate launch); here Justine starts from the main
+                // menu, so its title screen comes back instead.
                 if (Application.isPlaying)
                 {
+                    var ui = HplMap.Current != null ? HplMap.Current.GameUi : null;
+                    if (ui == null || !ui.ReturnToTitle())
+                    {
 #if UNITY_EDITOR
-                    UnityEditor.EditorApplication.isPlaying = false;
+                        UnityEditor.EditorApplication.isPlaying = false;
 #else
-                    Application.Quit();
+                        Application.Quit();
 #endif
+                    }
                 }
             }
 
@@ -431,6 +439,15 @@ namespace RTXMnesia.Player
                     Reset();
                     HintCat = cat;
                     HintEntry = entry;
+                    // HARDMODE: the newest save loads (only a "HardMode" one); without it — the main menu
+                    // (active check: the player is inactive in an ambush).
+                    if (ScriptApi.HplDifficulty.HardMode && _player.active && Application.isPlaying)
+                    {
+                        var map = HplMap.Current;
+                        var ui = map != null ? map.GameUi : null;
+                        string file = map != null ? RTXMnesia.Save.HplSaveHandler.AutoLoadFile(map.Campaign) : null;
+                        if (ui != null && (file == null || !ui.LoadSaveFile(file))) ui.ReturnToTitle();
+                    }
                 }
             }
         }

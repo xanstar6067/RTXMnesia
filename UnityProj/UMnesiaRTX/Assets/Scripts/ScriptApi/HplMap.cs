@@ -298,6 +298,7 @@ namespace RTXMnesia.ScriptApi
             if (!disableEnemyAI)
                 foreach (var enemy in _enemies) enemy.AfterWorldLoad();
             foreach (var rope in _ropes) rope.AfterWorldLoad(transform);
+            if (HplDifficulty.HardMode && !menuBackground && player != null) RemoveHardModeItems();
 
             InitFog();
 
@@ -381,6 +382,53 @@ namespace RTXMnesia.ScriptApi
         }
 
         /// <summary>
+        /// HARDMODE of cLuxMap::LoadFromFile (every load of the map file): every 0.7–0.95th tinderbox (fewer the more
+        /// of the 6 the player carries) and every 0.65th lamp oil of the map are removed, counted in entity order.
+        /// The player's tinderboxes are those carried from the previous map (HPL2's player keeps them while the
+        /// next map loads); a loaded save counts the player's current ones, as HPL2.
+        /// </summary>
+        void RemoveHardModeItems()
+        {
+            float tinderboxes = _arrival?.Player != null ? _arrival.Player.tinderboxes : player.tinderboxes;
+            float t = tinderboxes / 6f;
+            float tinderboxRemoveEvery = (1f - t) * (7f / 10f) + t * (9.5f / 10f);
+            const float oilRemoveEvery = 6.5f / 10f;
+            float tinderboxCounter = 0f, oilCounter = 0f;
+            int removedTinderboxes = 0, totalTinderboxes = 0, removedOil = 0, totalOil = 0;
+            var remove = new List<HplEntity>();
+            foreach (var entity in _entities)
+            {
+                if (entity is not Props.PropItem item) continue;
+                if (item.ItemType == "Tinderbox")
+                {
+                    totalTinderboxes++;
+                    tinderboxCounter += tinderboxRemoveEvery;
+                    if (tinderboxCounter >= 1f)
+                    {
+                        tinderboxCounter -= 1f;
+                        remove.Add(entity);
+                        removedTinderboxes++;
+                        continue;
+                    }
+                }
+                if (item.ItemType == "LampOil")
+                {
+                    oilCounter += oilRemoveEvery;
+                    totalOil++;
+                    if (oilCounter >= 1f)
+                    {
+                        oilCounter -= 1f;
+                        remove.Add(entity);
+                        removedOil++;
+                    }
+                }
+            }
+            foreach (var entity in remove) DestroyEntity(entity);
+            if (logDebugMessages)
+                HplLog.Info($"{removedTinderboxes} of {totalTinderboxes} tinderboxes removed, {tinderboxRemoveEvery}; {removedOil} of {totalOil} oil removed");
+        }
+
+        /// <summary>
         /// cLuxMap::AddCompletionAmount: the completion of the map grows (the counter shows the increase after the
         /// delay).
         /// </summary>
@@ -427,6 +475,9 @@ namespace RTXMnesia.ScriptApi
             sound.Music.OnMapEnter();
             if (arrival.Effects != null) effects.ApplyCarry(arrival.Effects);
             if (player != null && arrival.Player != null) player.ApplyCarry(arrival.Player);
+            // HARDMODE (cLuxMapHandler::CheckMapChange): full sanity on the way into the inner sanctum.
+            if (player != null && HplDifficulty.HardMode && arrival.FromMap == "27_torture_chancel_redux" && MapName == "28_inner_sanctum")
+                player.AddSanity(100f, true);
             PlacePlayerAtStartPos(arrival.StartPos);
             foreach (var enemy in _enemies) enemy.OnMapEnter();
             if (!Campaign.IsJustine) SetCheckPoint("_auto", arrival.StartPos, "");

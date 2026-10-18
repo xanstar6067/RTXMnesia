@@ -13,28 +13,30 @@ namespace RTXMnesia.Save
     /// and the pending load that the loaded map scene takes.
     ///
     /// Deviation: the files are JSON (JsonUtility of <see cref="SaveGame"/>) in our own folder, Documents/RTXMnesia/
-    /// Saves/&lt;campaign&gt;, never in the game's Documents/Amnesia: saves of the original stay untouched. No profiles yet.
+    /// Profiles/&lt;profile&gt;/Saves/&lt;campaign&gt; (<see cref="HplProfiles"/>), never in the game's Documents/Amnesia:
+    /// saves of the original stay untouched.
     /// The file is written at once through a temporary file (HPL2 writes on a save thread).
     /// </summary>
     public static class HplSaveHandler
     {
         public const string Extension = ".sav";
 
-        /// <summary>Tools and tests: another folder instead of Documents/RTXMnesia/Saves.</summary>
+        /// <summary>Tools and tests: another folder instead of the saves of the profile.</summary>
         public static string FolderOverride;
 
         /// <summary>
-        /// Documents/RTXMnesia/Saves; batch runs of the editor (tests, simulations, previews whose level scripts call
-        /// AutoSave) write to Logs/BatchSaves of the project instead.
+        /// The saves of the profile in use (Documents/RTXMnesia/Saves without one); batch runs of the editor (tests,
+        /// simulations, previews whose level scripts call AutoSave) write to Logs/BatchSaves of the project instead.
         /// </summary>
         public static string RootFolder
         {
             get
             {
                 if (FolderOverride != null) return FolderOverride;
-                if (Application.isEditor && Application.isBatchMode)
+                if (Application.isEditor && Application.isBatchMode && HplProfiles.RootOverride == null)
                     return Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "BatchSaves"));
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "RTXMnesia", "Saves");
+                string profile = HplProfiles.Folder;
+                return profile != null ? Path.Combine(profile, "Saves") : HplProfiles.LegacySaves;
             }
         }
 
@@ -49,7 +51,12 @@ namespace RTXMnesia.Save
         static SaveGame s_pending;
 
         /// <summary>LoadGameFromFile: the save waits for its map scene, which loads it instead of OnStart / OnEnter.</summary>
-        public static void BeginLoad(SaveGame save) => s_pending = save;
+        public static void BeginLoad(SaveGame save)
+        {
+            s_pending = save;
+            // cLuxSaveHandler::LoadSaveGameData: gpBase->mbHardMode = apSave->mbHardmode.
+            if (save != null) HplDifficulty.HardMode = save.hardMode;
+        }
 
         public static bool LoadPending => s_pending != null;
 
@@ -75,11 +82,41 @@ namespace RTXMnesia.Save
         public static string AutoSave(HplMap map)
         {
             if (map == null || map.menuBackground || map.player == null || map.disableAutoSaves) return null;
+            // HARDMODE: no auto saves.
+            if (HplDifficulty.HardMode) return null;
             string folder = Folder(map.Campaign);
             int max = map.gameConfig != null ? map.gameConfig.GetInt("Saving", "MaxAutoSaves", 20) : 20;
             DeleteOldestSaveFiles(folder, max);
             string path = Path.Combine(folder, GetSaveName(map, "AutoSave"));
             return SaveGameToFile(map, path) ? path : null;
+        }
+
+        /// <summary>cLuxSaveHandler::HardModeSave: a "HardMode" save (no limit on their number).</summary>
+        public static string HardModeSave(HplMap map)
+        {
+            if (map == null || map.menuBackground || map.player == null || map.disableAutoSaves) return null;
+            string path = Path.Combine(Folder(map.Campaign), GetSaveName(map, "HardMode"));
+            return SaveGameToFile(map, path) ? path : null;
+        }
+
+        /// <summary>
+        /// cLuxSaveHandler::AutoLoad's file: the newest save; in hard mode only if it is a "HardMode" save (else an
+        /// error and null — the hard mode death then goes to the main menu).
+        /// </summary>
+        public static string AutoLoadFile(HplCampaign campaign)
+        {
+            string file = GetNewestSaveFile(campaign);
+            if (file == null)
+            {
+                HplLog.Error($"Could not find a save file in '{Folder(campaign)}'!");
+                return null;
+            }
+            if (HplDifficulty.HardMode && Path.GetFileName(file).IndexOf("HardMode", StringComparison.Ordinal) < 0)
+            {
+                HplLog.Error($"Could not find a hard mode save file in '{Folder(campaign)}'!");
+                return null;
+            }
+            return file;
         }
 
         /// <summary>cLuxSaveHandler::SaveGameToFile.</summary>

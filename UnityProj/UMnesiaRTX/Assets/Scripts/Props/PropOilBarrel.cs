@@ -95,6 +95,13 @@ namespace RTXMnesia.Props
         void CalculateOilAmount()
         {
             if (_amountCalculated) return;
+            // HARDMODE: always 10.
+            if (HplDifficulty.HardMode)
+            {
+                _oilAmount = 10f;
+                _amountCalculated = true;
+                return;
+            }
             _oilAmount = 10f; // base amount
             float totalOil = Map.player.lampOil;
             foreach (var item in HplGame.Items)
