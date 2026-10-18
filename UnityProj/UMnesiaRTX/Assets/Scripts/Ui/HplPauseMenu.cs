@@ -18,7 +18,7 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections, RtGi,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
@@ -633,8 +633,10 @@ namespace RTXMnesia.Ui
                 Combo(rightX, y, MenuControl.RtAo, settings);
                 y += comboStep;
                 Combo(rightX, y, MenuControl.RtReflections, settings);
+                y += comboStep;
+                Combo(rightX, y, MenuControl.RtGi, settings);
                 y += comboStep + 4;
-                string traced = !HplRayTracing.Active || HplRayTracing.Shadows != settings.rtShadows || HplRayTracing.Ao != settings.rtAo || HplRayTracing.Reflections != settings.rtReflections
+                string traced = !HplRayTracing.Active || HplRayTracing.Shadows != settings.rtShadows || HplRayTracing.Ao != settings.rtAo || HplRayTracing.Reflections != settings.rtReflections || HplRayTracing.Gi != settings.rtGi
                     ? "Применится после «OK»."
                     : settings.rtShadows == 0 ? "Тени: картами теней."
                     : "С трассировкой: " + HplRayTracing.TracedLights + " из " + HplRayTracing.ShadowedLights + "\nисточников с тенями в кадре.";

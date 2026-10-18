@@ -35,6 +35,15 @@ namespace RTXMnesia.Hpl
         static readonly float[] ReflectionMinSmoothness = { 1f, 0.55f, 0.45f, 0.35f };
         static readonly float[] ReflectionRayLength = { 0f, 10f, 25f, 50f };
 
+        /// <summary>
+        /// RTGI choices: off, low, medium, high (the remaster lighting: on by default). Light bounced from the lamps and
+        /// emissive surfaces; low — half resolution with a half resolution denoiser, medium — half resolution with a
+        /// second denoiser pass, high — full resolution.
+        /// </summary>
+        public const int GiLevels = 4, GiDefault = 2;
+        /// <summary>Lights found by the rays (reflections, GI) within this distance of the camera (HDRP: 10 m).</summary>
+        public const float LightClusterRange = 40f;
+
         /// <summary>The source radius of a shadowed light while it is traced (HPL2 lights have none; candles, lamps).</summary>
         public const float SourceRadius = 0.04f;
 
@@ -49,6 +58,8 @@ namespace RTXMnesia.Hpl
         public static int Ao { get; private set; }
         /// <summary>RT reflections: 0 — off, 1..3 — low, medium, high.</summary>
         public static int Reflections { get; private set; }
+        /// <summary>RTGI: 0 — off, 1..3 — low, medium, high.</summary>
+        public static int Gi { get; private set; }
         /// <summary>The lights traced in the last frame, of the shadowed lights considered (RTX tab).</summary>
         public static int TracedLights { get; private set; }
         public static int ShadowedLights { get; private set; }
@@ -64,6 +75,7 @@ namespace RTXMnesia.Hpl
             Shadows = Active ? s.rtShadows : 0;
             Ao = Active ? s.rtAo : 0;
             Reflections = Active ? s.rtReflections : 0;
+            Gi = Active ? s.rtGi : 0;
             // The next render selects the lights again with the new settings.
             s_frame = -1;
             if (Shadows == 0) ReleaseLights();
@@ -71,9 +83,11 @@ namespace RTXMnesia.Hpl
 
         static ScreenSpaceAmbientOcclusion s_ao;
         static ScreenSpaceReflection s_reflection;
+        static GlobalIllumination s_gi;
+        static LightCluster s_cluster;
 
         /// <summary>
-        /// The ray tracing part of the global settings volume (HplGraphics): RTAO and RT reflections. With the classic
+        /// The ray tracing part of the global settings volume (HplGraphics): RTAO, RT reflections and RTGI. With the classic
         /// lighting the components are inactive (and the cameras render no SSR), so the classic look is unchanged.
         /// </summary>
         public static void ApplyVolume(VolumeProfile profile)
@@ -94,6 +108,7 @@ namespace RTXMnesia.Hpl
                 // The values below are set through properties (no overrideState of their own).
                 s_reflection.SetAllOverridesTo(true);
             }
+            ApplyGi(profile);
             s_reflection.active = Reflections > 0;
             if (Reflections == 0) return;
             s_reflection.enabled.Override(true);
@@ -109,6 +124,34 @@ namespace RTXMnesia.Hpl
             s_reflection.denoiserRadius = Reflections > 1 ? 0.75f : 0.5f;
         }
 
+        /// <summary>RTGI and the light cluster the rays of the reflections and of the GI see.</summary>
+        static void ApplyGi(VolumeProfile profile)
+        {
+            if (s_cluster == null && !profile.TryGet(out s_cluster)) s_cluster = profile.Add<LightCluster>();
+            s_cluster.active = Active;
+            if (Active) s_cluster.cameraClusterRange.Override(LightClusterRange);
+
+            if (s_gi == null && !profile.TryGet(out s_gi))
+            {
+                s_gi = profile.Add<GlobalIllumination>();
+                // The values below are set through properties (no overrideState of their own).
+                s_gi.SetAllOverridesTo(true);
+            }
+            s_gi.active = Gi > 0;
+            if (Gi == 0) return;
+            s_gi.enable.Override(true);
+            s_gi.tracing.Override(RayCastingMode.RayTracing);
+            s_gi.mode.Override(RayTracingMode.Performance);
+            // Custom quality: the values below instead of the asset's quality levels.
+            s_gi.quality.Override(ScalableSettingLevelParameter.LevelCount);
+            s_gi.rayLength = 50f;
+            s_gi.fullResolution = Gi == 3;
+            s_gi.denoise = true;
+            s_gi.halfResolutionDenoiser = Gi == 1;
+            s_gi.secondDenoiserPass = Gi > 1;
+            s_gi.denoiserRadius = 0.66f;
+        }
+
         /// <summary>Ray tracing and screen space shadows of a camera (HplGraphics, beginContextRendering).</summary>
         public static void ConfigureCamera(Camera camera, HDAdditionalCameraData data, bool mirror)
         {
@@ -118,6 +161,8 @@ namespace RTXMnesia.Hpl
             Override(data, FrameSettingsField.ScreenSpaceShadows, on && Shadows > 0);
             // The asset supports SSR only for these reflections: never ray marched, never with the classic lighting.
             Override(data, FrameSettingsField.SSR, on && Reflections > 0);
+            // Likewise SSGI: only the ray-traced GI.
+            Override(data, FrameSettingsField.SSGI, on && Gi > 0);
             if (on && !mirror) SelectLights(camera);
         }
 

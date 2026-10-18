@@ -203,13 +203,36 @@ namespace RTXMnesia.Dev
                       $"RT reflections {level}: {(level > 0 ? "traced by the camera" : "no SSR on the camera")}");
             }
             Check(Difference(reflOff, reflHigh) > 0.0001f, $"RT reflections change the image (mean difference {Difference(reflOff, reflHigh):0.0000})");
+
+            // Ray-traced global illumination: every level, with the other defaults.
+            byte[] giOff = null, giHigh = null;
+            for (int level = 0; level < HplRayTracing.GiLevels; level++)
+            {
+                var s = saved.Copy();
+                s.lighting = 1;
+                s.rtGi = level;
+                HplGraphics.Apply(s);
+                double ms = Capture(camera, rt, $"{mapName}_gi{level}", out var image);
+                if (level == 0) giOff = image;
+                if (level == HplRayTracing.GiLevels - 1) giHigh = image;
+                var profile = HplGraphics.SettingsVolume != null ? HplGraphics.SettingsVolume.sharedProfile : null;
+                GlobalIllumination gi = null;
+                LightCluster cluster = null;
+                bool found = profile != null && profile.TryGet(out gi) && profile.TryGet(out cluster);
+                hd = HDCamera.GetOrCreate(camera);
+                bool cameraGi = hd.frameSettings.IsEnabled(FrameSettingsField.SSGI);
+                _report.AppendLine($"RTGI {level}: component {found}, active {gi?.active}, tracing {gi?.tracing.value}, full resolution {gi?.fullResolution}, cluster {cluster?.cameraClusterRange.value} m, camera SSGI {cameraGi}, {ms:0.00} ms/frame, mean brightness {Brightness(image):0.0000}");
+                Check(found && gi.active == (level > 0) && cameraGi == (level > 0) && cluster.active && (level == 0 || gi.tracing.value == RayCastingMode.RayTracing),
+                      $"RTGI {level}: {(level > 0 ? "traced by the camera" : "no SSGI on the camera")}");
+            }
+            Check(Brightness(giHigh) > Brightness(giOff), $"RTGI adds bounced light (mean brightness {Brightness(giOff):0.0000} → {Brightness(giHigh):0.0000})");
             {
                 var s = saved.Copy();
                 s.lighting = 0;
                 HplGraphics.Apply(s);
                 Capture(camera, rt, $"{mapName}_classic_again", out _);
                 hd = HDCamera.GetOrCreate(camera);
-                Check(!hd.frameSettings.IsEnabled(FrameSettingsField.SSR), "classic lighting: the camera renders no SSR");
+                Check(!hd.frameSettings.IsEnabled(FrameSettingsField.SSR) && !hd.frameSettings.IsEnabled(FrameSettingsField.SSGI), "classic lighting: the camera renders no SSR and no SSGI");
             }
 
             // Key C: the comparison switches the lighting with a wipe, from the user's settings without RT and back.
@@ -264,6 +287,15 @@ namespace RTXMnesia.Dev
                 if (light != null && light.TryGetComponent<HDAdditionalLightData>(out var hd) && hd.useRayTracedShadows &&
                     Mathf.Abs(light.GetComponent<Light>().shapeRadius - HplRayTracing.SourceRadius) > 1e-5f) return false;
             return true;
+        }
+
+        /// <summary>Mean value of an RGB24 image, 0..1.</summary>
+        static float Brightness(byte[] a)
+        {
+            if (a == null || a.Length == 0) return 0f;
+            long sum = 0;
+            foreach (byte b in a) sum += b;
+            return sum / (255f * a.Length);
         }
 
         /// <summary>Mean absolute difference of two RGB24 images, 0..1.</summary>

@@ -71,6 +71,10 @@ public static class ConfigureHDRP
         SetBool(serialized, "m_RenderPipelineSettings.supportRayTracing", true);
         // RT reflections are HDRP's SSR traced with rays; HplRayTracing enables SSR only on cameras that trace them.
         SetBool(serialized, "m_RenderPipelineSettings.supportSSR", true);
+        // RTGI likewise is HDRP's SSGI traced with rays. Rooms of Amnesia have many candles: more lights per cell of
+        // the light cluster the rays of the reflections and the GI read.
+        SetBool(serialized, "m_RenderPipelineSettings.supportSSGI", true);
+        SetInt(serialized, "m_RenderPipelineSettings.lightLoopSettings.maxLightsPerClusterCell", 16);
         SetBool(serialized, "m_RenderPipelineSettings.hdShadowInitParams.supportScreenSpaceShadows", true);
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.maxScreenSpaceShadowSlots", 16);
         serialized.ApplyModifiedPropertiesWithoutUndo();
