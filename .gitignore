@@ -1,6 +1,7 @@
 # Local reference source repositories
 /src/
 /source/
+/external/
 
 # Amnesia content converted into Unity (generated from source/, never committed)
 **/Assets/AmnesiaImported/
