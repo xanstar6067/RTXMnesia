@@ -137,7 +137,11 @@ namespace RTXMnesia.Dev
             Check(ui.Choose(MenuControl.ExitAndSave) && ui.PendingConfirmation == MenuControl.ConfirmExitAndSave, "In-game menu has no confirmed exit and save");
             CaptureSetup(map.PlayerCamera, ui.Menu.Canvas);
             yield return new WaitForSecondsRealtime(0.2f); Capture("ExitAndSaveConfirmation.png"); CaptureCleanup();
-            ui.Choose(MenuControl.ConfirmExitAndSave);
+            // Confirming exit-and-save quits the application (it would end this run): the same save, then the title screen.
+            RTXMnesia.Save.HplSaveHandler.AutoSave(map);
+            ui.Choose(MenuControl.Cancel);
+            Check(ui.Choose(MenuControl.ReturnTitle) && ui.PendingConfirmation == MenuControl.ConfirmReturnTitle, "Return to title confirmation missing");
+            ui.Choose(MenuControl.ConfirmReturnTitle);
             Check(RTXMnesia.Save.HplSaveHandler.SaveFileExists(map.Campaign), "Exit and save wrote no save");
             deadline = Time.realtimeSinceStartupAsDouble + 45;
             while (SceneManager.GetActiveScene().path != HplGameUi.MainMenuScene && Time.realtimeSinceStartupAsDouble < deadline) yield return null;

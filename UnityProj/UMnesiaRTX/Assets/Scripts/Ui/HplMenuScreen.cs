@@ -616,10 +616,14 @@ namespace RTXMnesia.Ui
                 case MenuControl.ConfirmReturnTitle: LoadScene(_map.Campaign.MenuScene, false); break;
                 // eLuxMainMenuExit_ContinueGame → cLuxSaveHandler::AutoLoad: the newest save.
                 case MenuControl.ConfirmContinue: LoadSave(HplSaveHandler.GetNewestSaveFile(_map.Campaign)); break;
-                // eLuxMainMenuExit_QuitAndSave: auto save, then back to the title screen.
+                // Own behaviour: auto save, then quit the application ("В главное меню" is the way to the title screen).
                 case MenuControl.ConfirmExitAndSave:
                     HplSaveHandler.AutoSave(_map);
-                    LoadScene(_map.Campaign.MenuScene, false);
+#if UNITY_EDITOR
+                    UnityEditor.EditorApplication.isPlaying = false;
+#else
+                    Application.Quit();
+#endif
                     break;
                 case MenuControl.LoadGame: OpenLoadGame(); break;
                 case MenuControl.LoadSlot:

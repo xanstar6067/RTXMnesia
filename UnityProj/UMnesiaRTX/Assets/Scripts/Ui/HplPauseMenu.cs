@@ -384,7 +384,8 @@ namespace RTXMnesia.Ui
                 MenuControl.ConfirmNewGame => T("MainMenu", "Start a new game?", "Начать новую игру?"),
                 MenuControl.ConfirmReturnTitle => T("MainMenu", "Sure you want to exit to main menu?", "Выйти в главное меню?"),
                 MenuControl.ConfirmContinue => T("MainMenu", "Continue old game?", "Продолжить прошлую игру?"),
-                MenuControl.ConfirmExitAndSave => T("MainMenu", "Sure you want to exit and save?", "Сохранить и выйти в главное меню?"),
+                // Own text: here "save and exit" leaves the game (the original's string says "to the main menu").
+                MenuControl.ConfirmExitAndSave => "Сохранить прогресс и выйти из игры?",
                 MenuControl.ConfirmLoad => T("LoadGame", "LoadGameMessage", "Загрузить сохранённую игру?"),
                 MenuControl.ConfirmKeyDefaults => T("KeyConfig", "LoadDefaultsMessage", "Применить раскладку по умолчанию?"),
                 MenuControl.ConfirmKeyInvalid => T("KeyConfig", "InvalidInputMessage", "Некоторые клавиши повторяются. Сохранить?"),
