@@ -168,6 +168,7 @@ namespace RTXMnesia.Importer
 
         static void BuildMaterials(List<Plan> plans, Dictionary<string, string> textures, ImportLog log)
         {
+            bool hasDecals = false;
             Texture2D Tex(Plan plan, TextureRole role)
             {
                 if (!plan.Jobs.TryGetValue(role, out var job) || !textures.TryGetValue(Key(job), out string path)) return null;
@@ -200,6 +201,7 @@ namespace RTXMnesia.Importer
                         var material = plan.Source.Type == AmnesiaMaterial.Kind.Water
                             ? CreateWater(plan.Source, role => Tex(plan, role), Cube())
                             : CreateMaterial(plan.Source, role => Tex(plan, role), log);
+                        hasDecals |= material.shader.name == "HDRP/Decal";
                         SaveInPlace(material, plan.AssetPath);
                     }
                     catch (Exception e)
@@ -213,6 +215,7 @@ namespace RTXMnesia.Importer
                 AssetDatabase.StopAssetEditing();
                 EditorUtility.ClearProgressBar();
             }
+            if (hasDecals) UpdateLevelDecalVariants(log);
             AssetDatabase.SaveAssets();
         }
 
@@ -384,8 +387,41 @@ namespace RTXMnesia.Importer
             m.SetFloat("_AffectAlbedo", albedo != null ? 1f : 0f);
             if (normal != null) m.SetTexture("_NormalMap", normal);
             m.SetFloat("_AffectNormal", normal != null ? 1f : 0f);
-            HDMaterial.ValidateMaterial(m);
+            ConfigureDecalSurface(m);
             return m;
+        }
+
+        static void ConfigureDecalSurface(Material material)
+        {
+            // HPL2 RenderDecals writes diffuse only. HDRP defaults would change smoothness over the entire
+            // mesh, including fully transparent texels, and halve the diffuse opacity.
+            material.SetFloat("_AffectMetal", 0f);
+            material.SetFloat("_AffectSmoothness", 0f);
+            material.SetFloat("_AffectAO", 0f);
+            material.SetFloat("_DecalBlend", 1f);
+            material.SetFloat("_MaskBlendSrc", 0f); // Use diffuse alpha if a mask is enabled in the future.
+            HDMaterial.ValidateMaterial(material);
+        }
+
+        static void UpdateLevelDecalVariants(ImportLog log)
+        {
+            // LevelConverter stores tinted decals as independent sub-assets, not live material variants.
+            // Update those in place as well: keep their tint, GUID and local file ID, without rebuilding maps.
+            string levels = AmnesiaPaths.ImportedAssetsRoot + "/Levels";
+            if (!Directory.Exists(AmnesiaPaths.ToAbsolute(levels))) return;
+            int count = 0;
+            foreach (string file in Directory.GetFiles(AmnesiaPaths.ToAbsolute(levels), "*_generated.asset", SearchOption.AllDirectories))
+            {
+                string path = levels + "/" + Path.GetRelativePath(AmnesiaPaths.ToAbsolute(levels), file).Replace('\\', '/');
+                foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                {
+                    if (asset is not Material material || material.shader.name != "HDRP/Decal") continue;
+                    ConfigureDecalSurface(material);
+                    EditorUtility.SetDirty(material);
+                    count++;
+                }
+            }
+            log.Info($"Level decal variants updated in place: {count}");
         }
 
         /// <summary>
