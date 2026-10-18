@@ -77,6 +77,7 @@ namespace RTXMnesia.Ui
 
         void Update()
         {
+            Effects.HplRtxCompare.Update();
             // The load screen between maps takes the input (cLuxInputHandler LoadScreen state).
             if (_map == null || Menu == null || IsTransitioning || HplLoadScreen.Active || HplCredits.Active) return;
             if (!IsTitleScreen && (_map.player == null || !_map.player.readDevices)) return;
@@ -85,6 +86,8 @@ namespace RTXMnesia.Ui
             if (!IsPaused && _map.player != null && _map.player.UiInputBlocked &&
                 (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame)) return;
             if (keyboard != null && RouteKeys(keyboard)) return;
+            // C: compare the classic lighting and ray tracing (not an HPL2 key, not configurable).
+            if (!IsPaused && !IsTitleScreen && keyboard != null && keyboard.cKey.wasPressedThisFrame) Effects.HplRtxCompare.Toggle(Settings);
             if (!IsPaused) return;
 
             MenuOpacity = Mathf.MoveTowards(MenuOpacity, IsClosing ? 0f : 1f, Time.unscaledDeltaTime / Mathf.Max(0.001f, FadeTime()));

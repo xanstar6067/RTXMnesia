@@ -23,7 +23,7 @@ namespace RTXMnesia.Ui
         /// <summary>Translation: category, entry, fallback text.</summary>
         public delegate string Translate(string category, string entry, string fallback);
 
-        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.RtShadows;
+        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.RtAo;
 
         /// <summary>DLSS is chosen and runs on this GPU: it replaces the anti-aliasing of the graphics tab.</summary>
         public static bool DlssOn(HplUserSettings s) => s.dlssMode != (int)HplDlssMode.Off && HplDlss.Available;
@@ -118,6 +118,11 @@ namespace RTXMnesia.Ui
                         items.Add(new HplComboItem(RtLevel(i, t) + " (до " + HplRayTracing.ShadowLights[i] + " источников)"));
                     current = s.rtShadows;
                     break;
+                case MenuControl.RtAo:
+                    items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
+                    for (int i = 1; i < HplRayTracing.AoLevels; i++) items.Add(new HplComboItem(RtLevel(i, t)));
+                    current = s.rtAo;
+                    break;
             }
             current = Mathf.Clamp(current, 0, Mathf.Max(0, items.Count - 1));
             return items;
@@ -138,6 +143,7 @@ namespace RTXMnesia.Ui
             MenuControl.DlssMode => "NVIDIA DLSS",
             MenuControl.DlssPreset => "Модель DLSS",
             MenuControl.RtShadows => "Тени (трассировка)",
+            MenuControl.RtAo => "Затенение (RTAO)",
             _ => "",
         };
 
@@ -193,6 +199,7 @@ namespace RTXMnesia.Ui
                     break;
                 case MenuControl.DlssPreset: s.dlssPreset = (int)HplDlss.Presets()[index]; break;
                 case MenuControl.RtShadows: s.rtShadows = index; break;
+                case MenuControl.RtAo: s.rtAo = index; break;
             }
         }
 

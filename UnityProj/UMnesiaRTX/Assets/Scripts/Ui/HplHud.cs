@@ -264,6 +264,11 @@ namespace RTXMnesia.Ui
                 _completionText.DrawFont(" " + Translate("CompletionCount", "Completed"), new Vector2(400f, 20f), size, color);
             }
 
+            // The lighting comparison (key C): the new lighting, top left.
+            float compare = Effects.HplRtxCompare.LabelAlpha;
+            if (compare > 0f && _completionText != null && _completionText.font != null)
+                _completionText.DrawFont(Effects.HplRtxCompare.Label, new Vector2(24f, 20f), new Vector2(21f, 21f), new Color(1f, 1f, 1f, compare));
+
             RefreshCrosshair();
             RefreshPlayerEffects();
             RefreshInsanity(effects);

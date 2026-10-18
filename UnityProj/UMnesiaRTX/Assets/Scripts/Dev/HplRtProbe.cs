@@ -109,6 +109,7 @@ namespace RTXMnesia.Dev
                 var s = saved.Copy();
                 s.lighting = 1;
                 s.rtShadows = level;
+                s.rtAo = 0;
                 HplGraphics.Apply(s);
                 double ms = Capture(camera, rt, $"{mapName}_{level + 1}_rtShadows{level}", out var image);
                 if (level == HplRayTracing.ShadowsDefault) highImage = image;
@@ -125,12 +126,65 @@ namespace RTXMnesia.Dev
                 if (level == 0) Check(traced == 0, "RT shadows off: lights keep their shadow maps");
                 else
                 {
-                    Check(traced > 0 && traced <= HplRayTracing.ShadowLights[level], $"RT shadows {level}: 1..{HplRayTracing.ShadowLights[level]} lights traced");
+                    int expected = Mathf.Min(HplRayTracing.ShadowLights[level], HplRayTracing.ShadowedLights);
+                    Check(traced == expected, $"RT shadows {level}: {expected} lights traced (at most {HplRayTracing.ShadowLights[level]}, {HplRayTracing.ShadowedLights} in view)");
                     Check(hd.frameSettings.IsEnabled(FrameSettingsField.ScreenSpaceShadows), $"RT shadows {level}: screen space shadows on");
-                    Check(TracedRadiusOk(), $"RT shadows {level}: traced lights have the source radius {HplRayTracing.SourceRadius}");
+                    if (expected > 0) Check(TracedRadiusOk(), $"RT shadows {level}: traced lights have the source radius {HplRayTracing.SourceRadius}");
                 }
             }
-            Check(highImage != null && Difference(classicImage, highImage) > 0.0001f, $"ray-traced shadows change the image (mean difference {Difference(classicImage, highImage):0.0000})");
+            if (HplRayTracing.ShadowedLights > 0)
+                Check(highImage != null && Difference(classicImage, highImage) > 0.0001f, $"ray-traced shadows change the image (mean difference {Difference(classicImage, highImage):0.0000})");
+            else _report.AppendLine("No light with shadows in view: the image check of ray-traced shadows is skipped");
+
+            // Ray-traced ambient occlusion: every level, with the default shadows.
+            byte[] aoOff = null, aoHigh = null;
+            for (int level = 0; level < HplRayTracing.AoLevels; level++)
+            {
+                var s = saved.Copy();
+                s.lighting = 1;
+                s.rtShadows = HplRayTracing.ShadowsDefault;
+                s.rtAo = level;
+                HplGraphics.Apply(s);
+                double ms = Capture(camera, rt, $"{mapName}_ao{level}", out var image);
+                if (level == 0) aoOff = image;
+                if (level == HplRayTracing.AoLevels - 1) aoHigh = image;
+                var profile = HplGraphics.SettingsVolume != null ? HplGraphics.SettingsVolume.sharedProfile : null;
+                ScreenSpaceAmbientOcclusion ao = null;
+                bool found = profile != null && profile.TryGet(out ao);
+                _report.AppendLine($"RTAO {level}: component {found}, active {ao?.active}, ray traced {ao?.rayTracing.value}, quality {ao?.quality.value}, {ms:0.00} ms/frame");
+                Check(found && ao.active == (level > 0) && (level == 0 || ao.rayTracing.value && ao.quality.value == level - 1),
+                      $"RTAO {level}: the settings volume {(level > 0 ? "traces AO at quality " + (level - 1) : "has no AO")}");
+            }
+            Check(Difference(aoOff, aoHigh) > 0.0001f, $"RTAO changes the image (mean difference {Difference(aoOff, aoHigh):0.0000})");
+
+            // Key C: the comparison switches the lighting with a wipe, from the user's settings without RT and back.
+            var ui = map.GameUi;
+            if (ui != null)
+            {
+                var userSettings = ui.Settings;
+                var start = saved.Copy();
+                start.lighting = 0;
+                ui.Settings = start;
+                HplGraphics.Apply(start);
+                yield return null;
+                Effects.HplRtxCompare.Toggle(ui.Settings);
+                int frames = 0;
+                while (!Effects.HplRtxCompare.Wiping && frames++ < 30) yield return null;
+                Check(Effects.HplRtxCompare.Wiping && HplRayTracing.Active, $"key C: the frame is kept and ray tracing switches on ({frames} frames)");
+                yield return new WaitForSecondsRealtime(Effects.HplRtxCompare.WipeTime * 0.45f);
+                Check(Effects.HplRtxCompare.LabelAlpha > 0f && Effects.HplRtxCompare.Label == "Трассировка лучей", "key C: the HUD names the new lighting");
+                float progress = Effects.HplRtxCompare.Progress;
+                SaveFrame(rt, $"{mapName}_compare_wipe");
+                Check(progress > 0.05f && progress < 0.95f, $"key C: the wipe runs (progress {progress:0.00})");
+                yield return new WaitForSecondsRealtime(Effects.HplRtxCompare.WipeTime);
+                Check(!Effects.HplRtxCompare.Wiping, "key C: the wipe ends");
+                Effects.HplRtxCompare.Toggle(ui.Settings);
+                frames = 0;
+                while (!Effects.HplRtxCompare.Wiping && frames++ < 30) yield return null;
+                Check(Effects.HplRtxCompare.Wiping && !HplRayTracing.Active && Effects.HplRtxCompare.Label == "Классическое освещение", "key C again: back to the classic lighting");
+                yield return new WaitForSecondsRealtime(Effects.HplRtxCompare.WipeTime + 0.1f);
+                ui.Settings = userSettings;
+            }
 
             HplGraphics.Apply(saved);
             yield return null;
@@ -187,6 +241,19 @@ namespace RTXMnesia.Dev
             File.WriteAllBytes(Path.Combine(folder, name + ".png"), image.EncodeToPNG());
             Destroy(image);
             return watch.Elapsed.TotalMilliseconds / 20;
+        }
+
+        /// <summary>Saves what the camera last rendered to its target.</summary>
+        void SaveFrame(RenderTexture rt, string name)
+        {
+            var previous = RenderTexture.active;
+            RenderTexture.active = rt;
+            var image = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
+            image.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            RenderTexture.active = previous;
+            Directory.CreateDirectory(folder);
+            File.WriteAllBytes(Path.Combine(folder, name + ".png"), image.EncodeToPNG());
+            Destroy(image);
         }
 
         void Finish(int code)

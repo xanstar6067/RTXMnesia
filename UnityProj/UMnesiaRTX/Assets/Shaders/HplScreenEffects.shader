@@ -49,6 +49,8 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     TEXTURE2D(_HplZoomMap);
     float4 _HplInsanity;    // x: wave time, y: amplitude map blend, z: wave alpha, w: zoom alpha
     float _HplGamma;        // gamma of the settings: sRGB value^(1/gamma), as SDL's gamma ramp
+    TEXTURE2D_X(_HplCompareKept);
+    float4 _HplCompare;     // lighting comparison: x wipe line at mid height (pixels), y lean (pixels), z line width
 
 
     float3 LoadSource(int2 p)
@@ -66,6 +68,31 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
         float3 a = LoadSource(i), b = LoadSource(i + int2(1, 0));
         float3 c = LoadSource(i + int2(0, 1)), d = LoadSource(i + int2(1, 1));
         return lerp(lerp(a, b, t.x), lerp(c, d, t.x), t.y);
+    }
+
+    // The camera color as it is (lighting comparison: the kept frame, the live frame).
+    float4 RawCopyFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        return float4(CustomPassLoadCameraColor(uint2(v.positionCS.xy), 0), 1.0);
+    }
+
+    // Lighting comparison wipe (HplRtxCompare): live image left of a slanted line, the kept frame right of it; the line
+    // is white with an NVIDIA green glow. Display-referred linear values: in HDR, white is paper white.
+    float4 CompareWipeFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float2 p = v.positionCS.xy;
+        int2 q = clamp(int2(p), int2(0, 0), int2(_ScreenSize.xy) - 1);
+        float edge = _HplCompare.x + (0.5 - p.y / _ScreenSize.y) * 2.0 * _HplCompare.y * 0.5;
+        float3 color = p.x < edge ? LOAD_TEXTURE2D_X(_HplSource, q).rgb : LOAD_TEXTURE2D_X(_HplCompareKept, q).rgb;
+        float d = abs(p.x - edge);
+        float white = _HplEffectHdr.x > 0.5 ? _HplEffectHdr.y : 1.0;
+        float core = saturate(1.0 - d / _HplCompare.z);
+        float glow = exp(-d / (_HplCompare.z * 4.0)) * 0.2;
+        float3 green = float3(0.46, 0.73, 0.0);
+        color = lerp(color, white.xxx, core) + green * green * glow * white;
+        return float4(color, 1.0);
     }
 
     float4 GammaFrag(Varyings v) : SV_Target
@@ -357,6 +384,22 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend One SrcAlpha Cull Off
             HLSLPROGRAM
             #pragma fragment WorldFogFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Raw copy"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment RawCopyFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Compare wipe"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment CompareWipeFrag
             ENDHLSL
         }
     }

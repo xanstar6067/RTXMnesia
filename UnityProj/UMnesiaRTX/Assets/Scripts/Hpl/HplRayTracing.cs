@@ -21,6 +21,11 @@ namespace RTXMnesia.Hpl
         public static readonly int[] ShadowLights = { 0, 4, 8, 12, 16 };
         static readonly int[] ShadowSamples = { 0, 1, 1, 2, 4 };
         public const int ShadowsDefault = 2;
+        /// <summary>RT ambient occlusion choices: off, low, medium, high (HDRP's RTAO quality levels).</summary>
+        public const int AoLevels = 4, AoDefault = 2;
+        /// <summary>How much RTAO darkens the direct light of lamps (HDRP applies AO to indirect light only, which HPL2 maps do not have).</summary>
+        public const float AoDirectLighting = 0.35f;
+
         /// <summary>The source radius of a shadowed light while it is traced (HPL2 lights have none; candles, lamps).</summary>
         public const float SourceRadius = 0.04f;
 
@@ -31,6 +36,8 @@ namespace RTXMnesia.Hpl
         public static bool Active { get; private set; }
         /// <summary>Index of <see cref="ShadowLights"/>.</summary>
         public static int Shadows { get; private set; }
+        /// <summary>RT ambient occlusion: 0 — off, 1..3 — low, medium, high.</summary>
+        public static int Ao { get; private set; }
         /// <summary>The lights traced in the last frame, of the shadowed lights considered (RTX tab).</summary>
         public static int TracedLights { get; private set; }
         public static int ShadowedLights { get; private set; }
@@ -44,9 +51,27 @@ namespace RTXMnesia.Hpl
         {
             Active = s.lighting == 1 && SystemInfo.supportsRayTracing;
             Shadows = Active ? s.rtShadows : 0;
+            Ao = Active ? s.rtAo : 0;
             // The next render selects the lights again with the new settings.
             s_frame = -1;
             if (Shadows == 0) ReleaseLights();
+        }
+
+        static ScreenSpaceAmbientOcclusion s_ao;
+
+        /// <summary>
+        /// The ray tracing part of the global settings volume (HplGraphics): RTAO. With the classic lighting the
+        /// component is inactive, so the classic look is unchanged.
+        /// </summary>
+        public static void ApplyVolume(VolumeProfile profile)
+        {
+            if (s_ao == null && !profile.TryGet(out s_ao)) s_ao = profile.Add<ScreenSpaceAmbientOcclusion>(true);
+            s_ao.active = Ao > 0;
+            if (Ao == 0) return;
+            s_ao.rayTracing.Override(true);
+            s_ao.quality.Override(Ao - 1);
+            s_ao.intensity.Override(1f);
+            s_ao.directLightingStrength.Override(AoDirectLighting);
         }
 
         /// <summary>Ray tracing and screen space shadows of a camera (HplGraphics, beginContextRendering).</summary>

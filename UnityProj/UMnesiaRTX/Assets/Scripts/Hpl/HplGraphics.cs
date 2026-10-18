@@ -215,6 +215,7 @@ namespace RTXMnesia.Hpl
                     s_defaultBloom = bloom.intensity.value;
             }
             s_bloom.intensity.Override(Bloom ? s_defaultBloom : 0f);
+            HplRayTracing.ApplyVolume(s_profile);
         }
 
         static void SaveEditorQuality()

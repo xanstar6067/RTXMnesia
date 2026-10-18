@@ -19,6 +19,7 @@ namespace RTXMnesia.Effects
     {
         public const string ShaderName = "Hidden/RTXMnesia/HplScreenEffects";
         const int CopyPass = 0, TrailPass = 1, CompositePass = 2, InsanityPass = 7, GammaPass = 8, HdrDisplayPass = 10;
+        const int RawCopyPass = 12, CompareWipePass = 13;
 
         public Shader shader;
         [NonSerialized] public HplEffects effects;
@@ -26,6 +27,7 @@ namespace RTXMnesia.Effects
         Material _material;
         RTHandle _source, _trail, _insanity;
         RTHandle _menuSharp, _menuBlur, _menuTemp;
+        RTHandle _compareKept;
         int _menuGeneration = -1, _menuWidth, _menuHeight;
         bool _clearTrail = true;
         int _hdrRevision = -1;
@@ -45,6 +47,8 @@ namespace RTXMnesia.Effects
         static readonly int ZoomMapId = Shader.PropertyToID("_HplZoomMap");
         static readonly int InsanityId = Shader.PropertyToID("_HplInsanity");
         static readonly int GammaId = Shader.PropertyToID("_HplGamma");
+        static readonly int CompareKeptId = Shader.PropertyToID("_HplCompareKept");
+        static readonly int CompareId = Shader.PropertyToID("_HplCompare");
 
         protected override void Setup(ScriptableRenderContext renderContext, CommandBuffer cmd)
         {
@@ -88,6 +92,7 @@ namespace RTXMnesia.Effects
             _material.SetVector("_HplEffectHdr", new Vector4(hdr ? 1 : 0, Hpl.HplHdr.PaperWhite, Hpl.HplHdr.Peak, Hpl.HplHdr.DisplayGamma));
             if (hdr && HDROutputUtils.GetColorSpaceForGamut(HDROutputSettings.main.displayColorGamut, out int gamut))
                 _material.SetInteger("_HDRColorspace", gamut);
+            RenderCompare(ctx);
             RenderEffects(ctx);
 
             // The gamma of the settings (SDL_SetGamma in HPL2: the display ramp, output = input^(1/gamma)), last. Always in SDR:
@@ -114,6 +119,42 @@ namespace RTXMnesia.Effects
                 CoreUtils.DrawFullScreen(ctx.cmd, _material, props, HdrDisplayPass);
             }
             RenderCalibration(ctx);
+        }
+
+        /// <summary>
+        /// The lighting comparison (HplRtxCompare, key C), before the HPL effects so both images get them: the frame
+        /// is kept, then a slanted line sweeps the live image (left) over the kept one (right).
+        /// </summary>
+        void RenderCompare(CustomPassContext ctx)
+        {
+            var cmd = ctx.cmd;
+            var props = ctx.propertyBlock;
+            if (HplRtxCompare.CaptureRequested)
+            {
+                _compareKept ??= Alloc("HPL lighting comparison");
+                CoreUtils.SetRenderTarget(cmd, _compareKept, ClearFlag.None);
+                CoreUtils.DrawFullScreen(cmd, _material, props, RawCopyPass);
+                HplRtxCompare.Captured();
+                return;
+            }
+            if (!HplRtxCompare.Wiping)
+            {
+                _compareKept?.Release();
+                _compareKept = null;
+                return;
+            }
+            if (_compareKept == null) return;
+            var camera = ctx.hdCamera.camera;
+            // The line leans by 12% of the height; it starts left of the screen and leaves it on the right.
+            float lean = 0.12f * camera.pixelHeight;
+            float edge = -lean + HplRtxCompare.Progress * (camera.pixelWidth + 2f * lean);
+            CoreUtils.SetRenderTarget(cmd, _source, ClearFlag.None);
+            CoreUtils.DrawFullScreen(cmd, _material, props, RawCopyPass);
+            props.SetTexture(SourceId, _source);
+            props.SetTexture(CompareKeptId, _compareKept);
+            props.SetVector(CompareId, new Vector4(edge, lean, Mathf.Max(1.5f, camera.pixelHeight / 540f), 0f));
+            CoreUtils.SetRenderTarget(cmd, ctx.cameraColorBuffer, ClearFlag.None);
+            CoreUtils.DrawFullScreen(cmd, _material, props, CompareWipePass);
         }
 
         void RenderCalibration(CustomPassContext ctx)
@@ -263,6 +304,7 @@ namespace RTXMnesia.Effects
             _source?.Release();
             _trail?.Release();
             _insanity?.Release();
+            _compareKept?.Release();
             ReleaseMenu();
         }
     }

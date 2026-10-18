@@ -30,6 +30,7 @@ namespace RTXMnesia.World
         static readonly int ExtentId = Shader.PropertyToID("_HplBoxExtent");
         static readonly int ColorId = Shader.PropertyToID("_HplBoxColor");
         static readonly int UnitRadianceId = Shader.PropertyToID("_HplUnitRadiance");
+        static readonly int AoId = Shader.PropertyToID("_HplBoxAo");
 
         readonly Vector4[] _centers = new Vector4[MaxBoxes];
         readonly Vector4[] _extents = new Vector4[MaxBoxes];
@@ -90,6 +91,7 @@ namespace RTXMnesia.World
             cmd.SetGlobalVectorArray(ExtentId, _extents);
             cmd.SetGlobalVectorArray(ColorId, _colors);
             cmd.SetGlobalFloat(UnitRadianceId, Hpl.HplLighting.UnitRadiance);
+            cmd.SetGlobalFloat(AoId, Hpl.HplRayTracing.Ao > 0 ? 1f : 0f);
 
             var desc = new RendererListDesc(Tags, ctx.cullingResults, ctx.hdCamera.camera)
             {
