@@ -13,7 +13,8 @@ namespace RTXMnesia.Hpl
     /// when its frame settings allow it, which this class sets on every game camera before rendering (water mirrors
     /// never trace). Ray-traced shadows: HDRP has a fixed number of screen space shadow slots, so each frame the map
     /// lights with shadows nearest to the camera (visible, camera inside or close to their range) get ray-traced
-    /// shadows up to the chosen count; the others keep their shadow maps.
+    /// shadows up to the chosen count; the others keep their shadow maps. "Shadows from all lights" adds the lights
+    /// HPL2 drew without shadows (most candles) to that choice; the lantern in the hand has its own setting and slot.
     /// </summary>
     public static class HplRayTracing
     {
@@ -60,12 +61,21 @@ namespace RTXMnesia.Hpl
         public static int Reflections { get; private set; }
         /// <summary>RTGI: 0 — off, 1..3 — low, medium, high.</summary>
         public static int Gi { get; private set; }
+        /// <summary>Lights without CastShadows in the map (candles) also get ray-traced shadows (remaster).</summary>
+        public static bool AllShadows { get; private set; }
+        /// <summary>The lantern in the hand casts ray-traced shadows (remaster).</summary>
+        public static bool LanternShadows { get; private set; }
+        /// <summary>The hand-held lights traced in the last frame (RTX tab, checks).</summary>
+        public static int TracedHandLights { get; private set; }
         /// <summary>The lights traced in the last frame, of the shadowed lights considered (RTX tab).</summary>
         public static int TracedLights { get; private set; }
         public static int ShadowedLights { get; private set; }
 
         static readonly List<(AmnesiaLight light, float score)> s_candidates = new();
         static readonly HashSet<AmnesiaLight> s_traced = new();
+        static readonly HashSet<AmnesiaLight> s_hand = new();
+        /// <summary>HDRP's screen space shadow slots (the pipeline asset, ConfigureHDRP).</summary>
+        const int MaxSlots = 16;
         static readonly Dictionary<Light, float> s_radius = new();
         static int s_frame = -1;
 
@@ -76,9 +86,11 @@ namespace RTXMnesia.Hpl
             Ao = Active ? s.rtAo : 0;
             Reflections = Active ? s.rtReflections : 0;
             Gi = Active ? s.rtGi : 0;
+            AllShadows = Shadows > 0 && s.rtAllShadows;
+            LanternShadows = Active && s.rtLanternShadows;
             // The next render selects the lights again with the new settings.
             s_frame = -1;
-            if (Shadows == 0) ReleaseLights();
+            if (Shadows == 0 && !LanternShadows) ReleaseLights();
         }
 
         static ScreenSpaceAmbientOcclusion s_ao;
@@ -152,6 +164,15 @@ namespace RTXMnesia.Hpl
             s_gi.denoiserRadius = 0.66f;
         }
 
+        /// <summary>The ray tracing settings of <paramref name="s"/> are the applied ones (RTX tab: "applies after OK").</summary>
+        public static bool Applied(HplUserSettings s)
+        {
+            bool active = s.lighting == 1 && SystemInfo.supportsRayTracing;
+            if (active != Active) return false;
+            return !active || Shadows == s.rtShadows && Ao == s.rtAo && Reflections == s.rtReflections && Gi == s.rtGi &&
+                   AllShadows == (s.rtShadows > 0 && s.rtAllShadows) && LanternShadows == s.rtLanternShadows;
+        }
+
         /// <summary>Ray tracing and screen space shadows of a camera (HplGraphics, beginContextRendering).</summary>
         public static void ConfigureCamera(Camera camera, HDAdditionalCameraData data, bool mirror)
         {
@@ -163,7 +184,7 @@ namespace RTXMnesia.Hpl
             Override(data, FrameSettingsField.SSR, on && Reflections > 0);
             // Likewise SSGI: only the ray-traced GI.
             Override(data, FrameSettingsField.SSGI, on && Gi > 0);
-            if (on && !mirror) SelectLights(camera);
+            if (on && !mirror && (Shadows > 0 || LanternShadows)) SelectLights(camera);
         }
 
         static void Override(HDAdditionalCameraData data, FrameSettingsField field, bool on)
@@ -189,14 +210,29 @@ namespace RTXMnesia.Hpl
                 foreach (var hd in s_radius.Keys) if (hd == null) gone.Add(hd);
                 foreach (var hd in gone) s_radius.Remove(hd);
             }
-            int max = ShadowLights[Shadows];
+            // The lantern first: it keeps its slot, the map lights share the rest of HDRP's slots.
+            int hand = 0;
+            foreach (var light in AmnesiaLight.All)
+            {
+                if (light == null || !light.handHeld) continue;
+                bool lit = LanternShadows && light.isActiveAndEnabled && light.TryGetComponent<Light>(out var handLight) &&
+                           handLight.enabled && handLight.intensity > 0f && HplGraphics.Shadows != HplGraphics.ShadowsOff;
+                if (lit) { s_hand.Add(light); hand++; }
+                SetTraced(light, lit);
+            }
+            s_hand.RemoveWhere(l => l == null || !l.handHeld || !LanternShadows || !l.isActiveAndEnabled);
+            TracedHandLights = hand;
+            int max = Mathf.Min(ShadowLights[Shadows], MaxSlots - hand);
             var planes = GeometryUtility.CalculateFrustumPlanes(camera);
             Vector3 eye = camera.transform.position;
             s_candidates.Clear();
             foreach (var light in AmnesiaLight.All)
             {
-                if (light == null || !light.castShadows || !light.isActiveAndEnabled) continue;
-                if (!light.TryGetComponent<Light>(out var unityLight) || !unityLight.enabled || unityLight.shadows == LightShadows.None || unityLight.intensity <= 0f) continue;
+                if (light == null || light.box || light.handHeld || light.excludeFromLightLevel || !light.isActiveAndEnabled) continue;
+                if (!light.castShadows && !AllShadows) continue;
+                if (!light.TryGetComponent<Light>(out var unityLight) || !unityLight.enabled || unityLight.intensity <= 0f) continue;
+                // Map shadows: the graphics tab's shadow setting (Off: none); the added ones only follow its Off.
+                if (light.castShadows ? unityLight.shadows == LightShadows.None : HplGraphics.Shadows == HplGraphics.ShadowsOff) continue;
                 float range = unityLight.range;
                 Vector3 position = light.transform.position;
                 if (!GeometryUtility.TestPlanesAABB(planes, new Bounds(position, Vector3.one * (2f * range)))) continue;
@@ -219,6 +255,22 @@ namespace RTXMnesia.Hpl
         static void SetTraced(AmnesiaLight light, bool on)
         {
             if (!light.TryGetComponent<HDAdditionalLightData>(out var hd) || !light.TryGetComponent<Light>(out var unityLight)) return;
+            if (!light.castShadows)
+            {
+                // A light HPL2 drew without shadows: shadows only while traced. HDRP still wants a shadow map for it;
+                // the smallest one, rendered once (on demand), costs almost nothing.
+                if (on && unityLight.shadows == LightShadows.None)
+                {
+                    hd.shadowUpdateMode = ShadowUpdateMode.OnDemand;
+                    hd.SetShadowResolutionLevel(0);
+                    unityLight.shadows = LightShadows.Soft;
+                }
+                else if (!on && unityLight.shadows != LightShadows.None)
+                {
+                    unityLight.shadows = LightShadows.None;
+                    hd.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+                }
+            }
             if (on)
             {
                 if (!s_radius.ContainsKey(unityLight)) s_radius[unityLight] = unityLight.shapeRadius;
@@ -238,7 +290,10 @@ namespace RTXMnesia.Hpl
         static void ReleaseLights()
         {
             foreach (var light in s_traced) if (light != null) SetTraced(light, false);
+            foreach (var light in s_hand) if (light != null) SetTraced(light, false);
             s_traced.Clear();
+            s_hand.Clear();
+            TracedHandLights = 0;
             s_radius.Clear();
             TracedLights = ShadowedLights = 0;
         }

@@ -59,6 +59,9 @@ namespace RTXMnesia.World
         /// <summary>The player's darkness light (skipped by the light level).</summary>
         [System.NonSerialized] public bool excludeFromLightLevel;
 
+        /// <summary>A light of the hand object (the lantern, PlayerHands): its ray-traced shadows have their own setting.</summary>
+        [System.NonSerialized] public bool handHeld;
+
         /// <summary>The HDRP shadow resolution tier of the map (before the shadow setting lowers it); −1: not read yet.</summary>
         [System.NonSerialized] public int baseShadowLevel = -1;
 

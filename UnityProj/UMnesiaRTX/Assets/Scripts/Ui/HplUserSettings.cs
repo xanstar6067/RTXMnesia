@@ -40,6 +40,10 @@ namespace RTXMnesia.Ui
         public int rtReflections = HplRayTracing.ReflectionsDefault;
         /// <summary>Ray-traced global illumination (RTX tab): 0 — off, 1..3 — low, medium, high.</summary>
         public int rtGi = HplRayTracing.GiDefault;
+        /// <summary>RTX tab: ray-traced shadows also from the lights HPL2 drew without shadows (candles).</summary>
+        public bool rtAllShadows = true;
+        /// <summary>RTX tab: the lantern in the hand casts ray-traced shadows.</summary>
+        public bool rtLanternShadows = true;
         /// <summary>0 — low, 1 — medium, 2 — high (cLuxMainMenu_Options texture quality).</summary>
         public int textureQuality = 2;
         /// <summary>Index of <see cref="HplGraphics.AnisotropyLevels"/> (8× — the import default).</summary>

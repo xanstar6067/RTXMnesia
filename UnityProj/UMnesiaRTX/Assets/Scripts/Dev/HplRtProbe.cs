@@ -235,6 +235,66 @@ namespace RTXMnesia.Dev
                 Check(!hd.frameSettings.IsEnabled(FrameSettingsField.SSR) && !hd.frameSettings.IsEnabled(FrameSettingsField.SSGI), "classic lighting: the camera renders no SSR and no SSGI");
             }
 
+            // Shadows from all lights: the lights HPL2 drew without shadows join the choice (ultra: 16 slots).
+            {
+                var s = saved.Copy();
+                s.lighting = 1;
+                s.rtShadows = HplRayTracing.ShadowLights.Length - 1;
+                s.rtAo = s.rtReflections = s.rtGi = 0;
+                s.rtLanternShadows = false;
+                s.rtAllShadows = false;
+                HplGraphics.Apply(s);
+                Capture(camera, rt, $"{mapName}_all0", out var mapOnly);
+                int shadowedMap = HplRayTracing.ShadowedLights;
+                s.rtAllShadows = true;
+                HplGraphics.Apply(s);
+                double ms = Capture(camera, rt, $"{mapName}_all1", out var all);
+                int shadowedAll = HplRayTracing.ShadowedLights, added = 0, addedOk = 0;
+                foreach (var light in AmnesiaLight.All)
+                    if (light != null && !light.castShadows && !light.handHeld && light.TryGetComponent<HDAdditionalLightData>(out var hdl) && hdl.useRayTracedShadows)
+                    {
+                        added++;
+                        if (light.GetComponent<Light>().shadows != LightShadows.None && hdl.shadowUpdateMode == ShadowUpdateMode.OnDemand) addedOk++;
+                    }
+                _report.AppendLine($"All lights: {shadowedMap} → {shadowedAll} lights in view, {HplRayTracing.TracedLights} traced, {added} of them without HPL2 shadows, {ms:0.00} ms/frame, mean difference {Difference(mapOnly, all):0.0000}");
+                Check(shadowedAll >= shadowedMap && added > 0 && added == addedOk, "shadows from all lights: lights without HPL2 shadows are traced (shadow map on demand)");
+                Check(Difference(mapOnly, all) > 0.0001f, $"shadows from all lights change the image (mean difference {Difference(mapOnly, all):0.0000})");
+                s.rtAllShadows = false;
+                HplGraphics.Apply(s);
+                Capture(camera, rt, $"{mapName}_all0_again", out _);
+                bool restored = true;
+                foreach (var light in AmnesiaLight.All)
+                    if (light != null && !light.castShadows && !light.handHeld && light.TryGetComponent<HDAdditionalLightData>(out var hdl) && light.TryGetComponent<Light>(out var l))
+                        restored &= !hdl.useRayTracedShadows && l.shadows == LightShadows.None;
+                Check(restored, "shadows from all lights off: those lights have no shadows again");
+            }
+
+            // The lantern's shadows: its own setting and slot.
+            {
+                HplGame.AddItem(map, "lantern", "Lantern", "Lantern", "", 1f, "", "", out _);
+                player.SetLampOil(100f);
+                player.Lantern.SetActive(true, true);
+                yield return new WaitForSecondsRealtime(2.5f);
+                var s = saved.Copy();
+                s.lighting = 1;
+                s.rtLanternShadows = false;
+                HplGraphics.Apply(s);
+                Capture(camera, rt, $"{mapName}_lantern0", out var without);
+                s.rtLanternShadows = true;
+                HplGraphics.Apply(s);
+                double ms = Capture(camera, rt, $"{mapName}_lantern1", out var with);
+                AmnesiaLight hand = null;
+                foreach (var light in AmnesiaLight.All) if (light != null && light.handHeld && light.isActiveAndEnabled) hand = light;
+                bool traced = hand != null && hand.GetComponent<HDAdditionalLightData>().useRayTracedShadows && hand.GetComponent<Light>().shadows != LightShadows.None;
+                _report.AppendLine($"Lantern: lit {player.lanternActive}, hand light {(hand != null ? hand.name : "none")}, traced {traced}, {HplRayTracing.TracedLights} map lights traced, {ms:0.00} ms/frame, mean difference {Difference(without, with):0.0000}");
+                Check(player.lanternActive && traced && HplRayTracing.TracedHandLights >= 1, $"lantern shadows: the lit lantern's lights are traced ({HplRayTracing.TracedHandLights})");
+                Check(Difference(without, with) > 0.0001f, $"lantern shadows change the image (mean difference {Difference(without, with):0.0000})");
+                player.Lantern.SetActive(false, true);
+                yield return new WaitForSecondsRealtime(1.5f);
+                Capture(camera, rt, $"{mapName}_lantern_off", out _);
+                Check(HplRayTracing.TracedHandLights == 0 && (hand == null || !hand.GetComponent<HDAdditionalLightData>().useRayTracedShadows), "lantern put away: its light is not traced");
+            }
+
             // Key C: the comparison switches the lighting with a wipe, from the user's settings without RT and back.
             var ui = map.GameUi;
             if (ui != null)

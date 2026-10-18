@@ -212,6 +212,7 @@ namespace RTXMnesia.Player
         void CreateHandLight(HandObject o, AmnesiaLight light, Transform bone)
         {
             if (!light.TryGetComponent(out Light main)) return;
+            light.handHeld = true;
             HplLighting.SetLightLayers(main, HplLighting.LightLayersMask & ~HplLighting.HandsLayerMask);
             var go = new GameObject(light.name + " (hands)");
             go.transform.SetParent(light.transform, false);
