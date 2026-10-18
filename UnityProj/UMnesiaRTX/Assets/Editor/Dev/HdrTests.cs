@@ -195,21 +195,27 @@ namespace RTXMnesia.EditorDev
                 for (int i = 0; i < 64; i++) { float v = values[i % 8]; colors[i] = new Color(v, v, v, 1); }
                 source.SetPixels(colors, 0); source.Apply();
                 material.SetTexture("_HplSource", source);
-                material.SetVector("_HplEffectHdr", new Vector4(1, 160, 1000, 2.2f));
+                material.SetVector("_HplEffectHdr", new Vector4(1, 160, 1000, 2.4f));
                 var display = Draw(material, 10, 8, 8);
                 for (int x = 0; x < 8; x++)
                 {
                     float v = values[x];
-                    float expected = 160f * (v <= 1f ? Mathf.Pow(v, 2.2f) : Mathf.Pow((v + 0.055f) / 1.055f, 2.4f));
+                    float expected = 160f * Mathf.Pow(v, 2.4f);
                     float actual = display.GetPixel(x, 4).r;
                     Check(Mathf.Abs(actual - expected) < 0.002f + expected * 0.003f, $"HDR display curve at {v}: {actual} nits, expected {expected}");
                 }
-                Check(display.GetPixel(2, 4).r < 160f * SrgbToLinear(0.061f) * 0.5f, "HDR display curve darkens the toe against the piecewise decode");
                 UnityEngine.Object.DestroyImmediate(display);
-                material.SetVector("_HplEffectHdr", new Vector4(1, 160, 1000, 0));
-                var piecewise = Draw(material, 10, 8, 8);
-                Check(Mathf.Abs(piecewise.GetPixel(2, 4).r - 160f * SrgbToLinear(0.061f)) < 0.002f, "display gamma 0 keeps the piecewise decode");
-                UnityEngine.Object.DestroyImmediate(piecewise);
+                // SDR: the final pass hands the swap chain SRGBToLinear(value), so its piecewise encode shows the value.
+                material.SetVector("_HplEffectHdr", new Vector4(0, 160, 1000, 2.2f));
+                material.SetFloat("_HplGamma", 1.25f);
+                var sdr = Draw(material, 8, 8, 8);
+                for (int x = 1; x < 6; x++)
+                {
+                    float expected = SrgbToLinear(Mathf.Pow(values[x], 1f / 1.25f));
+                    float actual = sdr.GetPixel(x, 4).r;
+                    Check(Mathf.Abs(actual - expected) < 0.0005f + expected * 0.003f, $"SDR gamma pass at {values[x]}: {actual}, expected {expected}");
+                }
+                UnityEngine.Object.DestroyImmediate(sdr);
             }
             finally
             {
@@ -229,8 +235,8 @@ namespace RTXMnesia.EditorDev
                 HDROutputUtils.GetColorSpaceForGamut(ColorGamut.sRGB, out int gamut);
                 material.SetInteger("_HDRColorspace", gamut);
                 var colors = new Color[64];
-                // Match Color.hlsl's extended sRGB transfer, not Mathf's >1 gamma-2.2 approximation.
-                float encoded = 1.055f * Mathf.Pow(4, 1f / 2.4f) - 0.055f;
+                // The effect space is a pure power 1/2.2 of the linear buffer (HPL2's screen values).
+                float encoded = Mathf.Pow(4, 1f / 2.2f);
                 for (int i = 0; i < colors.Length; i++) colors[i] = new Color(encoded, encoded, encoded, 1);
                 source.SetPixels(colors, 0); source.Apply();
                 material.SetTexture("_HplSource", source);

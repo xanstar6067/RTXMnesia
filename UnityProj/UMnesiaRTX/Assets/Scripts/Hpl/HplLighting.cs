@@ -61,39 +61,29 @@ namespace RTXMnesia.Hpl
         /// <summary>An HPL2 screen-space color (gamma, may exceed 1) as HDRP linear radiance.</summary>
         public static Color Radiance(Color hplColor)
         {
-            Color linear = hplColor.linear;
+            // A pure power, as the screen values of HPL2 are shown (a gamma 2.2 monitor): the piecewise sRGB curve
+            // (Color.linear) is 1.6× brighter at 0.1 and 8× at 0.02, which turned dark fog into a grey haze.
             float k = UnitRadiance;
-            return new Color(linear.r * k, linear.g * k, linear.b * k, hplColor.a);
+            return new Color(Mathf.Pow(Mathf.Max(hplColor.r, 0f), 2.2f) * k, Mathf.Pow(Mathf.Max(hplColor.g, 0f), 2.2f) * k,
+                Mathf.Pow(Mathf.Max(hplColor.b, 0f), 2.2f) * k, hplColor.a);
         }
 
         /// <summary>
-        /// HPL2 fog (deferred_fog_frag.glsl: alpha = ((d - start) / (end - start))^falloff × color.a, constant color)
-        /// as HDRP fog: 1 - exp(-d / meanFreePath), capped at maxFogDistance. Matched at the fog end.
+        /// The world fog of HPL2 (deferred_fog_frag.glsl: alpha = ((d - start) / (end - start))^falloff × color.a over the
+        /// view depth d, constant color) is drawn by <see cref="World.HplFogAreaPass"/> ("WorldFog" pass of
+        /// HplFogArea.shader): HDRP's fog has no start distance and, matched at the end, hazed the whole near range
+        /// (16_cistern_entrance: start 20, end 60, opaque at the end: half fog already at 10 m). The HDRP fog of the
+        /// level volumes is switched off by an overriding volume of that pass; this only keeps the old call.
         /// </summary>
         public static void ApplyFog(UnityEngine.Rendering.HighDefinition.Fog fog, bool active, Color color, float fogEnd)
         {
-            fog.enabled.Override(active);
-            SetMultiplyFog(active, color, fogEnd);
-            if (!active) return;
-            fog.colorMode.Override(UnityEngine.Rendering.HighDefinition.FogColorMode.ConstantColor);
-            fog.color.Override(Radiance(new Color(color.r, color.g, color.b, 1f)));
-            fog.meanFreePath.Override(MeanFreePath(color, fogEnd));
-            fog.maxFogDistance.Override(FogDistance(fogEnd));
-            fog.baseHeight.Override(10000f);
-            fog.maximumHeight.Override(10001f);
-            fog.enableVolumetricFog.Override(false);
+            fog.enabled.Override(false);
         }
 
-        /// <summary>
-        /// The same fog opacity for HplMultiply.shader (_HplFog): HPL2 fogs after the decals, so their factor fades
-        /// to 1 with the fog. A shader global, set in edit mode too.
-        /// </summary>
-        public static void SetMultiplyFog(bool active, Color color, float fogEnd)
-        {
-            Shader.SetGlobalVector(MultiplyFogId, active
-                ? new Vector4(1f, 1f / MeanFreePath(color, fogEnd), FogDistance(fogEnd), 0f)
-                : Vector4.zero);
-        }
+        /// <summary>The world fog state for <see cref="World.HplFogAreaPass"/>: (start, end - start, falloff exponent, alpha) and the color as radiance.</summary>
+        public static bool WorldFogActive { get; private set; }
+        public static Vector4 WorldFogParams { get; private set; }
+        public static Color WorldFogRadiance { get; private set; }
 
         /// <summary>
         /// HPL2's fade of translucent objects in fog (deferred_transparent_frag.glsl, UseFog) for HplParticle.shader
@@ -102,6 +92,13 @@ namespace RTXMnesia.Hpl
         /// </summary>
         public static void SetTranslucentFog(bool active, Color color, float start, float end, float falloffExp)
         {
+            // The world fog itself (HplFogAreaPass) and the factor of the multiply decals (HplMultiply.shader, _HplFog:
+            // HPL2 fogs after the decals, so their factor fades to 1 with the fog opacity): x = opacity at the end, 0 = off.
+            WorldFogActive = active;
+            WorldFogParams = new Vector4(start, end - start, falloffExp, color.a);
+            WorldFogRadiance = Radiance(new Color(color.r, color.g, color.b, 1f));
+            Shader.SetGlobalVector(MultiplyFogId, active ? new Vector4(Mathf.Max(color.a, 1e-4f), start, end - start, falloffExp) : Vector4.zero);
+            if (active) World.HplFogAreaPass.EnsureVolume();
             Shader.SetGlobalVector(TranslucentFogId, active
                 ? new Vector4(start, end - start, 1f - color.a, falloffExp)
                 : new Vector4(0f, 1f, 1f, 1f));
@@ -121,10 +118,6 @@ namespace RTXMnesia.Hpl
         static readonly int TranslucentFogId = Shader.PropertyToID("_HplTranslucentFog");
         static readonly int FogColorId = Shader.PropertyToID("_HplFogColor");
 
-        static float FogDistance(float fogEnd) => Mathf.Max(1f, fogEnd);
-
-        static float MeanFreePath(Color color, float fogEnd) =>
-            -FogDistance(fogEnd) / Mathf.Log(1f - Mathf.Clamp(color.a, 0.01f, 0.99f));
 
         static readonly int MultiplyFogId = Shader.PropertyToID("_HplFog");
     }

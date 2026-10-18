@@ -15,18 +15,24 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     float4 _HplCalibrationRect;
     float4 _HplCalibration; // pattern, peak, paper white, black
 
+    // HPL2 multiplies albedo, light, fog and effects as raw screen values and writes them straight to a gamma ~2.2
+    // monitor: value = linear^(1/2.2). The piecewise sRGB curve differs most in the darks (linear 0.0002: value 0.021
+    // vs 0.0026) where a dark room lives, so the effect space is a pure power. SDR: the swap chain still encodes
+    // piecewise, so the final pass hands it SRGBToLinear(value) and the screen shows exactly the value.
+    #define HPL_DISPLAY_GAMMA 2.2
+
     float3 ToEffectSpace(float3 color)
     {
         if (_HplEffectHdr.x > 0.5)
-            return LinearToSRGB(max(RotateOutputSpaceToRec709(color) / _HplEffectHdr.y, 0));
-        return LinearToSRGB(saturate(color));
+            return pow(max(RotateOutputSpaceToRec709(color) / _HplEffectHdr.y, 0), 1.0 / HPL_DISPLAY_GAMMA);
+        return pow(saturate(color), 1.0 / HPL_DISPLAY_GAMMA);
     }
 
     float3 FromEffectSpace(float3 color)
     {
         if (_HplEffectHdr.x > 0.5)
-            return min(max(RotateRec709ToOutputSpace(SRGBToLinear(max(color, 0))) * _HplEffectHdr.y, 0), _HplEffectHdr.z);
-        return SRGBToLinear(color);
+            return min(max(RotateRec709ToOutputSpace(pow(max(color, 0), HPL_DISPLAY_GAMMA)) * _HplEffectHdr.y, 0), _HplEffectHdr.z);
+        return pow(saturate(color), HPL_DISPLAY_GAMMA);
     }
 
     TEXTURE2D_X(_HplSource);
@@ -66,21 +72,35 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     {
         UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
         float3 color = LoadSource(int2(v.positionCS.xy));
-        return float4(SRGBToLinear(pow(saturate(color), 1.0 / max(_HplGamma, 0.01))), 1.0);
+        return float4(SRGBToLinear(pow(saturate(color), 1.0 / max(_HplGamma, 0.01))), 1.0); // the swap chain encodes piecewise: it shows the value
     }
 
-    // Last HDR step. The scene reaches here as linear nits; Copy turned it into sRGB values (what the SDR path shows).
-    // HPL2 wrote those values straight to a gamma ~2.2 monitor, but the HDR output decodes with the piecewise sRGB
-    // curve, which is several times brighter in the darks (code 0.05: 0.0039 vs 0.0014, 0.02: 0.0015 vs 0.00018) and
-    // turns black fog and unlit shadows into a grey haze. Below paper white the values are decoded as a pure power
-    // (_HplEffectHdr.w, 0 = off); above it (highlights) the piecewise decode stays, so the curves meet at 1.
+    // Optional last HDR step: the display exponent of the values (_HplEffectHdr.w). 2.2 is the identity (HPL2 on a
+    // gamma 2.2 monitor); more darkens the shadows, less lifts them.
     float4 HdrDisplayFrag(Varyings v) : SV_Target
     {
         UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
         float3 encoded = max(LoadSource(int2(v.positionCS.xy)), 0);
-        float3 power = pow(encoded, max(_HplEffectHdr.w, 0.001));
-        float3 linearValue = lerp(SRGBToLinear(encoded), power, step(encoded, 1.0) * step(0.001, _HplEffectHdr.w));
+        float3 linearValue = pow(encoded, max(_HplEffectHdr.w, 0.001));
         return float4(min(max(RotateRec709ToOutputSpace(linearValue) * _HplEffectHdr.y, 0), _HplEffectHdr.z), 1.0);
+    }
+
+    // The world fog of HPL2 for RTXMnesia.World.HplFogAreaPass (AfterOpaqueColor), kept here because this shader is
+    // always in the build: cRendererDeferred::RenderFullScreenFog / deferred_fog_frag.glsl, alpha =
+    // ((depth - start) / length)^falloff × color.a over the view depth; nothing drawn (sky) is not fogged.
+    float4 _HplWorldFog;         // start, end - start, falloff exponent, opacity at the end
+    float4 _HplWorldFogRadiance; // rgb: the color as radiance
+
+    float4 WorldFogFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float rawDepth = LoadCameraDepth(v.positionCS.xy);
+        if (rawDepth == UNITY_RAW_FAR_CLIP_VALUE) return float4(0, 0, 0, 1);
+        PositionInputs posInput = GetPositionInput(v.positionCS.xy, _ScreenSize.zw, rawDepth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V);
+        float depth = posInput.linearDepth - _HplWorldFog.x;
+        float amount = _HplWorldFog.y > 0.0 ? saturate(depth / _HplWorldFog.y) : (depth > 0.0 ? 1.0 : 0.0);
+        float alpha = amount > 0.0 ? pow(amount, _HplWorldFog.z) * _HplWorldFog.w : 0.0;
+        return float4(_HplWorldFogRadiance.rgb * GetCurrentExposureMultiplier() * alpha, 1.0 - alpha);
     }
 
     float4 CopyFrag(Varyings v) : SV_Target
@@ -329,6 +349,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment HdrDisplayFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "World fog"
+            ZWrite Off ZTest Always Blend One SrcAlpha Cull Off
+            HLSLPROGRAM
+            #pragma fragment WorldFogFrag
             ENDHLSL
         }
     }

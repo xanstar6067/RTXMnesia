@@ -1308,7 +1308,6 @@ namespace RTXMnesia.ScriptApi
                 FogEnd = _level.fogEnd;
                 FogFalloffExp = _level.fogFalloffExp;
             }
-            HplLighting.SetMultiplyFog(FogActive, FogColor, FogEnd);
             HplLighting.SetTranslucentFog(FogActive, FogColor, FogStart, FogEnd, FogFalloffExp);
             if (_level != null)
             {
@@ -1330,7 +1329,6 @@ namespace RTXMnesia.ScriptApi
             FogEnd = end ?? FogEnd;
             FogFalloffExp = falloffExp ?? FogFalloffExp;
             HplLighting.SetTranslucentFog(FogActive, FogColor, FogStart, FogEnd, FogFalloffExp);
-            if (_fog != null) HplLighting.ApplyFog(_fog, FogActive, FogColor, FogEnd);
         }
 
         // ------------------------------------------------------------------ sky box (cWorld)

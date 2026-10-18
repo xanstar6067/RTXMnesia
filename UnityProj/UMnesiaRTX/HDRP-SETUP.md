@@ -45,6 +45,6 @@ to check title UI creation, the playing menu music source and HDR options on an 
 The probe is included only with `RTXMNESIA_STARTUP_TEST`, writes `StartupResult.txt` and exits.
 This does not verify HDR luminance, physical display output or the unfinished shader readback test.
 
-## HDR display curve
+## Screen values and gamma 2.2
 
-In HDR output HDRP does not tonemap: it multiplies the linear buffer by paper white and only range-reduces (BT2390). HPL2's values were written to a gamma ~2.2 monitor, so the piecewise sRGB decode lifts dark tones several times (code 0.05: 0.0039 vs 0.0014) and black fog / unlit shadows turn grey. `HplScreenEffectsPass` ends with an "HDR display" pass that decodes values below paper white as a pure power (`HplHdr.DisplayGamma`, 2.2; 0 = off) and leaves highlights unchanged. SDR is untouched. Check: `RTXMnesia.EditorDev.HdrTests.RunRenderBatch` (GPU readback, no `-nographics`).
+HPL2 multiplies albedo, light, fog and effects as raw screen values written to a gamma ~2.2 monitor. The piecewise sRGB curve (SDR swap chain encode, `Color.linear`, HDR decode) is far brighter/darker than a power curve in the darks. `HplScreenEffects.shader` therefore works in a pure power 2.2 space; in SDR the last pass (always on) hands the swap chain `SRGBToLinear(value^(1/gamma))` so it shows exactly the value; in HDR the output is the linear buffer times paper white. `HplHdr.DisplayGamma` (2.2 = skip) is an optional shadow exponent. Check: `RTXMnesia.EditorDev.HdrTests.RunRenderBatch` (GPU readback, no `-nographics`, Unity must not have the project open).

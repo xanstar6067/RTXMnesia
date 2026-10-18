@@ -19,6 +19,7 @@ namespace RTXMnesia.World
     {
         public const string ShaderName = "Hidden/RTXMnesia/HplFogArea";
         const int MaxAreas = 16;
+        const int WorldFogPass = 11; // "World fog" in HplScreenEffects.shader
 
         static readonly List<AmnesiaFogArea> Areas = new();
         static CustomPassVolume _volume;
@@ -29,6 +30,8 @@ namespace RTXMnesia.World
         static readonly int ColorId = Shader.PropertyToID("_HplFogAreaColor");
         static readonly int ParamsId = Shader.PropertyToID("_HplFogAreaParams");
         static readonly int RadianceId = Shader.PropertyToID("_HplFogAreaRadiance");
+        static readonly int WorldFogId = Shader.PropertyToID("_HplWorldFog");
+        static readonly int WorldFogRadianceId = Shader.PropertyToID("_HplWorldFogRadiance");
 
         readonly Matrix4x4[] _worldToBox = new Matrix4x4[MaxAreas];
         readonly Vector4[] _colors = new Vector4[MaxAreas];
@@ -37,7 +40,13 @@ namespace RTXMnesia.World
         readonly List<(float viewZ, AmnesiaFogArea area)> _visible = new();
         readonly Plane[] _frustum = new Plane[6];
         readonly Vector3[] _nearPlane = new Vector3[4];
-        Material _material;
+        Material _material, _worldFogMaterial;
+
+        /// <summary>The world fog (HplLighting.SetTranslucentFog) is drawn by this pass too: it needs the volume without any area.</summary>
+        public static void EnsureVolume()
+        {
+            if (_volume == null) CreateVolume();
+        }
 
         public static void Register(AmnesiaFogArea area)
         {
@@ -57,9 +66,22 @@ namespace RTXMnesia.World
             // Higher priorities run first: after the box lights (priority 0), like the HPL2 fog after the lights.
             _volume.priority = -1f;
             _volume.AddPassOfType(typeof(HplFogAreaPass)).name = "HPL fog areas";
+            // HDRP's own fog has no start distance (HplLighting.ApplyFog): the world fog is drawn by this pass, so the
+            // fog of the level volumes is overridden off here (a higher priority wins; also in edit mode renders).
+            var volume = go.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 2000f;
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            profile.hideFlags = HideFlags.HideAndDontSave;
+            profile.Add<Fog>(true).enabled.Override(false);
+            volume.sharedProfile = profile;
         }
 
-        protected override void Cleanup() => CoreUtils.Destroy(_material);
+        protected override void Cleanup()
+        {
+            CoreUtils.Destroy(_material);
+            CoreUtils.Destroy(_worldFogMaterial);
+        }
 
         protected override void Execute(CustomPassContext ctx)
         {
@@ -105,13 +127,17 @@ namespace RTXMnesia.World
             }
             // The translucent shaders of this camera read the same globals: also when no area is in view.
             cmd.SetGlobalInt(CountId, count);
-            if (count == 0) return;
-            cmd.SetGlobalMatrixArray(WorldToBoxId, _worldToBox);
-            cmd.SetGlobalVectorArray(ColorId, _colors);
-            cmd.SetGlobalVectorArray(ParamsId, _params);
-            cmd.SetGlobalVectorArray(RadianceId, _radiance);
+            if (count > 0)
+            {
+                cmd.SetGlobalMatrixArray(WorldToBoxId, _worldToBox);
+                cmd.SetGlobalVectorArray(ColorId, _colors);
+                cmd.SetGlobalVectorArray(ParamsId, _params);
+                cmd.SetGlobalVectorArray(RadianceId, _radiance);
+            }
+            bool worldFog = Hpl.HplLighting.WorldFogActive;
+            if (count == 0 && !worldFog) return;
 
-            if (_material == null)
+            if (count > 0 && _material == null)
             {
                 if (shader == null) shader = Shader.Find(ShaderName);
                 if (shader == null)
@@ -122,7 +148,26 @@ namespace RTXMnesia.World
                 _material = CoreUtils.CreateEngineMaterial(shader);
             }
             CoreUtils.SetRenderTarget(cmd, ctx.cameraColorBuffer, ClearFlag.None);
-            CoreUtils.DrawFullScreen(cmd, _material, shaderPassId: 0);
+            if (count > 0 && _material != null) CoreUtils.DrawFullScreen(cmd, _material, shaderPassId: 0);
+            if (worldFog)
+            {
+                // RenderFullScreenFog: after the areas, over everything drawn (opaque and the lights), not over the sky.
+                var radiance = Hpl.HplLighting.WorldFogRadiance;
+                cmd.SetGlobalVector(WorldFogId, Hpl.HplLighting.WorldFogParams);
+                cmd.SetGlobalVector(WorldFogRadianceId, new Vector4(radiance.r, radiance.g, radiance.b, 1f));
+                if (_worldFogMaterial == null)
+                {
+                    // In HplScreenEffects.shader, which is always in the build (no scene refers to this pass's shaders).
+                    var fogShader = Shader.Find(Effects.HplScreenEffectsPass.ShaderName);
+                    if (fogShader == null)
+                    {
+                        Debug.LogError("[RTXMnesia] Shader " + Effects.HplScreenEffectsPass.ShaderName + " not found: the world fog is off");
+                        return;
+                    }
+                    _worldFogMaterial = CoreUtils.CreateEngineMaterial(fogShader);
+                }
+                CoreUtils.DrawFullScreen(cmd, _worldFogMaterial, shaderPassId: WorldFogPass);
+            }
         }
 
         /// <summary>

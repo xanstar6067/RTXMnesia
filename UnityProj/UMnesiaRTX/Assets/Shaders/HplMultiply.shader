@@ -8,7 +8,7 @@
 // factor is computed there: t_gamma × color (× 2 for MulX2), clamped like the 8-bit target for Mul, and
 // linearized; dst_lin × factor_lin then matches dst_gamma × factor_gamma.
 // Fog is applied after decals in HPL2, here before: the factor is faded to 1 by the fog opacity (_HplFog, set by
-// HplLighting.ApplyFog with the same formula as the HDRP fog), and likewise by the fog areas over the pixel
+// HplLighting.SetTranslucentFog with the HPL2 world fog formula), and likewise by the fog areas over the pixel
 // (HplFogAreas.hlsl).
 Shader "RTXMnesia/HplMultiply"
 {
@@ -58,7 +58,7 @@ Shader "RTXMnesia/HplMultiply"
                 float _Cull;
             CBUFFER_END
 
-            float4 _HplFog; // x: active, y: 1 / mean free path, z: max fog distance
+            float4 _HplFog; // x: fog opacity at the end (0 = no fog), y: start, z: end - start, w: falloff exponent (HPL2 world fog)
 
             struct Attributes
             {
@@ -96,12 +96,13 @@ Shader "RTXMnesia/HplMultiply"
 
                 float3 gamma = LinearToSRGB(t.rgb) * _BaseColor.rgb * _HplScale;
                 if (_HplScale <= 1.0) gamma = saturate(gamma);
-                float3 factor = SRGBToLinear(max(gamma, 0.0));
+                float3 factor = pow(max(gamma, 0.0), 2.2); // HPL2 multiplies the screen value; a gamma 2.2 monitor shows value^2.2
 
                 if (_HplFog.x > 0.0)
                 {
-                    float d = min(length(input.positionRWS), _HplFog.z);
-                    factor = lerp(factor, 1.0, 1.0 - exp(-d * _HplFog.y));
+                    float depth = max(-TransformWorldToView(input.positionRWS).z, 0.0);
+                    float fogAmount = _HplFog.z > 0.0 ? saturate((depth - _HplFog.y) / _HplFog.z) : (depth > _HplFog.y ? 1.0 : 0.0);
+                    factor = lerp(factor, 1.0, pow(fogAmount, _HplFog.w) * _HplFog.x);
                 }
                 // The fog areas are drawn after the decals too (RenderFog): the same fade by their opacity here.
                 if (_HplFogAreaCount > 0)

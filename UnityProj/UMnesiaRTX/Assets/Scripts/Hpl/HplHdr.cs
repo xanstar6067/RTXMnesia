@@ -47,9 +47,8 @@ namespace RTXMnesia.Hpl
             }
         }
         /// <summary>
-        /// Exponent that turns HPL2's screen values into HDR luminance below paper white (<c>HplScreenEffects.shader</c>,
-        /// "HDR display"). HPL2 wrote the values to a gamma 2.2 monitor; HDR output decodes with the piecewise sRGB
-        /// curve, which lifts the darks several times and makes black fog and shadows grey. 0 = piecewise decode.
+        /// Display exponent of HPL2's screen values in HDR (<c>HplScreenEffects.shader</c>, "HDR display"). 2.2 is
+        /// HPL2 on a gamma 2.2 monitor, the identity: the pass is skipped. Higher values darken the shadows, lower lift them.
         /// </summary>
         public static float DisplayGamma { get; set; } = 2.2f;
         public static float PaperWhite => s_settings.hdrPaperWhite;

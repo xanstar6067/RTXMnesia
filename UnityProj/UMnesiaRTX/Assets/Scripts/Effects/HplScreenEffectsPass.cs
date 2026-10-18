@@ -88,9 +88,10 @@ namespace RTXMnesia.Effects
                 _material.SetInteger("_HDRColorspace", gamut);
             RenderEffects(ctx);
 
-            // The gamma of the settings (SDL_SetGamma in HPL2: the display ramp, output = input^(1/gamma)), last.
+            // The gamma of the settings (SDL_SetGamma in HPL2: the display ramp, output = input^(1/gamma)), last. Always in SDR:
+            // this pass also turns the screen values back into what the swap chain's piecewise sRGB encode shows.
             float gamma = Ui.HplUserSettings.Gamma;
-            if (!hdr && Mathf.Abs(gamma - 1f) >= 0.001f)
+            if (!hdr)
             {
                 var props = ctx.propertyBlock;
                 CoreUtils.SetRenderTarget(ctx.cmd, _source, ClearFlag.None);
@@ -100,9 +101,9 @@ namespace RTXMnesia.Effects
                 CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
                 CoreUtils.DrawFullScreen(ctx.cmd, _material, props, GammaPass);
             }
-            if (hdr && Hpl.HplHdr.DisplayGamma > 0f)
+            if (hdr && Hpl.HplHdr.DisplayGamma > 0f && Mathf.Abs(Hpl.HplHdr.DisplayGamma - 2.2f) > 0.001f)
             {
-                // Last: the HPL2 display curve (pure power below paper white) instead of the piecewise sRGB decode.
+                // Optional display exponent; 2.2 (HPL2 on a gamma 2.2 monitor) is the identity and skips this pass.
                 var props = ctx.propertyBlock;
                 CoreUtils.SetRenderTarget(ctx.cmd, _source, ClearFlag.None);
                 CoreUtils.DrawFullScreen(ctx.cmd, _material, props, CopyPass);
