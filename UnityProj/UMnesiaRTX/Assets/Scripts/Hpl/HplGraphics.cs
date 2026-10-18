@@ -69,6 +69,7 @@ namespace RTXMnesia.Hpl
             Bloom = s.bloom;
             HplDlss.Apply(s);
             if (!Application.isPlaying) return;
+            HplRayTracing.Apply(s);
 
             Hook();
             SaveEditorQuality();
@@ -161,7 +162,7 @@ namespace RTXMnesia.Hpl
 #endif
         }
 
-        /// <summary>Anti-aliasing of every game camera (player, menu, fly camera); the water mirrors keep theirs.</summary>
+        /// <summary>Anti-aliasing and ray tracing of every game camera (player, menu, fly camera); the water mirrors keep their anti-aliasing.</summary>
         static void OnBeginContextRendering(ScriptableRenderContext context, List<Camera> cameras)
         {
             var mode = Antialiasing switch
@@ -173,8 +174,11 @@ namespace RTXMnesia.Hpl
             };
             foreach (var camera in cameras)
             {
-                if (camera == null || camera.cameraType != CameraType.Game || HplWaterReflection.IsReflectionCamera(camera)) continue;
-                if (!camera.TryGetComponent<HDAdditionalCameraData>(out var data)) continue;
+                if (camera == null || camera.cameraType != CameraType.Game || !camera.TryGetComponent<HDAdditionalCameraData>(out var data)) continue;
+                bool mirror = HplWaterReflection.IsReflectionCamera(camera);
+                // Ray tracing (lighting "Ray tracing", RTX tab); the water mirrors never trace.
+                HplRayTracing.ConfigureCamera(camera, data, mirror);
+                if (mirror) continue;
                 if (data.antialiasing != mode) data.antialiasing = mode;
                 if (mode == HDAdditionalCameraData.AntialiasingMode.SubpixelMorphologicalAntiAliasing)
                     data.SMAAQuality = HDAdditionalCameraData.SMAAQualityLevel.High;

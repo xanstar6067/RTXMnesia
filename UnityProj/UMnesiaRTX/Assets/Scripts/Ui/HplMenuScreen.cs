@@ -710,7 +710,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.RadialBlur: DraftSettings.radialBlur = !DraftSettings.radialBlur; break;
                 case MenuControl.Lighting: case MenuControl.Textures: case MenuControl.Resolution: case MenuControl.ScreenMode:
                 case MenuControl.FpsLimit: case MenuControl.TextureQuality: case MenuControl.Anisotropy:
-                case MenuControl.Antialiasing: case MenuControl.Shadows: case MenuControl.DlssMode: case MenuControl.DlssPreset:
+                case MenuControl.Antialiasing: case MenuControl.Shadows: case MenuControl.DlssMode: case MenuControl.DlssPreset: case MenuControl.RtShadows:
                     OpenComboList(control);
                     break;
                 case MenuControl.ComboItem: PickComboItem(_menu.DataAt(index)); break;

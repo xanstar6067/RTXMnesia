@@ -18,7 +18,7 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
@@ -626,13 +626,22 @@ namespace RTXMnesia.Ui
             DrawLines(info, leftX, y, size, grey);
 
             y = top;
+            if (SystemInfo.supportsRayTracing && settings.lighting == 1)
+            {
+                Combo(rightX, y, MenuControl.RtShadows, settings);
+                y += comboStep + 4;
+                string traced = !HplRayTracing.Active || HplRayTracing.Shadows != settings.rtShadows
+                    ? "Применится после «OK»."
+                    : settings.rtShadows == 0 ? "Тени — картами теней."
+                    : "С трассировкой: " + HplRayTracing.TracedLights + " из " + HplRayTracing.ShadowedLights + "\nисточников с тенями в кадре.";
+                DrawLines(traced, rightX, y, size, grey);
+                return;
+            }
             Draw(_guiText, "Трассировка лучей", new Vector2(rightX, y), size, Color.white);
             y += 24;
             string rt = !SystemInfo.supportsRayTracing
                 ? "Недоступна: нужны DirectX 12\nи видеокарта с трассировкой лучей."
-                : settings.lighting != 1
-                    ? "Включите освещение «Трассировка\nлучей» на вкладке «Графика»."
-                    : "Настройки трассировки лучей\nпоявятся здесь позже.";
+                : "Включите освещение «Трассировка\nлучей» на вкладке «Графика».";
             DrawLines(rt, rightX, y, size, grey);
         }
 

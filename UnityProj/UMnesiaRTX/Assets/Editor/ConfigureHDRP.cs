@@ -66,6 +66,11 @@ public static class ConfigureHDRP
             upscalers.arraySize = 1;
             upscalers.GetArrayElementAtIndex(0).stringValue = "DLSS";
         }
+        // Hardware ray tracing (lighting "Ray tracing", HplRayTracing). Ray-traced shadows of punctual lights are screen
+        // space shadows: one slot per light traced in a frame (HplRayTracing.ShadowLights up to 16).
+        SetBool(serialized, "m_RenderPipelineSettings.supportRayTracing", true);
+        SetBool(serialized, "m_RenderPipelineSettings.hdShadowInitParams.supportScreenSpaceShadows", true);
+        SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.maxScreenSpaceShadowSlots", 16);
         serialized.ApplyModifiedPropertiesWithoutUndo();
 
         GraphicsSettings.defaultRenderPipeline = pipeline;
@@ -143,6 +148,13 @@ public static class ConfigureHDRP
     {
         var p = o.FindProperty(path);
         if (p != null) p.boolValue = value;
+        else Debug.LogWarning("RTXMnesia: HDRP setting not found: " + path);
+    }
+
+    static void SetInt(SerializedObject o, string path, int value)
+    {
+        var p = o.FindProperty(path);
+        if (p != null) p.intValue = value;
         else Debug.LogWarning("RTXMnesia: HDRP setting not found: " + path);
     }
 

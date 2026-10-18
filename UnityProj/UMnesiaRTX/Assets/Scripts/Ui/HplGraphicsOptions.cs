@@ -23,7 +23,7 @@ namespace RTXMnesia.Ui
         /// <summary>Translation: category, entry, fallback text.</summary>
         public delegate string Translate(string category, string entry, string fallback);
 
-        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.DlssPreset;
+        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.RtShadows;
 
         /// <summary>DLSS is chosen and runs on this GPU: it replaces the anti-aliasing of the graphics tab.</summary>
         public static bool DlssOn(HplUserSettings s) => s.dlssMode != (int)HplDlssMode.Off && HplDlss.Available;
@@ -112,6 +112,12 @@ namespace RTXMnesia.Ui
                     current = presets.IndexOf((uint)s.dlssPreset);
                     break;
                 }
+                case MenuControl.RtShadows:
+                    items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
+                    for (int i = 1; i < HplRayTracing.ShadowLights.Length; i++)
+                        items.Add(new HplComboItem(RtLevel(i, t) + " (до " + HplRayTracing.ShadowLights[i] + " источников)"));
+                    current = s.rtShadows;
+                    break;
             }
             current = Mathf.Clamp(current, 0, Mathf.Max(0, items.Count - 1));
             return items;
@@ -131,7 +137,17 @@ namespace RTXMnesia.Ui
             MenuControl.Shadows => t("OptionsMenu", "Shadows", "Тени"),
             MenuControl.DlssMode => "NVIDIA DLSS",
             MenuControl.DlssPreset => "Модель DLSS",
+            MenuControl.RtShadows => "Тени (трассировка)",
             _ => "",
+        };
+
+        /// <summary>A quality step of a ray tracing effect: low, medium, high, ultra.</summary>
+        static string RtLevel(int level, Translate t) => level switch
+        {
+            1 => t("OptionsMenu", "Low", "Низкое"),
+            2 => t("OptionsMenu", "Medium", "Среднее"),
+            3 => t("OptionsMenu", "High", "Высокое"),
+            _ => "Ультра",
         };
 
         /// <summary>A DLSS model: its letter and generation (F — the last CNN model, J/K — transformer, L/M — transformer 2).</summary>
@@ -176,6 +192,7 @@ namespace RTXMnesia.Ui
                     if (s.dlssPreset != 0 && (HplDlss.AvailablePresets((HplDlssMode)index) & (uint)s.dlssPreset) == 0) s.dlssPreset = 0;
                     break;
                 case MenuControl.DlssPreset: s.dlssPreset = (int)HplDlss.Presets()[index]; break;
+                case MenuControl.RtShadows: s.rtShadows = index; break;
             }
         }
 

@@ -244,6 +244,40 @@ namespace RTXMnesia.Dev
             }
             else Debug.Log("DLSS is not available on this GPU: the RTX tab shows why");
 
+            // Ray tracing lighting: its settings appear on the RTX tab.
+            if (SystemInfo.supportsRayTracing)
+            {
+                ui.OpenOptions(1);
+                yield return null;
+                ui.Choose(MenuControl.Lighting);
+                ui.ChooseComboItem(1);
+                // The checks above turned the shadows off.
+                ui.Choose(MenuControl.Shadows);
+                ui.ChooseComboItem(Hpl.HplGraphics.ShadowsHigh);
+                ui.Choose(MenuControl.RtxTab);
+                yield return null;
+                bool rtShadows = false;
+                for (int i = 0; i < ui.Menu.ButtonCount; i++) rtShadows |= ui.Menu.ControlAt(i) == MenuControl.RtShadows;
+                Check(rtShadows, "with ray tracing lighting the RTX tab has the ray-traced shadows list");
+                ui.Choose(MenuControl.RtShadows);
+                yield return null;
+                int rows = 0;
+                for (int i = 0; i < ui.Menu.ButtonCount; i++) if (ui.Menu.ControlAt(i) == MenuControl.ComboItem) rows++;
+                Check(rows == Hpl.HplRayTracing.ShadowLights.Length, $"the open RT shadows list is drawn ({rows} of {Hpl.HplRayTracing.ShadowLights.Length} choices)");
+                Capture(target, Path.Combine(folder, "Options_RTX_RtShadowsList.png"), camera, menuCanvas);
+                ui.ChooseComboItem(1);
+                Check(ui.DraftSettings.rtShadows == 1, "RT shadows Low picked");
+                ui.Choose(MenuControl.Apply);
+                for (int i = 0; i < 5; i++) yield return null;
+                int traced = 0;
+                foreach (var light in World.AmnesiaLight.All)
+                    if (light != null && light.TryGetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(out var hdl) && hdl.useRayTracedShadows) traced++;
+                Check(Hpl.HplRayTracing.Active && traced > 0 && traced <= Hpl.HplRayTracing.ShadowLights[1], $"ray tracing applied: {traced} lights with ray-traced shadows (at most {Hpl.HplRayTracing.ShadowLights[1]})");
+                ui.OpenOptions(Ui.HplPauseMenu.OptionsTabs - 1);
+                yield return null;
+                Capture(target, Path.Combine(folder, "Options_RTX_RtShadows.png"), camera, menuCanvas);
+            }
+
             // The user's settings back (applied and saved as they were).
             original.Apply(map);
             ui.Settings = original;
@@ -253,6 +287,13 @@ namespace RTXMnesia.Dev
             foreach (var light in World.AmnesiaLight.All)
                 if (light.castShadows && light.TryGetComponent<Light>(out var l)) restored &= l.shadows != LightShadows.None == (original.shadows > 0);
             Check(restored && Hpl.HplGraphics.ImageTrail == original.imageTrail, "the user's settings restored");
+            if (original.lighting == 0)
+            {
+                bool rtOff = !Hpl.HplRayTracing.Active;
+                foreach (var light in World.AmnesiaLight.All)
+                    if (light != null && light.TryGetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(out var hdl)) rtOff &= !hdl.useRayTracedShadows;
+                Check(rtOff, "classic lighting back: no ray-traced shadows");
+            }
             ui.OpenOptions(0);
             result(failures);
         }

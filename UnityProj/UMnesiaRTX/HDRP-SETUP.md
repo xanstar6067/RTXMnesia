@@ -11,7 +11,9 @@ Open this folder with Unity **6000.6.2f1**.
 - `SampleScene` has an HDRP camera with TAA, a directional light and a global volume
   with gradient sky, fixed exposure and ACES tonemapping.
 
-This is a desktop HDRP baseline. Hardware ray tracing is not enabled by this setup.
+This is a desktop HDRP baseline. Hardware ray tracing (DXR) is supported by the asset: `supportRayTracing`, screen space
+shadows with 16 slots (ray-traced shadows of punctual lights use them). Cameras only trace rays with the "Ray tracing"
+lighting of the graphics options (`HplRayTracing`); check: `RTXMnesia.EditorDev.RtPreview.RunBatch`, results in `Logs/RtCheck`.
 
 NVIDIA DLSS (built-in module `com.unity.modules.nvidia`): the setup enables hardware dynamic resolution with DLSS as
 the only upscaler (optimal settings, sharpness 0, mip bias). A camera only uses it while it allows dynamic resolution;
