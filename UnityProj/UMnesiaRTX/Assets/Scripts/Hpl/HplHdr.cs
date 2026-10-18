@@ -9,6 +9,7 @@ namespace RTXMnesia.Hpl
     public sealed class HplHdr : MonoBehaviour
     {
         public const float MinPeak = 400, MaxPeak = 5000, MinWhite = 80, MaxWhite = 400, MaxBlack = 0.1f;
+        public const float MinShadows = 2f, MaxShadows = 3.2f, DefaultShadows = 2.4f;
         static HplHdr s_instance;
         static HplUserSettings s_settings = new();
         Tonemapping _tonemapping;
@@ -50,7 +51,7 @@ namespace RTXMnesia.Hpl
         /// Display exponent of HPL2's screen values in HDR (<c>HplScreenEffects.shader</c>, "HDR display"). 2.2 is
         /// HPL2 on a gamma 2.2 monitor, the identity: the pass is skipped. Higher values darken the shadows, lower lift them.
         /// </summary>
-        public static float DisplayGamma { get; set; } = 2.2f;
+        public static float DisplayGamma => s_settings.hdrShadows;
         public static float PaperWhite => s_settings.hdrPaperWhite;
         public static float Peak => s_settings.hdrPeak;
         public static float Black => s_settings.hdrBlack;
@@ -68,7 +69,8 @@ namespace RTXMnesia.Hpl
             if (settings == null) return;
             settings.Validate();
             if (s_settings.hdrMode != settings.hdrMode || s_settings.hdrPaperWhite != settings.hdrPaperWhite ||
-                s_settings.hdrPeak != settings.hdrPeak || s_settings.hdrBlack != settings.hdrBlack) Revision++;
+                s_settings.hdrPeak != settings.hdrPeak || s_settings.hdrBlack != settings.hdrBlack ||
+                s_settings.hdrShadows != settings.hdrShadows) Revision++;
             s_settings = settings.Copy();
             if (!Application.isPlaying) return;
             if (s_instance == null)

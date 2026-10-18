@@ -446,6 +446,11 @@ namespace RTXMnesia.Ui
                     DraftSettings.hdrBlack = Mathf.Round(value * HplHdr.MaxBlack * 1000) / 1000;
                     HplHdr.CalibrationPattern = 2;
                 }
+                else if (_dragSlider == MenuControl.HdrShadowsSlider)
+                {
+                    DraftSettings.hdrShadows = Mathf.Round((HplHdr.MinShadows + value * (HplHdr.MaxShadows - HplHdr.MinShadows)) * 20f) / 20f;
+                    HplHdr.CalibrationPattern = 2;
+                }
                 else DraftSettings.mouseSensitivity = Mathf.Round((0.2f + value * 4.8f) * 10) / 10f;
             }
             if (!mouse.leftButton.isPressed) _dragSlider = null;
@@ -727,10 +732,12 @@ namespace RTXMnesia.Ui
                 case MenuControl.HdrWhiteMore: DraftSettings.hdrPaperWhite += 5 * more; HplHdr.CalibrationPattern = 1; break;
                 case MenuControl.HdrBlackLess: DraftSettings.hdrBlack += 0.001f * less; HplHdr.CalibrationPattern = 2; break;
                 case MenuControl.HdrBlackMore: DraftSettings.hdrBlack += 0.001f * more; HplHdr.CalibrationPattern = 2; break;
+                case MenuControl.HdrShadowsLess: DraftSettings.hdrShadows += 0.05f * less; HplHdr.CalibrationPattern = 2; break;
+                case MenuControl.HdrShadowsMore: DraftSettings.hdrShadows += 0.05f * more; HplHdr.CalibrationPattern = 2; break;
                 case MenuControl.HdrPreview: HplHdr.CalibrationPattern = (HplHdr.CalibrationPattern + 3 + more) % 3; break;
                 case MenuControl.HdrDetect: HplHdr.UseDisplayValues(DraftSettings); break;
                 case MenuControl.HdrDefaults:
-                    DraftSettings.hdrMode = 1; DraftSettings.hdrPeak = 1000; DraftSettings.hdrPaperWhite = 160; DraftSettings.hdrBlack = 0;
+                    DraftSettings.hdrMode = 1; DraftSettings.hdrPeak = 1000; DraftSettings.hdrPaperWhite = 160; DraftSettings.hdrBlack = 0; DraftSettings.hdrShadows = HplHdr.DefaultShadows;
                     break;
                 case MenuControl.ConfirmQuit:
                     // cLuxMainMenu::OnQuit with a map loaded: auto save first (a dead player is not saved).

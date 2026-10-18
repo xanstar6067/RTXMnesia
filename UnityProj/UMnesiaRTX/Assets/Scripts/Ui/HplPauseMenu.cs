@@ -26,7 +26,7 @@ namespace RTXMnesia.Ui
         // Start game window (cLuxMainMenu_StartGame), the hard mode save, the Justine campaign.
         StartNormal, StartHard, StartGameStart, HardSave, ConfirmHardSave, Justine, MainCampaign,
         HdrMode, HdrPeakLess, HdrPeakMore, HdrPeakSlider, HdrWhiteLess, HdrWhiteMore, HdrWhiteSlider,
-        HdrBlackLess, HdrBlackMore, HdrBlackSlider, HdrPreview, HdrDetect, HdrDefaults,
+        HdrBlackLess, HdrBlackMore, HdrBlackSlider, HdrShadowsLess, HdrShadowsMore, HdrShadowsSlider, HdrPreview, HdrDetect, HdrDefaults,
     }
 
     /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>
@@ -607,14 +607,16 @@ namespace RTXMnesia.Ui
             string status = HplHdr.Pending ? HdrText("Переключение…", "Switching…") : HplHdr.Active
                 ? HdrText("HDR активен", "HDR active") : HplHdr.Available ? HdrText("Вывод SDR", "SDR output") : HdrText("HDR недоступен", "HDR unavailable");
             Draw(_guiText, status, new Vector2(420, 165), Vector2.one * 16, Color.white);
-            SmallAdjust(130, 208, HdrText("Пиковая яркость", "Peak luminance"), settings.hdrPeak.ToString("0") + " nit",
+            SmallAdjust(130, 200, HdrText("Пиковая яркость", "Peak luminance"), settings.hdrPeak.ToString("0") + " nit",
                 (settings.hdrPeak - HplHdr.MinPeak) / (HplHdr.MaxPeak - HplHdr.MinPeak), MenuControl.HdrPeakLess, MenuControl.HdrPeakMore, MenuControl.HdrPeakSlider);
-            SmallAdjust(130, 274, HdrText("Яркость белого / UI", "Paper white / UI"), settings.hdrPaperWhite.ToString("0") + " nit",
+            SmallAdjust(130, 256, HdrText("Яркость белого / UI", "Paper white / UI"), settings.hdrPaperWhite.ToString("0") + " nit",
                 (settings.hdrPaperWhite - HplHdr.MinWhite) / (HplHdr.MaxWhite - HplHdr.MinWhite), MenuControl.HdrWhiteLess, MenuControl.HdrWhiteMore, MenuControl.HdrWhiteSlider);
-            SmallAdjust(130, 340, HdrText("Уровень чёрного", "Black level"), settings.hdrBlack.ToString("0.000", CultureInfo.InvariantCulture) + " nit",
+            SmallAdjust(130, 312, HdrText("Уровень чёрного", "Black level"), settings.hdrBlack.ToString("0.000", CultureInfo.InvariantCulture) + " nit",
                 settings.hdrBlack / HplHdr.MaxBlack, MenuControl.HdrBlackLess, MenuControl.HdrBlackMore, MenuControl.HdrBlackSlider);
-            Button(new Rect(125, 410, 240, 23), HdrText("Данные дисплея", "Use display values"), MenuControl.HdrDetect, null, Vector2.one * 16);
-            Button(new Rect(125, 440, 240, 23), HdrText("По умолчанию", "Defaults"), MenuControl.HdrDefaults, null, Vector2.one * 16);
+            SmallAdjust(130, 368, HdrText("Глубина теней", "Shadow depth"), settings.hdrShadows.ToString("0.00", CultureInfo.InvariantCulture),
+                (settings.hdrShadows - HplHdr.MinShadows) / (HplHdr.MaxShadows - HplHdr.MinShadows), MenuControl.HdrShadowsLess, MenuControl.HdrShadowsMore, MenuControl.HdrShadowsSlider);
+            Button(new Rect(125, 424, 240, 23), HdrText("Данные дисплея", "Use display values"), MenuControl.HdrDetect, null, Vector2.one * 16);
+            Button(new Rect(125, 452, 240, 23), HdrText("По умолчанию", "Defaults"), MenuControl.HdrDefaults, null, Vector2.one * 16);
             string[] names = { HdrText("Пик", "Peak"), HdrText("Белый", "White"), HdrText("Чёрный", "Black") };
             Button(new Rect(410, 194, 270, 23), "< " + names[HplHdr.CalibrationPattern] + " >", MenuControl.HdrPreview, null, Vector2.one * 16);
             string[] help = {

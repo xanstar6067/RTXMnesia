@@ -43,6 +43,8 @@ namespace RTXMnesia.Ui
         /// <summary>Native HDR output: 0 off, 1 automatic, 2 on when supported. Global, outside profiles.</summary>
         public int hdrMode = 1;
         public float hdrPeak = 1000f, hdrPaperWhite = 160f, hdrBlack = 0f;
+        /// <summary>HDR shadow depth: the display exponent of HPL2's screen values (2.2 = a gamma 2.2 monitor, 2.4 = BT.1886 for dark rooms, higher: deeper shadows on panels with raised blacks).</summary>
+        public float hdrShadows = HplHdr.DefaultShadows;
         /// <summary>Game option "Commentary" (user config Game ShowCommentary, off by default): developer commentary icons.</summary>
         public bool commentary;
 
@@ -137,6 +139,7 @@ namespace RTXMnesia.Ui
             hdrPeak = HplHdr.Finite(hdrPeak, 1000, HplHdr.MinPeak, HplHdr.MaxPeak);
             hdrPaperWhite = HplHdr.Finite(hdrPaperWhite, 160, HplHdr.MinWhite, HplHdr.MaxWhite);
             hdrBlack = HplHdr.Finite(hdrBlack, 0, 0, HplHdr.MaxBlack);
+            hdrShadows = HplHdr.Finite(hdrShadows, HplHdr.DefaultShadows, HplHdr.MinShadows, HplHdr.MaxShadows);
             mouseSensitivity = float.IsNaN(mouseSensitivity) || float.IsInfinity(mouseSensitivity)
                 ? 1f : Mathf.Clamp(mouseSensitivity, 0.2f, 5f);
             masterVolume = float.IsNaN(masterVolume) || float.IsInfinity(masterVolume)
