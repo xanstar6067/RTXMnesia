@@ -26,8 +26,12 @@ namespace RTXMnesia.Ui
         public int resolutionWidth, resolutionHeight;
         /// <summary>Frames per second limit (one of <see cref="HplGraphics.FpsLimits"/>); 0 — none. VSync overrides it.</summary>
         public int fpsLimit;
-        /// <summary>Lighting and texture sets: 0 — classic (the only one so far).</summary>
+        /// <summary>Lighting set: 0 — classic, 1 — ray tracing (needs DXR; its settings are on the RTX tab). Texture set: 0 — classic.</summary>
         public int lighting, textures;
+        /// <summary><see cref="HplDlssMode"/> (RTX tab); DLSS replaces <see cref="antialiasing"/> while it is on.</summary>
+        public int dlssMode;
+        /// <summary>The DLSS model: a NVIDIA.DLSSPreset bit, 0 — NVIDIA's default for each mode.</summary>
+        public int dlssPreset;
         /// <summary>0 — low, 1 — medium, 2 — high (cLuxMainMenu_Options texture quality).</summary>
         public int textureQuality = 2;
         /// <summary>Index of <see cref="HplGraphics.AnisotropyLevels"/> (8× — the import default).</summary>
@@ -149,8 +153,10 @@ namespace RTXMnesia.Ui
             fullscreen = screenMode != 2;
             if (resolutionWidth <= 0 || resolutionHeight <= 0) resolutionWidth = resolutionHeight = 0;
             if (Array.IndexOf(HplGraphics.FpsLimits, fpsLimit) < 0) fpsLimit = 0;
-            lighting = 0;
+            lighting = lighting == 1 && SystemInfo.supportsRayTracing ? 1 : 0;
             textures = 0;
+            dlssMode = Mathf.Clamp(dlssMode, 0, (int)HplDlssMode.UltraPerformance);
+            dlssPreset = HplDlss.ValidPreset(dlssPreset);
             textureQuality = Mathf.Clamp(textureQuality, 0, 2);
             anisotropy = Mathf.Clamp(anisotropy, 0, HplGraphics.AnisotropyLevels.Length - 1);
             antialiasing = Mathf.Clamp(antialiasing, 0, (int)HplAntialiasing.Taa);

@@ -10,7 +10,7 @@ namespace RTXMnesia.Ui
     public enum MenuControl
     {
         Resume, Options, Quit, ConfirmQuit, Cancel, Apply,
-        GameTab, GraphicsTab, SoundTab, InputTab, HdrTab,
+        GameTab, GraphicsTab, SoundTab, InputTab, HdrTab, RtxTab,
         Subtitles, Hints, Crosshair, Fullscreen, VSync, VolumeLess, VolumeMore,
         SensitivityLess, SensitivityMore, InvertMouse, SmoothMouse,
         VolumeSlider, SensitivitySlider, NewGame, ReturnTitle, ConfirmNewGame, ConfirmReturnTitle,
@@ -18,7 +18,7 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
@@ -262,7 +262,7 @@ namespace RTXMnesia.Ui
             else if (options)
             {
                 Options(tab, settings);
-                if (combo != null && tab == 1) ComboList(combo, settings);
+                if (combo != null && (tab == 1 || tab == 5)) ComboList(combo, settings);
             }
             else if (saves != null) LoadGame(saves, selectedSave);
             else Main(extras);
@@ -553,11 +553,11 @@ namespace RTXMnesia.Ui
         {
             Window(new Rect(90, 70, 620, 460), tab == 4);
             Draw(_guiText, T("MainMenu", "Options", "Настройки"), new Vector2(125, 50), Vector2.one * 25, Color.white);
-            string[] tabs = { "OptionsGame", "OptionsGraphics", "OptionsSound", "OptionsInput", "OptionsHDR" };
-            string[] fallbacks = { "Игра", "Графика", "Звук", "Управление", "HDR" };
-            for (int i = 0; i < 5; i++)
+            string[] tabs = { "OptionsGame", "OptionsGraphics", "OptionsSound", "OptionsInput", "OptionsHDR", "OptionsRTX" };
+            string[] fallbacks = { "Игра", "Графика", "Звук", "Управление", "HDR", "RTX" };
+            for (int i = 0; i < OptionsTabs; i++)
             {
-                Rect rect = new(110 + i * 116, 117, 112, 28);
+                Rect rect = new(106 + i * 98, 117, 94, 28);
                 Button(rect, T("MainMenu", tabs[i], fallbacks[i]), (MenuControl)((int)MenuControl.GameTab + i));
                 if (i == tab) Piece(null, new Rect(rect.x, rect.yMax + 3, rect.width, 1), new Color(1, 1, 1, 0.7f));
             }
@@ -589,9 +589,57 @@ namespace RTXMnesia.Ui
                 case 4:
                     Hdr(settings);
                     break;
+                case 5:
+                    Rtx(settings);
+                    break;
             }
             SkinButton(new Rect(500, 485, 80, 30), T("MainMenu", "OK", "OK"), MenuControl.Apply);
             SkinButton(new Rect(590, 485, 95, 30), T("MainMenu", "Cancel", "Отмена"), MenuControl.Cancel);
+        }
+
+        /// <summary>The tabs of the options window: game, graphics, sound, input, HDR, RTX.</summary>
+        public const int OptionsTabs = 6;
+
+        /// <summary>
+        /// The RTX tab: NVIDIA DLSS on the left (on any NVIDIA RTX GPU, with or without ray tracing), the ray tracing
+        /// settings on the right — only with the "Ray tracing" lighting of the graphics tab.
+        /// </summary>
+        void Rtx(HplUserSettings settings)
+        {
+            const float leftX = 120, rightX = 420, top = 158, comboStep = 45;
+            var size = Vector2.one * 16;
+            var grey = new Color(0.6f, 0.6f, 0.6f, 1);
+            float y = top;
+            Combo(leftX, y, MenuControl.DlssMode, settings);
+            y += comboStep;
+            _disabled = !HplGraphicsOptions.DlssOn(settings);
+            Combo(leftX, y, MenuControl.DlssPreset, settings);
+            _disabled = false;
+            y += comboStep + 4;
+            string info;
+            if (!HplDlss.Available) info = "DLSS недоступен: нужна видеокарта\nNVIDIA RTX и её драйвер.";
+            else if (settings.dlssMode == (int)HplDlssMode.Off) info = "DLSS выключен: сглаживание\nвыбирается на вкладке «Графика».";
+            else if (HplDlss.Active && HplDlss.Mode == (HplDlssMode)settings.dlssMode && HplDlss.RenderSize(out var render, out var output))
+                info = "Рендер " + render.x + " x " + render.y + "\nВывод " + output.x + " x " + output.y;
+            else info = "Применится после «OK».";
+            DrawLines(info, leftX, y, size, grey);
+
+            y = top;
+            Draw(_guiText, "Трассировка лучей", new Vector2(rightX, y), size, Color.white);
+            y += 24;
+            string rt = !SystemInfo.supportsRayTracing
+                ? "Недоступна: нужны DirectX 12\nи видеокарта с трассировкой лучей."
+                : settings.lighting != 1
+                    ? "Включите освещение «Трассировка\nлучей» на вкладке «Графика»."
+                    : "Настройки трассировки лучей\nпоявятся здесь позже.";
+            DrawLines(rt, rightX, y, size, grey);
+        }
+
+        /// <summary>Text with line breaks (the GUI text draws one line), 20 units per line.</summary>
+        void DrawLines(string text, float x, float y, Vector2 size, Color color)
+        {
+            string[] lines = text.Split('\n');
+            for (int i = 0; i < lines.Length; i++) Draw(_guiText, lines[i], new Vector2(x, y + i * 20), size, color);
         }
 
         // The calibration patch is drawn in the camera buffer, through a hole in the UI background.
@@ -728,7 +776,10 @@ namespace RTXMnesia.Ui
             y = top;
             foreach (var c in new[] { MenuControl.TextureQuality, MenuControl.Anisotropy, MenuControl.Antialiasing, MenuControl.Shadows })
             {
+                // With DLSS on (RTX tab) the anti-aliasing list shows "DLSS" and cannot be opened.
+                _disabled = c == MenuControl.Antialiasing && HplGraphicsOptions.DlssOn(settings);
                 Combo(rightX, y, c, settings);
+                _disabled = false;
                 y += comboStep;
             }
             // Own text: the game's Russian "Bloom" entry reads "Потускнение" (dimming), the opposite of the effect.
@@ -751,7 +802,8 @@ namespace RTXMnesia.Ui
             Piece("ComboBoxBackground", rect, Color.white);
             Piece("ComboBoxButtonIcon", new Rect(rect.xMax - 18, rect.y + 2, 18, 18), Color.white);
             Button(new Rect(rect.x + 4, rect.y + 2, rect.width - 22, 18), items.Count > 0 ? items[current].label : "", control, null, size, HplFontAlign.Left);
-            _buttons[_buttons.Count - 1] = (rect, control);
+            // A disabled list (grey) stays not pressable.
+            if (!_disabled) _buttons[_buttons.Count - 1] = (rect, control);
         }
 
         /// <summary>

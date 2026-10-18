@@ -366,18 +366,18 @@ MonoBehaviour:
       lutFormat: 48
       bufferFormat: 74
     dynamicResolutionSettings:
-      enabled: 0
-      useMipBias: 0
+      enabled: 1
+      useMipBias: 1
       advancedUpscalersByPriority: 
       advancedUpscalerNames:
-      - STP
+      - DLSS
       DLSSPerfQualitySetting: 0
       DLSSInjectionPoint: 0
       TAAUInjectionPoint: 0
       STPInjectionPoint: 0
       defaultInjectionPoint: 2
       DLSSUseOptimalSettings: 1
-      DLSSSharpness: 0.5
+      DLSSSharpness: 0
       DLSSRenderPresetForQuality: 0
       DLSSRenderPresetForBalanced: 0
       DLSSRenderPresetForPerformance: 0
@@ -400,7 +400,7 @@ MonoBehaviour:
       rayTracingHalfResThreshold: 50
       lowResSSGIMinimumThreshold: 0
       lowResVolumetricCloudsMinimumThreshold: 50
-      enableDLSS: 0
+      enableDLSS: 1
     lowresTransparentSettings:
       enabled: 1
       checkerboardDepthBuffer: 1

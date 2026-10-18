@@ -57,9 +57,11 @@ namespace RTXMnesia.Effects
             _insanity = Alloc("HPL insanity");
         }
 
+        // After post processing the screen has the output size even when DLSS renders at a lower one (HDRP resets the
+        // RTHandle reference size to it): no dynamic scale, or hardware dynamic resolution would shrink these buffers.
         static RTHandle Alloc(string name) =>
             RTHandles.Alloc(Vector2.one, TextureXR.slices, dimension: TextureXR.dimension,
-                            colorFormat: GraphicsFormat.R16G16B16A16_SFloat, useDynamicScale: true, name: name);
+                            colorFormat: GraphicsFormat.R16G16B16A16_SFloat, useDynamicScale: false, name: name);
 
         // Preserve HPL2's appearance at 60 Hz, then decay the history by elapsed time.
         // The original exp(-amount * FPS * 0.015) nearly freezes the image at high FPS.
@@ -197,9 +199,9 @@ namespace RTXMnesia.Effects
                 input = _trail;
             }
 
-            // Radial blur size is a fraction of the render width (cPostEffect_RadialBlur).
+            // Radial blur size is a fraction of the screen width (cPostEffect_RadialBlur; the output size, also with DLSS).
             props.SetTexture(SourceId, input);
-            props.SetVector(RadialBlurId, new Vector4(Mathf.Max(0f, blur) * ctx.hdCamera.actualWidth, effects.RadialBlur.StartDist, 0f, 0f));
+            props.SetVector(RadialBlurId, new Vector4(Mathf.Max(0f, blur) * ctx.hdCamera.camera.pixelWidth, effects.RadialBlur.StartDist, 0f, 0f));
             props.SetFloat(SepiaId, sepia > 0f ? sepia : 0f);
             props.SetTexture(SepiaLookupId, effects.sepiaLookup != null ? effects.sepiaLookup : Texture2D.whiteTexture);
             props.SetFloat(FadeId, Mathf.Clamp01(fade));
@@ -220,11 +222,11 @@ namespace RTXMnesia.Effects
                 _menuBlur = Alloc("HPL menu blur");
                 _menuTemp = Alloc("HPL menu blur temp");
             }
-            if (_menuGeneration != ui.PauseGeneration || _menuWidth != ctx.hdCamera.actualWidth || _menuHeight != ctx.hdCamera.actualHeight)
+            if (_menuGeneration != ui.PauseGeneration || _menuWidth != ctx.hdCamera.camera.pixelWidth || _menuHeight != ctx.hdCamera.camera.pixelHeight)
             {
                 _menuGeneration = ui.PauseGeneration;
-                _menuWidth = ctx.hdCamera.actualWidth;
-                _menuHeight = ctx.hdCamera.actualHeight;
+                _menuWidth = ctx.hdCamera.camera.pixelWidth;
+                _menuHeight = ctx.hdCamera.camera.pixelHeight;
                 CoreUtils.SetRenderTarget(cmd, _menuSharp, ClearFlag.None);
                 CoreUtils.DrawFullScreen(cmd, _material, props, CopyPass);
                 RTHandle input = _menuSharp;

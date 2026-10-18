@@ -12,6 +12,11 @@ Open this folder with Unity **6000.6.2f1**.
   with gradient sky, fixed exposure and ACES tonemapping.
 
 This is a desktop HDRP baseline. Hardware ray tracing is not enabled by this setup.
+
+NVIDIA DLSS (built-in module `com.unity.modules.nvidia`): the setup enables hardware dynamic resolution with DLSS as
+the only upscaler (optimal settings, sharpness 0, mip bias). A camera only uses it while it allows dynamic resolution;
+`HplDlss` turns that on for the game cameras when the RTX options tab selects a DLSS mode. Check on an RTX GPU:
+`RTXMnesia.EditorDev.DlssPreview.RunBatch` (no `-quit` / `-nographics`), results in `Logs/DlssCheck`.
 The former URP template package and its unused settings assets have been removed.
 
 To apply the baseline again, use **Tools > RTXMnesia > Configure HDRP**.

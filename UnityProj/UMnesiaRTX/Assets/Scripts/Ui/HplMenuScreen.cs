@@ -458,7 +458,7 @@ namespace RTXMnesia.Ui
 
         public void OpenOptions(int tab = -1)
         {
-            if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, 4);
+            if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, HplPauseMenu.OptionsTabs - 1);
             ShowingOptions = true;
             _dragSlider = null;
             DraftSettings = _ui.Settings.Copy();
@@ -482,9 +482,9 @@ namespace RTXMnesia.Ui
                 Activate(_selected, direction);
                 return;
             }
-            if (control >= MenuControl.GameTab && control <= MenuControl.HdrTab)
+            if (control >= MenuControl.GameTab && control <= MenuControl.RtxTab)
             {
-                _optionsTab = (_optionsTab + 5 + direction) % 5;
+                _optionsTab = (_optionsTab + HplPauseMenu.OptionsTabs + direction) % HplPauseMenu.OptionsTabs;
                 _selected = _optionsTab;
                 _dragSlider = null;
                 Refresh();
@@ -690,7 +690,7 @@ namespace RTXMnesia.Ui
                     _ui.Settings.Save();
                     Show();
                     break;
-                case MenuControl.GameTab: case MenuControl.GraphicsTab: case MenuControl.SoundTab: case MenuControl.InputTab: case MenuControl.HdrTab:
+                case MenuControl.GameTab: case MenuControl.GraphicsTab: case MenuControl.SoundTab: case MenuControl.InputTab: case MenuControl.HdrTab: case MenuControl.RtxTab:
                     _optionsTab = (int)control - (int)MenuControl.GameTab;
                     _selected = _optionsTab;
                     break;
@@ -706,7 +706,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.RadialBlur: DraftSettings.radialBlur = !DraftSettings.radialBlur; break;
                 case MenuControl.Lighting: case MenuControl.Textures: case MenuControl.Resolution: case MenuControl.ScreenMode:
                 case MenuControl.FpsLimit: case MenuControl.TextureQuality: case MenuControl.Anisotropy:
-                case MenuControl.Antialiasing: case MenuControl.Shadows:
+                case MenuControl.Antialiasing: case MenuControl.Shadows: case MenuControl.DlssMode: case MenuControl.DlssPreset:
                     OpenComboList(control);
                     break;
                 case MenuControl.ComboItem: PickComboItem(_menu.DataAt(index)); break;

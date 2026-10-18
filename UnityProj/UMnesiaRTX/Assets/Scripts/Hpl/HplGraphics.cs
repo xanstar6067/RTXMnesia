@@ -67,6 +67,7 @@ namespace RTXMnesia.Hpl
             ImageTrail = s.imageTrail;
             RadialBlur = s.radialBlur;
             Bloom = s.bloom;
+            HplDlss.Apply(s);
             if (!Application.isPlaying) return;
 
             Hook();
@@ -177,6 +178,8 @@ namespace RTXMnesia.Hpl
                 if (data.antialiasing != mode) data.antialiasing = mode;
                 if (mode == HDAdditionalCameraData.AntialiasingMode.SubpixelMorphologicalAntiAliasing)
                     data.SMAAQuality = HDAdditionalCameraData.SMAAQualityLevel.High;
+                // DLSS (RTX tab) replaces the anti-aliasing above while it is on.
+                HplDlss.ConfigureCamera(camera, data);
             }
         }
 

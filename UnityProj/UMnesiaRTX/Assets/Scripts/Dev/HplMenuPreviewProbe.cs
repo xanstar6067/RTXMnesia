@@ -162,9 +162,13 @@ namespace RTXMnesia.Dev
 
             ui.Choose(MenuControl.Lighting);
             ui.ChooseComboItem(1);
-            Check(ui.OpenCombo != null && ui.DraftSettings.lighting == 0, "enhanced lighting cannot be picked yet, the list stays open");
+            if (SystemInfo.supportsRayTracing)
+                Check(ui.OpenCombo == null && ui.DraftSettings.lighting == 1, "ray tracing lighting picked (DXR supported), the list closes");
+            else
+                Check(ui.OpenCombo != null && ui.DraftSettings.lighting == 0, "ray tracing lighting cannot be picked without DXR, the list stays open");
+            if (ui.OpenCombo == null) ui.Choose(MenuControl.Lighting);
             ui.ChooseComboItem(0);
-            Check(ui.OpenCombo == null, "classic lighting picked, the list closes");
+            Check(ui.OpenCombo == null && ui.DraftSettings.lighting == 0, "classic lighting picked, the list closes");
             ui.Choose(MenuControl.FpsLimit);
             yield return null;
             Capture(target, Path.Combine(folder, "Options_1_FpsLimit.png"), camera, menuCanvas);
@@ -197,6 +201,48 @@ namespace RTXMnesia.Dev
             var volume = Hpl.HplGraphics.SettingsVolume;
             Check(volume != null && volume.isActiveAndEnabled && volume.sharedProfile.TryGet<UnityEngine.Rendering.HighDefinition.MotionBlur>(out var blur) && blur.intensity.value == 0f,
                   "the settings volume turns HDRP motion blur off");
+
+            // The RTX tab: DLSS mode and model; with DLSS on the graphics tab's anti-aliasing shows "DLSS".
+            ui.OpenOptions(Ui.HplPauseMenu.OptionsTabs - 1);
+            yield return null;
+            bool rtxControls = false, presetList = false;
+            for (int i = 0; i < ui.Menu.ButtonCount; i++)
+            {
+                rtxControls |= ui.Menu.ControlAt(i) == MenuControl.DlssMode;
+                presetList |= ui.Menu.ControlAt(i) == MenuControl.DlssPreset;
+            }
+            Check(rtxControls && presetList, "the RTX tab has the DLSS mode and model lists");
+            Capture(target, Path.Combine(folder, "Options_RTX_Off.png"), camera, menuCanvas);
+            if (Hpl.HplDlss.Available)
+            {
+                ui.Choose(MenuControl.DlssMode);
+                yield return null;
+                int rows = 0;
+                for (int i = 0; i < ui.Menu.ButtonCount; i++) if (ui.Menu.ControlAt(i) == MenuControl.ComboItem) rows++;
+                Check(rows == 6, $"the open DLSS list is drawn on the RTX tab ({rows} of 6 choices)");
+                Capture(target, Path.Combine(folder, "Options_RTX_ModeList.png"), camera, menuCanvas);
+                ui.ChooseComboItem((int)Hpl.HplDlssMode.Performance);
+                Check(ui.DraftSettings.dlssMode == (int)Hpl.HplDlssMode.Performance, "DLSS Performance picked");
+                ui.Choose(MenuControl.DlssPreset);
+                yield return null;
+                Capture(target, Path.Combine(folder, "Options_RTX_Models.png"), camera, menuCanvas);
+                ui.ChooseComboItem(0);
+                ui.Choose(MenuControl.Apply);
+                for (int i = 0; i < 5; i++) yield return null;
+                Check(Hpl.HplDlss.Active && hd.allowDynamicResolution && hd.antialiasing == UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData.AntialiasingMode.None,
+                      "DLSS applied: the player camera allows dynamic resolution, its own anti-aliasing is off");
+                var hdCamera = UnityEngine.Rendering.HighDefinition.HDCamera.GetOrCreate(camera);
+                Check(hdCamera.actualWidth < camera.pixelWidth, $"DLSS renders below the output size ({hdCamera.actualWidth} of {camera.pixelWidth})");
+                ui.OpenOptions(Ui.HplPauseMenu.OptionsTabs - 1);
+                yield return null;
+                Capture(target, Path.Combine(folder, "Options_RTX_Performance.png"), camera, menuCanvas);
+                ui.OpenOptions(1);
+                yield return null;
+                var aa = HplGraphicsOptions.Items(MenuControl.Antialiasing, ui.Settings, ui.Menu.Translate, out _);
+                Check(aa.Count == 1 && aa[0].label == "DLSS" && !aa[0].enabled, "the graphics tab's anti-aliasing shows DLSS and cannot be changed");
+                Capture(target, Path.Combine(folder, "Options_1_DlssAA.png"), camera, menuCanvas);
+            }
+            else Debug.Log("DLSS is not available on this GPU: the RTX tab shows why");
 
             // The user's settings back (applied and saved as they were).
             original.Apply(map);
