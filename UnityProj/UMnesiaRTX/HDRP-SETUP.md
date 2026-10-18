@@ -26,3 +26,17 @@ Batch setup:
 ```
 
 Setup completion is recorded in `Logs/HDRP-Setup-Result.txt`.
+
+## Native HDR output (in progress)
+
+`HplHdr` selects native HDR output at runtime and exposes calibration in the HDR options tab.
+SDR-only players must not query `HDROutputSettings.HDRModeChangeRequested` or request a mode change:
+Unity throws even when `HDROutputSettings.main` is non-null. Check display availability first;
+without it the HDR volume stays inactive and startup continues in SDR. Runtime mode changes
+also require `HDRDisplaySupportFlags.RuntimeSwitchable`.
+
+Startup regression: `RTXMnesia.EditorDev.HdrStartupTests.BuildPlayerBatch` builds the real title
+scene as a release player in `Logs/HdrStartup/Player`. Run `HdrStartup.exe -batchmode -nographics`
+to check title UI creation, the playing menu music source and HDR options on an unsupported display.
+The probe is included only with `RTXMNESIA_STARTUP_TEST`, writes `StartupResult.txt` and exits.
+This does not verify HDR luminance, physical display output or the unfinished shader readback test.

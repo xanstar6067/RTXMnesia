@@ -19,7 +19,8 @@ namespace RTXMnesia.Hpl
         public static bool Available => (SystemInfo.hdrDisplaySupportFlags & HDRDisplaySupportFlags.Supported) != 0 &&
             HDROutputSettings.main != null && HDROutputSettings.main.available;
         public static bool Active => Available && HDROutputSettings.main.active;
-        public static bool Pending => HDROutputSettings.main != null && HDROutputSettings.main.HDRModeChangeRequested;
+        // The native getter throws in SDR-only players, even though 'main' is non-null.
+        public static bool Pending => Available && HDROutputSettings.main.HDRModeChangeRequested;
         public static float PaperWhite => s_settings.hdrPaperWhite;
         public static float Peak => s_settings.hdrPeak;
         public static float Black => s_settings.hdrBlack;
@@ -59,10 +60,18 @@ namespace RTXMnesia.Hpl
         void Update()
         {
             bool available = Available;
+            if (!available)
+            {
+                _requested = null;
+                _available = false;
+                SetActive(false);
+                return;
+            }
             // Auto and On request native HDR only if the OS/display exposes it. Never change Windows settings.
-            bool desired = s_settings.hdrMode != 0 && available;
+            bool desired = s_settings.hdrMode != 0;
             var display = HDROutputSettings.main;
-            if (display != null && !Pending && (_requested != desired || _available != available))
+            bool canSwitch = (SystemInfo.hdrDisplaySupportFlags & HDRDisplaySupportFlags.RuntimeSwitchable) != 0;
+            if (canSwitch && !Pending && (_requested != desired || _available != available))
             {
                 _requested = desired;
                 _available = available;
@@ -70,15 +79,11 @@ namespace RTXMnesia.Hpl
                 if (display.active != desired) display.RequestHDRModeChange(desired);
             }
             // Reconcile display/OS changes without flooding a driver which refuses the request.
-            if (display != null && !Pending && display.active != desired && Time.realtimeSinceStartup - _requestTime > 5)
+            if (canSwitch && !Pending && display.active != desired && Time.realtimeSinceStartup - _requestTime > 5)
                 _requested = null;
-            bool active = Active;
-            if (_lastActive != active) { Revision++; _lastActive = active; }
-            Shader.SetGlobalFloat("_HplHdrActive", active ? 1 : 0);
-            if (_tonemapping == null) return;
-            // An inactive component leaves each SDR map's existing tonemapping untouched.
-            _tonemapping.active = active;
-            if (!active) return;
+            bool active = display.active;
+            SetActive(active);
+            if (!active || _tonemapping == null) return;
             display.automaticHDRTonemapping = false;
             _tonemapping.mode.Override(TonemappingMode.Neutral);
             _tonemapping.neutralHDRRangeReductionMode.Override(NeutralRangeReductionMode.BT2390);
@@ -88,6 +93,15 @@ namespace RTXMnesia.Hpl
             _tonemapping.paperWhite.Override(PaperWhite);
             _tonemapping.minNits.Override(Black);
             _tonemapping.maxNits.Override(Peak);
+        }
+
+        void SetActive(bool active)
+        {
+            if (_lastActive != active) { Revision++; _lastActive = active; }
+            Shader.SetGlobalFloat("_HplHdrActive", active ? 1 : 0);
+            if (_tonemapping == null) return;
+            // An inactive component leaves each SDR map's existing tonemapping untouched.
+            _tonemapping.active = active;
         }
 
         public static void UseDisplayValues(HplUserSettings settings)

@@ -30,6 +30,8 @@ namespace RTXMnesia.EditorDev
             {
                 s_checks = 0;
                 Directory.CreateDirectory(Folder);
+                if (!HplHdr.Available)
+                    Check(!HplHdr.Active && !HplHdr.Pending, "SDR display status does not call unsupported native HDR getters");
                 var settings = new HplUserSettings();
                 JsonUtility.FromJsonOverwrite("{\"gamma\":1.2}", settings);
                 settings.Validate();
