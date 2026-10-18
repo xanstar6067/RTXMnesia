@@ -715,12 +715,11 @@ namespace RTXMnesia.Ui
             }
             SmallToggle(leftX, y, T("OptionsMenu", "VSync", "Вертикальная синхронизация"), settings.vSync, MenuControl.VSync);
             y += toggleStep + 4;
-            if (HplHdr.Active)
-            {
-                Draw(_guiText, HdrText("Яркость — во вкладке HDR", "Brightness: see HDR tab"), new Vector2(leftX, y), Vector2.one * 15, Color.white);
-                Draw(_guiText, HdrText("Гамма применяется только в SDR", "Gamma applies only in SDR"), new Vector2(leftX, y + 20), Vector2.one * 13, Color.gray);
-            }
-            else SmallAdjust(leftX, y, T("OptionsMenu", "Gamma", "Гамма"), settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
+            // The SDR gamma is a separate setting from the HDR brightness (HDR tab): always editable, but it only
+            // applies to SDR output, so with HDR active the label says so.
+            string gammaLabel = T("OptionsMenu", "Gamma", "Гамма");
+            if (HplHdr.Active) gammaLabel += HdrText(" (только SDR)", " (SDR only)");
+            SmallAdjust(leftX, y, gammaLabel, settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
                         (settings.gamma - HplUserSettings.MinGamma) / (HplUserSettings.MaxGamma - HplUserSettings.MinGamma),
                         MenuControl.GammaLess, MenuControl.GammaMore, MenuControl.GammaSlider);
             y = top;
