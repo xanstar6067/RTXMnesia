@@ -2,6 +2,7 @@
 /src/
 /source/
 /external/
+/sourceRTXRemix/
 
 # Amnesia content converted into Unity (generated from source/, never committed)
 **/Assets/AmnesiaImported/
