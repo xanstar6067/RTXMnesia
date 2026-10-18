@@ -28,6 +28,7 @@ namespace RTXMnesia.Effects
         RTHandle _menuSharp, _menuBlur, _menuTemp;
         int _menuGeneration = -1, _menuWidth, _menuHeight;
         bool _clearTrail = true;
+        int _hdrRevision = -1;
         double _lastRenderTime = -1.0;
 
         static readonly int SourceId = Shader.PropertyToID("_HplSource");
@@ -74,18 +75,44 @@ namespace RTXMnesia.Effects
         {
             if (effects == null || _material == null) return;
             if (ctx.hdCamera.camera.cameraType != CameraType.Game || World.HplWaterReflection.IsReflectionCamera(ctx.hdCamera.camera)) return;
+            bool hdr = Hpl.HplHdr.Active;
+            if (_hdrRevision != Hpl.HplHdr.Revision)
+            {
+                _hdrRevision = Hpl.HplHdr.Revision;
+                _clearTrail = true;
+                ReleaseMenu();
+            }
+            // HDRP's AfterPostProcess custom pass sees linear display-gamut nits. The final blit encodes it.
+            _material.SetVector("_HplEffectHdr", new Vector4(hdr ? 1 : 0, Hpl.HplHdr.PaperWhite, Hpl.HplHdr.Peak, 0));
+            if (hdr && HDROutputUtils.GetColorSpaceForGamut(HDROutputSettings.main.displayColorGamut, out int gamut))
+                _material.SetInteger("_HDRColorspace", gamut);
             RenderEffects(ctx);
 
             // The gamma of the settings (SDL_SetGamma in HPL2: the display ramp, output = input^(1/gamma)), last.
             float gamma = Ui.HplUserSettings.Gamma;
-            if (Mathf.Abs(gamma - 1f) < 0.001f) return;
+            if (!hdr && Mathf.Abs(gamma - 1f) >= 0.001f)
+            {
+                var props = ctx.propertyBlock;
+                CoreUtils.SetRenderTarget(ctx.cmd, _source, ClearFlag.None);
+                CoreUtils.DrawFullScreen(ctx.cmd, _material, props, CopyPass);
+                props.SetTexture(SourceId, _source);
+                props.SetFloat(GammaId, gamma);
+                CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
+                CoreUtils.DrawFullScreen(ctx.cmd, _material, props, GammaPass);
+            }
+            RenderCalibration(ctx);
+        }
+
+        void RenderCalibration(CustomPassContext ctx)
+        {
+            if (!Hpl.HplHdr.CalibrationVisible) return;
+            var rect = Hpl.HplHdr.CalibrationRect;
             var props = ctx.propertyBlock;
-            CoreUtils.SetRenderTarget(ctx.cmd, _source, ClearFlag.None);
-            CoreUtils.DrawFullScreen(ctx.cmd, _material, props, CopyPass);
-            props.SetTexture(SourceId, _source);
-            props.SetFloat(GammaId, gamma);
+            props.SetVector("_HplCalibrationRect", new Vector4(rect.x, rect.y, rect.width, rect.height));
+            props.SetVector("_HplCalibration", new Vector4(Hpl.HplHdr.CalibrationPattern, Hpl.HplHdr.Peak,
+                Hpl.HplHdr.PaperWhite, Hpl.HplHdr.Black));
             CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
-            CoreUtils.DrawFullScreen(ctx.cmd, _material, props, GammaPass);
+            CoreUtils.DrawFullScreen(ctx.cmd, _material, props, 9);
         }
 
         void RenderEffects(CustomPassContext ctx)

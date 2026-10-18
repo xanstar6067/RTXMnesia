@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using RTXMnesia.ScriptApi;
+using RTXMnesia.Hpl;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,7 +10,7 @@ namespace RTXMnesia.Ui
     public enum MenuControl
     {
         Resume, Options, Quit, ConfirmQuit, Cancel, Apply,
-        GameTab, GraphicsTab, SoundTab, InputTab,
+        GameTab, GraphicsTab, SoundTab, InputTab, HdrTab,
         Subtitles, Hints, Crosshair, Fullscreen, VSync, VolumeLess, VolumeMore,
         SensitivityLess, SensitivityMore, InvertMouse, SmoothMouse,
         VolumeSlider, SensitivitySlider, NewGame, ReturnTitle, ConfirmNewGame, ConfirmReturnTitle,
@@ -24,6 +25,8 @@ namespace RTXMnesia.Ui
         NameCreate, NameCancel, MessageOk,
         // Start game window (cLuxMainMenu_StartGame), the hard mode save, the Justine campaign.
         StartNormal, StartHard, StartGameStart, HardSave, ConfirmHardSave, Justine, MainCampaign,
+        HdrMode, HdrPeakLess, HdrPeakMore, HdrPeakSlider, HdrWhiteLess, HdrWhiteMore, HdrWhiteSlider,
+        HdrBlackLess, HdrBlackMore, HdrBlackSlider, HdrPreview, HdrDetect, HdrDefaults,
     }
 
     /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>
@@ -146,7 +149,11 @@ namespace RTXMnesia.Ui
             return text;
         }
 
-        public void SetVisible(bool visible) => _root.SetActive(visible);
+        public void SetVisible(bool visible)
+        {
+            _root.SetActive(visible);
+            if (!visible) HplHdr.CalibrationVisible = false;
+        }
         Vector2 VirtualPoint(Vector2 position)
         {
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_screen, position, Canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : Canvas.worldCamera, out var p);
@@ -179,6 +186,7 @@ namespace RTXMnesia.Ui
                             HplKeyConfig keyConfig = null, HplMenuCombo combo = null, HplMenuExtras extras = null)
         {
             extras ??= new HplMenuExtras();
+            HplHdr.CalibrationVisible = false;
             _loadFade.color = Color.clear; _loadingText.Clear();
             _menuText.Clear();
             _guiText.Clear();
@@ -542,13 +550,13 @@ namespace RTXMnesia.Ui
 
         void Options(int tab, HplUserSettings settings)
         {
-            Window(new Rect(90, 70, 620, 460));
+            Window(new Rect(90, 70, 620, 460), tab == 4);
             Draw(_guiText, T("MainMenu", "Options", "Настройки"), new Vector2(125, 50), Vector2.one * 25, Color.white);
-            string[] tabs = { "OptionsGame", "OptionsGraphics", "OptionsSound", "OptionsInput" };
-            string[] fallbacks = { "Игра", "Графика", "Звук", "Управление" };
-            for (int i = 0; i < 4; i++)
+            string[] tabs = { "OptionsGame", "OptionsGraphics", "OptionsSound", "OptionsInput", "OptionsHDR" };
+            string[] fallbacks = { "Игра", "Графика", "Звук", "Управление", "HDR" };
+            for (int i = 0; i < 5; i++)
             {
-                Rect rect = new(115 + i * 140, 117, 130, 28);
+                Rect rect = new(110 + i * 116, 117, 112, 28);
                 Button(rect, T("MainMenu", tabs[i], fallbacks[i]), (MenuControl)((int)MenuControl.GameTab + i));
                 if (i == tab) Piece(null, new Rect(rect.x, rect.yMax + 3, rect.width, 1), new Color(1, 1, 1, 0.7f));
             }
@@ -577,9 +585,51 @@ namespace RTXMnesia.Ui
                     float keyWidth = _guiText.font != null ? _guiText.font.GetLength(Vector2.one * 18, keyConfig) : 200;
                     Button(new Rect(140, 380, keyWidth + 20, 25), keyConfig, MenuControl.KeyConfig, null, default, HplFontAlign.Left);
                     break;
+                case 4:
+                    Hdr(settings);
+                    break;
             }
             SkinButton(new Rect(500, 485, 80, 30), T("MainMenu", "OK", "OK"), MenuControl.Apply);
             SkinButton(new Rect(590, 485, 95, 30), T("MainMenu", "Cancel", "Отмена"), MenuControl.Cancel);
+        }
+
+        // The calibration patch is drawn in the camera buffer, through a hole in the UI background.
+        // Putting it in an ordinary UI texture would clamp its luminance to Paper White / Max Nits.
+        static readonly Rect HdrPatch = new(420, 224, 250, 150);
+        string HdrText(string ru, string en) => _map.language != null &&
+            _map.language.language != null && _map.language.language.StartsWith("eng", System.StringComparison.OrdinalIgnoreCase) ? en : ru;
+
+        void Hdr(HplUserSettings settings)
+        {
+            _shade.color = Color.clear;
+            string mode = settings.hdrMode switch { 0 => HdrText("Выкл.", "Off"), 1 => HdrText("Авто", "Auto"), _ => HdrText("Вкл.", "On") };
+            Button(new Rect(130, 164, 245, 24), "HDR: " + mode, MenuControl.HdrMode, null, Vector2.one * 17, HplFontAlign.Left);
+            string status = HplHdr.Pending ? HdrText("Переключение…", "Switching…") : HplHdr.Active
+                ? HdrText("HDR активен", "HDR active") : HplHdr.Available ? HdrText("Вывод SDR", "SDR output") : HdrText("HDR недоступен", "HDR unavailable");
+            Draw(_guiText, status, new Vector2(420, 165), Vector2.one * 16, Color.white);
+            SmallAdjust(130, 208, HdrText("Пиковая яркость", "Peak luminance"), settings.hdrPeak.ToString("0") + " nit",
+                (settings.hdrPeak - HplHdr.MinPeak) / (HplHdr.MaxPeak - HplHdr.MinPeak), MenuControl.HdrPeakLess, MenuControl.HdrPeakMore, MenuControl.HdrPeakSlider);
+            SmallAdjust(130, 274, HdrText("Яркость белого / UI", "Paper white / UI"), settings.hdrPaperWhite.ToString("0") + " nit",
+                (settings.hdrPaperWhite - HplHdr.MinWhite) / (HplHdr.MaxWhite - HplHdr.MinWhite), MenuControl.HdrWhiteLess, MenuControl.HdrWhiteMore, MenuControl.HdrWhiteSlider);
+            SmallAdjust(130, 340, HdrText("Уровень чёрного", "Black level"), settings.hdrBlack.ToString("0.000", CultureInfo.InvariantCulture) + " nit",
+                settings.hdrBlack / HplHdr.MaxBlack, MenuControl.HdrBlackLess, MenuControl.HdrBlackMore, MenuControl.HdrBlackSlider);
+            Button(new Rect(125, 410, 240, 23), HdrText("Данные дисплея", "Use display values"), MenuControl.HdrDetect, null, Vector2.one * 16);
+            Button(new Rect(125, 440, 240, 23), HdrText("По умолчанию", "Defaults"), MenuControl.HdrDefaults, null, Vector2.one * 16);
+            string[] names = { HdrText("Пик", "Peak"), HdrText("Белый", "White"), HdrText("Чёрный", "Black") };
+            Button(new Rect(410, 194, 270, 23), "< " + names[HplHdr.CalibrationPattern] + " >", MenuControl.HdrPreview, null, Vector2.one * 16);
+            string[] help = {
+                HdrText("Повышайте пик до исчезновения\nкреста, затем немного уменьшите.\nОтключите динамический тонмап\nдисплея для точной калибровки.", "Raise peak until the cross disappears,\nthen lower it slightly. Disable the\ndisplay's dynamic tone mapping\nfor accurate calibration."),
+                HdrText("Белое поле и текст должны быть\nкомфортными в вашем освещении.\nЭта настройка также влияет\nна общую яркость сцены.", "Keep the white tile and text\ncomfortable in your room lighting.\nThis also controls the overall\nbrightness of the scene."),
+                HdrText("Начните с нуля. Крест должен\nбыть едва различим на чёрном.\nНа OLED обычно оставляйте 0.\nНе высветляйте тёмные комнаты.", "Start at zero. The cross should be\nbarely visible against black.\nFor OLED, usually leave at zero.\nAvoid lifting dark rooms.") };
+            string hint = HplHdr.Active ? help[HplHdr.CalibrationPattern] :
+                HdrText("Образец SDR — только иллюстрация.\nВключите HDR в Windows и игре.\nВ редакторе нужен DX12;\nдля DX11 проверяйте сборку.", "SDR illustration, not HDR calibration.\nEnable HDR in Windows and the game.\nEditor HDR requires DX12;\nuse a standalone player for DX11.");
+            string[] lines = hint.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+                Draw(_guiText, lines[i], new Vector2(420, 388 + i * 18), Vector2.one * 13, Color.white);
+            float width = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
+            HplHdr.CalibrationRect = new Rect((HdrPatch.x + (width - 800) * 0.5f) / width, HdrPatch.y / 600,
+                HdrPatch.width / width, HdrPatch.height / 600);
+            HplHdr.CalibrationVisible = _root.activeInHierarchy && _opacity > 0.99f;
         }
 
         /// <summary>
@@ -665,7 +715,12 @@ namespace RTXMnesia.Ui
             }
             SmallToggle(leftX, y, T("OptionsMenu", "VSync", "Вертикальная синхронизация"), settings.vSync, MenuControl.VSync);
             y += toggleStep + 4;
-            SmallAdjust(leftX, y, T("OptionsMenu", "Gamma", "Гамма"), settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
+            if (HplHdr.Active)
+            {
+                Draw(_guiText, HdrText("Яркость — во вкладке HDR", "Brightness: see HDR tab"), new Vector2(leftX, y), Vector2.one * 15, Color.white);
+                Draw(_guiText, HdrText("Гамма применяется только в SDR", "Gamma applies only in SDR"), new Vector2(leftX, y + 20), Vector2.one * 13, Color.gray);
+            }
+            else SmallAdjust(leftX, y, T("OptionsMenu", "Gamma", "Гамма"), settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
                         (settings.gamma - HplUserSettings.MinGamma) / (HplUserSettings.MaxGamma - HplUserSettings.MinGamma),
                         MenuControl.GammaLess, MenuControl.GammaMore, MenuControl.GammaSlider);
             y = top;
@@ -836,9 +891,16 @@ namespace RTXMnesia.Ui
                  index == _selected || highlighted ? Highlight : Color.white, HplFontAlign.Center);
         }
 
-        void Window(Rect r)
+        void Window(Rect r, bool hdrHole = false)
         {
-            Piece("WindowBackground", r, Color.white);
+            if (!hdrHole) Piece("WindowBackground", r, Color.white);
+            else
+            {
+                WindowPart(r, new Rect(r.x, r.y, r.width, HdrPatch.y - r.y));
+                WindowPart(r, new Rect(r.x, HdrPatch.yMax, r.width, r.yMax - HdrPatch.yMax));
+                WindowPart(r, new Rect(r.x, HdrPatch.y, HdrPatch.x - r.x, HdrPatch.height));
+                WindowPart(r, new Rect(HdrPatch.xMax, HdrPatch.y, r.xMax - HdrPatch.xMax, HdrPatch.height));
+            }
             var types = new[] { "WindowBorderLeft", "WindowBorderRight", "WindowBorderUp", "WindowBorderDown", "WindowCornerLU", "WindowCornerRU", "WindowCornerLD", "WindowCornerRD" };
             foreach (var type in types)
             {
@@ -869,6 +931,13 @@ namespace RTXMnesia.Ui
             Place(target.rectTransform, rect);
         }
 
+        void WindowPart(Rect whole, Rect part)
+        {
+            Piece("WindowBackground", part, Color.white);
+            _pieces[_pieceIndex - 1].uvRect = new Rect((part.x - whole.x) / whole.width,
+                1 - (part.yMax - whole.y) / whole.height, part.width / whole.width, part.height / whole.height);
+        }
+
         void Piece(string type, Rect rect, Color color)
         {
             if (_layer > 0)
@@ -883,6 +952,7 @@ namespace RTXMnesia.Ui
                 _pieces.Add(image);
             }
             var target = _pieces[_pieceIndex++];
+            target.uvRect = new Rect(0, 0, 1, 1);
             var piece = type != null && _assets != null ? _assets.Find(type) : default;
             target.texture = piece.texture != null ? piece.texture : Texture2D.whiteTexture;
             target.color = (piece.texture != null ? piece.color * color : color) * new Color(1, 1, 1, _opacity);
@@ -913,6 +983,7 @@ namespace RTXMnesia.Ui
         }
         public void Destroy()
         {
+            HplHdr.CalibrationVisible = false;
             if (_root == null) return;
             if (Application.isPlaying) Object.Destroy(_root); else Object.DestroyImmediate(_root);
         }

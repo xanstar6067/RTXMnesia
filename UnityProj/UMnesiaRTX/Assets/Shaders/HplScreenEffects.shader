@@ -9,6 +9,25 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     #pragma target 4.5
 
     #include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/RenderPass/CustomPass/CustomPassCommon.hlsl"
+    #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/HDROutput.hlsl"
+
+    float4 _HplEffectHdr; // active, paper white, peak nits
+    float4 _HplCalibrationRect;
+    float4 _HplCalibration; // pattern, peak, paper white, black
+
+    float3 ToEffectSpace(float3 color)
+    {
+        if (_HplEffectHdr.x > 0.5)
+            return LinearToSRGB(max(RotateOutputSpaceToRec709(color) / _HplEffectHdr.y, 0));
+        return LinearToSRGB(saturate(color));
+    }
+
+    float3 FromEffectSpace(float3 color)
+    {
+        if (_HplEffectHdr.x > 0.5)
+            return min(max(RotateRec709ToOutputSpace(SRGBToLinear(max(color, 0))) * _HplEffectHdr.y, 0), _HplEffectHdr.z);
+        return SRGBToLinear(color);
+    }
 
     TEXTURE2D_X(_HplSource);
     TEXTURE2D_X(_HplMenuSharp);
@@ -54,7 +73,7 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     {
         UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
         float3 color = CustomPassLoadCameraColor(uint2(v.positionCS.xy), 0);
-        return float4(LinearToSRGB(saturate(color)), 1.0);
+        return float4(ToEffectSpace(color), 1.0);
     }
 
     // Blended into the accumulation buffer with SrcAlpha / OneMinusSrcAlpha.
@@ -94,10 +113,13 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
         // Sepia: per channel lookup in the 1D conversion texture, faded with the original.
         if (_HplSepia > 0.0)
         {
+            // The original lookup only covers 0..1. Preserve the highlight magnitude outside that domain.
+            float scale = _HplEffectHdr.x > 0.5 ? max(1, max(color.r, max(color.g, color.b))) : 1;
+            float3 lookupColor = color / scale;
             float3 conv = float3(
-                SAMPLE_TEXTURE2D_LOD(_HplSepiaLookup, s_linear_clamp_sampler, float2(color.r, 0.5), 0).r,
-                SAMPLE_TEXTURE2D_LOD(_HplSepiaLookup, s_linear_clamp_sampler, float2(color.g, 0.5), 0).g,
-                SAMPLE_TEXTURE2D_LOD(_HplSepiaLookup, s_linear_clamp_sampler, float2(color.b, 0.5), 0).b);
+                SAMPLE_TEXTURE2D_LOD(_HplSepiaLookup, s_linear_clamp_sampler, float2(lookupColor.r, 0.5), 0).r,
+                SAMPLE_TEXTURE2D_LOD(_HplSepiaLookup, s_linear_clamp_sampler, float2(lookupColor.g, 0.5), 0).g,
+                SAMPLE_TEXTURE2D_LOD(_HplSepiaLookup, s_linear_clamp_sampler, float2(lookupColor.b, 0.5), 0).b) * scale;
             float alpha = saturate(_HplSepia);
             color = conv * alpha + color * (1.0 - alpha);
         }
@@ -106,7 +128,7 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
         color *= 1.0 - _HplFade;
         color += _HplAdd.rgb;
 
-        return float4(SRGBToLinear(saturate(color)), 1.0);
+        return float4(FromEffectSpace(_HplEffectHdr.x > 0.5 ? color : saturate(color)), 1.0);
     }
     // posteffect_insanity_frag.glsl. HPL2 works in GL pixels (y up); the maps are read with the image's top row at
     // the screen bottom like HPL2 (Unity textures have v = 0 at the bottom row, the pixel y here grows downwards).
@@ -152,7 +174,7 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
     {
         UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
         float3 sharp = LOAD_TEXTURE2D_X(_HplMenuSharp, uint2(v.positionCS.xy)).rgb;
-        return float4(SRGBToLinear(lerp(sharp, LoadSource(int2(v.positionCS.xy)), _HplMenuBlend)), 1);
+        return float4(FromEffectSpace(lerp(sharp, LoadSource(int2(v.positionCS.xy)), _HplMenuBlend)), 1);
     }
     float4 InventoryComposite(Varyings v) : SV_Target
     {
@@ -163,7 +185,41 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
                               dot(color, float3(0.349, 0.686, 0.168)),
                               dot(color, float3(0.272, 0.534, 0.131)));
         sepia = pow(max(0, sepia * 0.35), 1.5);
-        return float4(SRGBToLinear(lerp(color, sepia, _HplMenuBlend)), 1);
+        return float4(FromEffectSpace(lerp(color, sepia, _HplMenuBlend)), 1);
+    }
+
+    float4 CalibrationFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float2 uv = (v.positionCS.xy * _ScreenSize.zw - _HplCalibrationRect.xy) / _HplCalibrationRect.zw;
+        clip(min(min(uv.x, uv.y), min(1 - uv.x, 1 - uv.y)));
+        float nits = 0;
+        if (_HplCalibration.x < 0.5)
+        {
+            // Small peak patch: cross at the selected luminance, surround 10% lower. No game tonemapping.
+            bool patch = all(abs(uv - 0.5) < float2(0.23, 0.35));
+            bool cross = abs(uv.x - 0.5) < 0.025 || abs(uv.y - 0.5) < 0.04;
+            nits = patch ? _HplCalibration.y * (cross ? 1 : 0.9) : 0;
+        }
+        else if (_HplCalibration.x < 1.5)
+        {
+            // Neutral grey steps and a paper-white tile, all at or below paper white.
+            nits = _HplCalibration.z * pow((floor(min(uv.x, 0.999) * 5) + 1) / 5, 2.2);
+        }
+        else
+        {
+            // Physical black and a near-black cross at the selected minimum plus 0.005 nits.
+            bool cross = abs(uv.x - 0.5) < 0.035 || abs(uv.y - 0.5) < 0.055;
+            nits = cross ? _HplCalibration.w + 0.005 : 0;
+        }
+        // HDR is absolute output-gamut luminance, SDR is an explicitly labelled illustrative preview.
+        if (_HplEffectHdr.x < 0.5)
+        {
+            if (_HplCalibration.x < 0.5) nits /= _HplCalibration.y;
+            else if (_HplCalibration.x < 1.5) nits /= _HplCalibration.z;
+            else nits = nits > 0 ? 0.015 : 0;
+        }
+        return float4(nits.xxx, 1);
     }
     ENDHLSL
 
@@ -243,6 +299,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment GammaFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "HDR calibration"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment CalibrationFrag
             ENDHLSL
         }
     }

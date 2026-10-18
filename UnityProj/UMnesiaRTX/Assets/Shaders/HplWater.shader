@@ -123,7 +123,8 @@ Shader "RTXMnesia/HplWater"
                 return max(bias + (1.0 - bias) * pow(facing, power), 0.0);
             }
 
-            float3 ToGamma(float3 c) { return LinearToSRGB(saturate(c)); }
+            float _HplHdrActive;
+            float3 ToGamma(float3 c) { return LinearToSRGB(_HplHdrActive > 0.5 ? max(c, 0) : saturate(c)); }
 
             float4 Frag(Varyings input) : SV_Target
             {

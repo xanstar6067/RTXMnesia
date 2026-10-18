@@ -81,6 +81,8 @@ namespace RTXMnesia.Ui
 
         public void Reset()
         {
+            if (DraftSettings != null) HplHdr.Apply(_ui.Settings);
+            HplHdr.CalibrationVisible = false;
             ConfirmingQuit = false;
             ShowingOptions = false;
             ShowingLoad = false;
@@ -129,6 +131,7 @@ namespace RTXMnesia.Ui
 
         public void Refresh()
         {
+            if (ShowingOptions && DraftSettings != null) HplHdr.Apply(DraftSettings);
             UpdateHardModeExtras();
             _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
                 _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad || ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad ? _saveLabels : null, _selectedSave,
@@ -428,6 +431,21 @@ namespace RTXMnesia.Ui
                 if (_dragSlider == MenuControl.VolumeSlider) DraftSettings.masterVolume = Mathf.Round(value * 100) / 100f;
                 else if (_dragSlider == MenuControl.GammaSlider)
                     DraftSettings.gamma = Mathf.Round((HplUserSettings.MinGamma + value * (HplUserSettings.MaxGamma - HplUserSettings.MinGamma)) * 20f) / 20f;
+                else if (_dragSlider == MenuControl.HdrPeakSlider)
+                {
+                    DraftSettings.hdrPeak = Mathf.Round((HplHdr.MinPeak + value * (HplHdr.MaxPeak - HplHdr.MinPeak)) / 10) * 10;
+                    HplHdr.CalibrationPattern = 0;
+                }
+                else if (_dragSlider == MenuControl.HdrWhiteSlider)
+                {
+                    DraftSettings.hdrPaperWhite = Mathf.Round(HplHdr.MinWhite + value * (HplHdr.MaxWhite - HplHdr.MinWhite));
+                    HplHdr.CalibrationPattern = 1;
+                }
+                else if (_dragSlider == MenuControl.HdrBlackSlider)
+                {
+                    DraftSettings.hdrBlack = Mathf.Round(value * HplHdr.MaxBlack * 1000) / 1000;
+                    HplHdr.CalibrationPattern = 2;
+                }
                 else DraftSettings.mouseSensitivity = Mathf.Round((0.2f + value * 4.8f) * 10) / 10f;
             }
             if (!mouse.leftButton.isPressed) _dragSlider = null;
@@ -435,7 +453,7 @@ namespace RTXMnesia.Ui
 
         public void OpenOptions(int tab = -1)
         {
-            if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, 3);
+            if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, 4);
             ShowingOptions = true;
             _dragSlider = null;
             DraftSettings = _ui.Settings.Copy();
@@ -459,9 +477,9 @@ namespace RTXMnesia.Ui
                 Activate(_selected, direction);
                 return;
             }
-            if (control >= MenuControl.GameTab && control <= MenuControl.InputTab)
+            if (control >= MenuControl.GameTab && control <= MenuControl.HdrTab)
             {
-                _optionsTab = (_optionsTab + 4 + direction) % 4;
+                _optionsTab = (_optionsTab + 5 + direction) % 5;
                 _selected = _optionsTab;
                 _dragSlider = null;
                 Refresh();
@@ -475,7 +493,8 @@ namespace RTXMnesia.Ui
             }
             else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
                      control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary ||
-                     control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur) Activate(_selected, direction);
+                     control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur ||
+                     control >= MenuControl.HdrMode && control <= MenuControl.HdrDefaults) Activate(_selected, direction);
         }
 
         void Activate(int index, int direction = 0)
@@ -666,7 +685,7 @@ namespace RTXMnesia.Ui
                     _ui.Settings.Save();
                     Show();
                     break;
-                case MenuControl.GameTab: case MenuControl.GraphicsTab: case MenuControl.SoundTab: case MenuControl.InputTab:
+                case MenuControl.GameTab: case MenuControl.GraphicsTab: case MenuControl.SoundTab: case MenuControl.InputTab: case MenuControl.HdrTab:
                     _optionsTab = (int)control - (int)MenuControl.GameTab;
                     _selected = _optionsTab;
                     break;
@@ -701,6 +720,18 @@ namespace RTXMnesia.Ui
                 // cLuxMainMenu_Options: the gamma slider steps 0.05 between 0.3 and 2.
                 case MenuControl.GammaLess: DraftSettings.gamma = Mathf.Clamp(DraftSettings.gamma + 0.05f * less, HplUserSettings.MinGamma, HplUserSettings.MaxGamma); break;
                 case MenuControl.GammaMore: DraftSettings.gamma = Mathf.Clamp(DraftSettings.gamma + 0.05f * more, HplUserSettings.MinGamma, HplUserSettings.MaxGamma); break;
+                case MenuControl.HdrMode: DraftSettings.hdrMode = (DraftSettings.hdrMode + 3 + more) % 3; break;
+                case MenuControl.HdrPeakLess: DraftSettings.hdrPeak += 10 * less; HplHdr.CalibrationPattern = 0; break;
+                case MenuControl.HdrPeakMore: DraftSettings.hdrPeak += 10 * more; HplHdr.CalibrationPattern = 0; break;
+                case MenuControl.HdrWhiteLess: DraftSettings.hdrPaperWhite += 5 * less; HplHdr.CalibrationPattern = 1; break;
+                case MenuControl.HdrWhiteMore: DraftSettings.hdrPaperWhite += 5 * more; HplHdr.CalibrationPattern = 1; break;
+                case MenuControl.HdrBlackLess: DraftSettings.hdrBlack += 0.001f * less; HplHdr.CalibrationPattern = 2; break;
+                case MenuControl.HdrBlackMore: DraftSettings.hdrBlack += 0.001f * more; HplHdr.CalibrationPattern = 2; break;
+                case MenuControl.HdrPreview: HplHdr.CalibrationPattern = (HplHdr.CalibrationPattern + 3 + more) % 3; break;
+                case MenuControl.HdrDetect: HplHdr.UseDisplayValues(DraftSettings); break;
+                case MenuControl.HdrDefaults:
+                    DraftSettings.hdrMode = 1; DraftSettings.hdrPeak = 1000; DraftSettings.hdrPaperWhite = 160; DraftSettings.hdrBlack = 0;
+                    break;
                 case MenuControl.ConfirmQuit:
                     // cLuxMainMenu::OnQuit with a map loaded: auto save first (a dead player is not saved).
                     if (!_ui.IsTitleScreen && _map.player != null && !_map.player.IsDead) HplSaveHandler.AutoSave(_map);

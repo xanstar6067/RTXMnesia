@@ -40,6 +40,9 @@ namespace RTXMnesia.Ui
         public bool bloom = true, imageTrail = true, radialBlur = true;
         /// <summary>Display gamma (HPL2 Graphics Gamma, 0.3–2, SDL_SetGamma); drawn by HplScreenEffectsPass.</summary>
         public float gamma = 1f;
+        /// <summary>Native HDR output: 0 off, 1 automatic, 2 on when supported. Global, outside profiles.</summary>
+        public int hdrMode = 1;
+        public float hdrPeak = 1000f, hdrPaperWhite = 160f, hdrBlack = 0f;
         /// <summary>Game option "Commentary" (user config Game ShowCommentary, off by default): developer commentary icons.</summary>
         public bool commentary;
 
@@ -130,6 +133,10 @@ namespace RTXMnesia.Ui
 
         public void Validate()
         {
+            hdrMode = Mathf.Clamp(hdrMode, 0, 2);
+            hdrPeak = HplHdr.Finite(hdrPeak, 1000, HplHdr.MinPeak, HplHdr.MaxPeak);
+            hdrPaperWhite = HplHdr.Finite(hdrPaperWhite, 160, HplHdr.MinWhite, HplHdr.MaxWhite);
+            hdrBlack = HplHdr.Finite(hdrBlack, 0, 0, HplHdr.MaxBlack);
             mouseSensitivity = float.IsNaN(mouseSensitivity) || float.IsInfinity(mouseSensitivity)
                 ? 1f : Mathf.Clamp(mouseSensitivity, 0.2f, 5f);
             masterVolume = float.IsNaN(masterVolume) || float.IsInfinity(masterVolume)

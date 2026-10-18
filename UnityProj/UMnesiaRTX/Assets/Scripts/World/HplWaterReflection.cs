@@ -273,6 +273,9 @@ namespace RTXMnesia.World
         /// <summary>The main camera's view mirrored in the surface plane, its projection with the near plane on the water.</summary>
         void PlaceMirror(Camera main, Surface s)
         {
+            // A mirror texture must stay scene-linear. HDRP applies display-gamut conversion / HDR encoding
+            // to Game cameras even when they target a texture; Reflection cameras bypass display output.
+            _mirror.cameraType = Hpl.HplHdr.Active ? CameraType.Reflection : CameraType.Game;
             // HPL2 renders the reflection with the world renderer: the sky box too.
             if (_mirror.TryGetComponent(out HDAdditionalCameraData mirrorData)) mirrorData.backgroundColorHDR = Hpl.HplLighting.BackgroundColor;
             var r = s.renderer;

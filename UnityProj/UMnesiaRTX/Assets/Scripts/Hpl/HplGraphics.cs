@@ -86,6 +86,7 @@ namespace RTXMnesia.Hpl
             }
             ApplyScreen(s);
             ApplyVolume();
+            HplHdr.Apply(s);
             foreach (var light in AmnesiaLight.All) ApplyShadows(light);
             if (changed) Changed?.Invoke();
         }
