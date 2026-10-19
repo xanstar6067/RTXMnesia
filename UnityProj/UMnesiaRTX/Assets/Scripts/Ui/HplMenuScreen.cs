@@ -709,7 +709,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.ImageTrail: DraftSettings.imageTrail = !DraftSettings.imageTrail; break;
                 case MenuControl.RadialBlur: DraftSettings.radialBlur = !DraftSettings.radialBlur; break;
                 case MenuControl.Lighting: case MenuControl.Textures: case MenuControl.Resolution: case MenuControl.ScreenMode:
-                case MenuControl.FpsLimit: case MenuControl.TextureQuality: case MenuControl.Anisotropy:
+                case MenuControl.FpsLimit: case MenuControl.TextureQuality: case MenuControl.TextureMemoryBudget: case MenuControl.Anisotropy:
                 case MenuControl.Antialiasing: case MenuControl.Shadows: case MenuControl.DlssMode: case MenuControl.DlssPreset: case MenuControl.RtShadows: case MenuControl.RtAo: case MenuControl.RtReflections: case MenuControl.RtGi: case MenuControl.RtAllShadows: case MenuControl.RtLanternShadows: case MenuControl.RtPathTracing:
                     OpenComboList(control);
                     break;

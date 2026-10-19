@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using RTXMnesia.Hpl;
 using UnityEngine;
 using UnityEngine.Rendering.HighDefinition;
 
@@ -20,6 +21,7 @@ namespace RTXMnesia.World
         readonly List<(Renderer renderer, Material[] originals, Material[] fade)> _items = new();
         public bool Fading { get; private set; }
         public float Alpha { get; private set; } = 1f;
+        int _textureMode = -1;
 
         /// <summary>The renderers of the entity's model: not billboards or the meshes of its lights.</summary>
         public static List<Renderer> ModelRenderers(Transform root)
@@ -56,11 +58,12 @@ namespace RTXMnesia.World
             {
                 if (renderer == null) continue;
                 var originals = renderer.sharedMaterials;
+                for (int i = 0; i < originals.Length; i++) originals[i] = HplEnhancedTextures.ClassicMaterial(originals[i]);
                 var fade = new Material[originals.Length];
                 bool any = false;
                 for (int i = 0; i < originals.Length; i++)
                 {
-                    fade[i] = FadeMaterial(originals[i]);
+                    fade[i] = FadeMaterial(HplEnhancedTextures.ResolveMaterial(originals[i], HplGraphics.Textures == 1));
                     any |= fade[i] != null;
                     if (fade[i] == null) fade[i] = originals[i];
                 }
@@ -76,11 +79,16 @@ namespace RTXMnesia.World
                 End();
                 return;
             }
-            if (!Fading)
+            if (!Fading || _textureMode != HplGraphics.Textures)
             {
                 Fading = true;
-                foreach (var (renderer, _, fade) in _items)
-                    if (renderer != null) renderer.sharedMaterials = fade;
+                _textureMode = HplGraphics.Textures;
+                foreach (var (renderer, originals, fade) in _items)
+                    if (renderer != null)
+                    {
+                        for (int i = 0; i < fade.Length; i++) fade[i] = FadeMaterial(HplEnhancedTextures.ResolveMaterial(originals[i], HplGraphics.Textures == 1)) ?? originals[i];
+                        renderer.sharedMaterials = fade;
+                    }
             }
             Alpha = alpha;
             Apply(alpha);
@@ -94,7 +102,11 @@ namespace RTXMnesia.World
             Fading = false;
             Apply(1f);
             foreach (var (renderer, originals, _) in _items)
-                if (renderer != null) renderer.sharedMaterials = originals;
+                if (renderer != null)
+                {
+                    renderer.sharedMaterials = originals;
+                    HplEnhancedTextures.Apply(renderer, HplGraphics.Textures == 1);
+                }
         }
 
         void Apply(float alpha)

@@ -18,7 +18,7 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows, RtPathTracing,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, TextureMemoryBudget, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows, RtPathTracing,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
@@ -812,7 +812,7 @@ namespace RTXMnesia.Ui
                         (settings.gamma - HplUserSettings.MinGamma) / (HplUserSettings.MaxGamma - HplUserSettings.MinGamma),
                         MenuControl.GammaLess, MenuControl.GammaMore, MenuControl.GammaSlider);
             y = top;
-            foreach (var c in new[] { MenuControl.TextureQuality, MenuControl.Anisotropy, MenuControl.Antialiasing, MenuControl.Shadows })
+            foreach (var c in new[] { MenuControl.TextureQuality, MenuControl.TextureMemoryBudget, MenuControl.Anisotropy, MenuControl.Antialiasing, MenuControl.Shadows })
             {
                 // With DLSS on (RTX tab) the anti-aliasing list shows "DLSS" and cannot be opened.
                 _disabled = c == MenuControl.Antialiasing && HplGraphicsOptions.DlssOn(settings);

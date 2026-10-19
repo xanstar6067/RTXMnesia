@@ -942,6 +942,8 @@ namespace RTXMnesia.ScriptApi
             if (prop == null) return null;
             prop.Load(this, PhysicsWorld);
             AddEntity(prop);
+            foreach (var renderer in go.GetComponentsInChildren<Renderer>(true))
+                HplEnhancedTextures.Apply(renderer, HplGraphics.Textures == 1);
             return prop;
         }
 

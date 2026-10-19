@@ -22,6 +22,7 @@ namespace RTXMnesia.Hpl
     {
         public static readonly int[] FpsLimits = { 0, 60, 120, 144, 240, 280, 360 };
         public static readonly int[] AnisotropyLevels = { 1, 2, 4, 8, 16 };
+        public static readonly int[] TextureMemoryBudgetsGb = { 2, 4, 8, 10, 12, 16 };
         /// <summary>Shadow choices: off, low, medium, high (cLuxMainMenu_Options shadows + ShadowQuality).</summary>
         public const int ShadowsOff = 0, ShadowsHigh = 3;
 
@@ -50,6 +51,9 @@ namespace RTXMnesia.Hpl
         static int s_savedMipLimit;
         static AnisotropicFiltering s_savedAniso;
         static int s_savedFrameRate;
+        static bool s_savedStreaming;
+        static float s_savedStreamingBudget;
+        static int s_savedStreamingReduction;
 #endif
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -78,6 +82,9 @@ namespace RTXMnesia.Hpl
             Application.targetFrameRate = s.fpsLimit > 0 ? s.fpsLimit : -1;
             // cLuxMainMenu_Options texture quality: High / Medium / Low = full size, half, quarter (mip limit).
             QualitySettings.globalTextureMipmapLimit = 2 - s.textureQuality;
+            QualitySettings.streamingMipmapsActive = true;
+            QualitySettings.streamingMipmapsMemoryBudget = s.textureMemoryBudgetGb * 1024f;
+            QualitySettings.streamingMipmapsMaxLevelReduction = 4;
             int aniso = AnisotropyLevels[s.anisotropy];
             if (aniso <= 1) QualitySettings.anisotropicFiltering = AnisotropicFiltering.Disable;
             else
@@ -159,6 +166,8 @@ namespace RTXMnesia.Hpl
             RenderPipelineManager.beginContextRendering += OnBeginContextRendering;
 #if UNITY_EDITOR
             Application.quitting += RestoreEditorQuality;
+            UnityEditor.EditorApplication.playModeStateChanged -= OnEditorPlayState;
+            UnityEditor.EditorApplication.playModeStateChanged += OnEditorPlayState;
 #endif
         }
 
@@ -226,10 +235,17 @@ namespace RTXMnesia.Hpl
             s_savedMipLimit = QualitySettings.globalTextureMipmapLimit;
             s_savedAniso = QualitySettings.anisotropicFiltering;
             s_savedFrameRate = Application.targetFrameRate;
+            s_savedStreaming = QualitySettings.streamingMipmapsActive;
+            s_savedStreamingBudget = QualitySettings.streamingMipmapsMemoryBudget;
+            s_savedStreamingReduction = QualitySettings.streamingMipmapsMaxLevelReduction;
 #endif
         }
 
 #if UNITY_EDITOR
+        static void OnEditorPlayState(UnityEditor.PlayModeStateChange state)
+        {
+            if (state == UnityEditor.PlayModeStateChange.ExitingPlayMode) RestoreEditorQuality();
+        }
         /// <summary>Leaving Play in the editor: the project's quality settings as they were.</summary>
         static void RestoreEditorQuality()
         {
@@ -238,6 +254,9 @@ namespace RTXMnesia.Hpl
             QualitySettings.globalTextureMipmapLimit = s_savedMipLimit;
             QualitySettings.anisotropicFiltering = s_savedAniso;
             Application.targetFrameRate = s_savedFrameRate;
+            QualitySettings.streamingMipmapsActive = s_savedStreaming;
+            QualitySettings.streamingMipmapsMemoryBudget = s_savedStreamingBudget;
+            QualitySettings.streamingMipmapsMaxLevelReduction = s_savedStreamingReduction;
         }
 #endif
     }

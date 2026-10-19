@@ -13,7 +13,11 @@ namespace RTXMnesia.Hpl
         public struct Entry
         {
             public Material classic;
-            public Material enhanced;
+            public string enhancedResource;
+            [UnityEngine.Serialization.FormerlySerializedAs("enhanced")]
+            [SerializeField] Material legacyEnhanced;
+            public Material enhanced => !string.IsNullOrEmpty(enhancedResource) ? Resources.Load<Material>(enhancedResource) : legacyEnhanced;
+            public void ClearLegacyReference() => legacyEnhanced = null;
         }
         public Entry[] entries = Array.Empty<Entry>();
     }
@@ -23,6 +27,8 @@ namespace RTXMnesia.Hpl
     {
         static HplTextureSet s_catalog;
         static readonly Dictionary<Material, Material> s_forward = new();
+        static readonly Dictionary<Material, HplTextureSet.Entry> s_entries = new();
+        static readonly Dictionary<Texture, List<HplTextureSet.Entry>> s_textureEntries = new();
         static readonly Dictionary<Material, Material> s_reverse = new();
         static readonly List<Material> s_variants = new();
         static bool s_initialized;
@@ -35,6 +41,8 @@ namespace RTXMnesia.Hpl
             HplGraphics.Changed += OnChanged;
             SceneManager.sceneLoaded -= OnSceneLoaded;
             SceneManager.sceneLoaded += OnSceneLoaded;
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
             Application.quitting -= Shutdown;
             Application.quitting += Shutdown;
 #if UNITY_EDITOR
@@ -52,18 +60,56 @@ namespace RTXMnesia.Hpl
             if (s_catalog == null) return;
             foreach (var entry in s_catalog.entries)
             {
-                if (entry.classic == null || entry.enhanced == null) continue;
-                s_forward[entry.classic] = entry.enhanced;
-                s_reverse[entry.enhanced] = entry.classic;
+                if (entry.classic == null) continue;
+                s_entries[entry.classic] = entry;
+                var texture = entry.classic.HasProperty("_BaseColorMap") ? entry.classic.GetTexture("_BaseColorMap") : null;
+                if (texture == null) continue;
+                if (!s_textureEntries.TryGetValue(texture, out var candidates)) s_textureEntries[texture] = candidates = new();
+                candidates.Add(entry);
             }
         }
 
-        static void OnChanged() => ApplyLoadedScenes(HplGraphics.Textures == 1);
+        static void OnChanged()
+        {
+            ApplyLoadedScenes(HplGraphics.Textures == 1);
+            if (HplGraphics.Textures == 0)
+            {
+                bool hadEnhanced = s_forward.Count > 0;
+                ReleaseMaterials();
+                if (hadEnhanced && Application.isPlaying) Resources.UnloadUnusedAssets();
+            }
+        }
         static void OnSceneLoaded(Scene scene, LoadSceneMode mode) => ApplyScene(scene, HplGraphics.Textures == 1);
+        static void OnSceneUnloaded(Scene scene)
+        {
+            // Drop materials belonging to the previous map before the next map is activated.
+            ApplyLoadedScenes(false);
+            ReleaseMaterials();
+            if (HplGraphics.Textures == 1) ApplyLoadedScenes(true);
+            Resources.UnloadUnusedAssets();
+        }
+        public static int LoadedMaterialCount => s_forward.Count;
+        public static Material ClassicMaterial(Material material) => material != null && s_reverse.TryGetValue(material, out var classic) ? classic : material;
+
+        public static Material ResolveMaterial(Material original, bool enhanced)
+        {
+            if (original == null) return null;
+            Initialize();
+            if (!enhanced) return ClassicMaterial(original);
+            if (s_reverse.ContainsKey(original)) return original;
+            if (s_forward.TryGetValue(original, out var cached)) return cached;
+            if (!s_entries.TryGetValue(original, out var entry)) return Variant(original) ?? original;
+            var replacement = entry.enhanced;
+            if (replacement == null) return original;
+            s_forward[original] = replacement;
+            s_reverse[replacement] = original;
+            return replacement;
+        }
 
         public static void ApplyLoadedScenes(bool enhanced)
         {
-            for (int i = 0; i < SceneManager.sceneCount; i++) ApplyScene(SceneManager.GetSceneAt(i), enhanced);
+            // Includes runtime hands and other DontDestroyOnLoad renderers.
+            foreach (var renderer in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include)) Apply(renderer, enhanced);
             // A stationary path-tracing camera must not keep accumulating the previous material set.
             if (UnityEngine.Rendering.RenderPipelineManager.currentPipeline is
                 UnityEngine.Rendering.HighDefinition.HDRenderPipeline hdrp) hdrp.ResetPathTracing();
@@ -81,21 +127,14 @@ namespace RTXMnesia.Hpl
         {
             if (renderer == null) return;
             Initialize();
-            if (s_forward.Count == 0) return;
+            if (s_entries.Count == 0) return;
             var materials = renderer.sharedMaterials;
             bool changed = false;
             for (int i = 0; i < materials.Length; i++)
             {
                 var original = materials[i];
                 if (original == null) continue;
-                Material replacement;
-                if (enhanced)
-                {
-                    if (s_reverse.ContainsKey(original)) continue;
-                    if (!s_forward.TryGetValue(original, out replacement))
-                        replacement = Variant(original);
-                }
-                else s_reverse.TryGetValue(original, out replacement);
+                var replacement = ResolveMaterial(original, enhanced);
                 if (replacement == null || replacement == original) continue;
                 materials[i] = replacement;
                 changed = true;
@@ -108,17 +147,27 @@ namespace RTXMnesia.Hpl
         static Material Variant(Material original)
         {
             if (s_catalog == null || original.shader == null || original.shader.name != "HDRP/Lit" ||
-                original.GetFloat("_SurfaceType") != 0 || !original.HasProperty("_BaseColorMap")) return null;
+                    original.GetFloat("_SurfaceType") != 0 || !original.HasProperty("_BaseColorMap")) return null;
             var texture = original.GetTexture("_BaseColorMap");
-            if (texture == null) return null;
-            foreach (var entry in s_catalog.entries)
+            if (texture == null || !s_textureEntries.TryGetValue(texture, out var entries)) return null;
+            foreach (var entry in entries)
             {
-                if (entry.classic == null || entry.enhanced == null || entry.classic.GetTexture("_BaseColorMap") != texture) continue;
-                var copy = new Material(entry.enhanced) { name = original.name + " (enhanced)", hideFlags = HideFlags.HideAndDontSave };
-                copy.SetColor("_BaseColor", original.GetColor("_BaseColor"));
-                // HDRP's maps share the base UV transform.
-                copy.SetTextureScale("_BaseColorMap", original.GetTextureScale("_BaseColorMap"));
-                copy.SetTextureOffset("_BaseColorMap", original.GetTextureOffset("_BaseColorMap"));
+                if (entry.classic == null || entry.classic.GetTexture("_BaseColorMap") != texture ||
+                    entry.classic.GetTexture("_HeightMap") != original.GetTexture("_HeightMap") ||
+                    entry.classic.GetTexture("_EmissiveColorMap") != original.GetTexture("_EmissiveColorMap") ||
+                    entry.classic.GetFloat("_AlphaCutoffEnable") != original.GetFloat("_AlphaCutoffEnable") ||
+                    entry.classic.GetFloat("_AlphaCutoff") != original.GetFloat("_AlphaCutoff") ||
+                    entry.classic.GetFloat("_DoubleSidedEnable") != original.GetFloat("_DoubleSidedEnable")) continue;
+                var enhanced = entry.enhanced;
+                if (enhanced == null) continue;
+                // Start from the particular clone: emission, tint, UVs and culling can differ even when albedo is shared.
+                var copy = new Material(original) { name = original.name + " (enhanced)", hideFlags = HideFlags.HideAndDontSave };
+                foreach (string property in new[] { "_BaseColorMap", "_NormalMap", "_MaskMap", "_HeightMap", "_SpecularColorMap" })
+                    copy.SetTexture(property, enhanced.GetTexture(property));
+                foreach (string property in new[] { "_MaterialID", "_NormalScale", "_Metallic", "_MetallicRemapMin", "_MetallicRemapMax", "_AORemapMin", "_AORemapMax", "_SmoothnessRemapMin", "_SmoothnessRemapMax",
+                    "_DisplacementMode", "_HeightPoMAmplitude", "_HeightAmplitude", "_HeightCenter", "_PPDMinSamples", "_PPDMaxSamples" })
+                    copy.SetFloat(property, enhanced.GetFloat(property));
+                UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(copy);
                 s_forward[original] = copy;
                 s_reverse[copy] = original;
                 s_variants.Add(copy);
@@ -130,6 +179,19 @@ namespace RTXMnesia.Hpl
         public static void Shutdown()
         {
             ApplyLoadedScenes(false);
+            ReleaseMaterials();
+            s_entries.Clear();
+            s_textureEntries.Clear();
+            s_catalog = null;
+            s_initialized = false;
+            HplGraphics.Changed -= OnChanged;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            Application.quitting -= Shutdown;
+        }
+
+        static void ReleaseMaterials()
+        {
             foreach (var material in s_variants)
                 if (material != null)
                 {
@@ -139,11 +201,6 @@ namespace RTXMnesia.Hpl
             s_variants.Clear();
             s_forward.Clear();
             s_reverse.Clear();
-            s_catalog = null;
-            s_initialized = false;
-            HplGraphics.Changed -= OnChanged;
-            SceneManager.sceneLoaded -= OnSceneLoaded;
-            Application.quitting -= Shutdown;
         }
 #if UNITY_EDITOR
         static void OnPlayModeChanged(UnityEditor.PlayModeStateChange state)

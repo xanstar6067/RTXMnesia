@@ -48,6 +48,8 @@ namespace RTXMnesia.Ui
         public int rtPathTracing;
         /// <summary>0 — low, 1 — medium, 2 — high (cLuxMainMenu_Options texture quality).</summary>
         public int textureQuality = 2;
+        /// <summary>Streaming texture memory budget in GiB; shared graphics setting, outside profiles.</summary>
+        public int textureMemoryBudgetGb = 2;
         /// <summary>Index of <see cref="HplGraphics.AnisotropyLevels"/> (8× — the import default).</summary>
         public int anisotropy = 3;
         /// <summary><see cref="HplAntialiasing"/>.</summary>
@@ -177,6 +179,7 @@ namespace RTXMnesia.Ui
             rtGi = Mathf.Clamp(rtGi, 0, HplRayTracing.GiLevels - 1);
             rtPathTracing = Mathf.Clamp(rtPathTracing, 0, HplRayTracing.PathTracingSamples.Length - 1);
             textureQuality = Mathf.Clamp(textureQuality, 0, 2);
+            if (Array.IndexOf(HplGraphics.TextureMemoryBudgetsGb, textureMemoryBudgetGb) < 0) textureMemoryBudgetGb = 2;
             anisotropy = Mathf.Clamp(anisotropy, 0, HplGraphics.AnisotropyLevels.Length - 1);
             antialiasing = Mathf.Clamp(antialiasing, 0, (int)HplAntialiasing.Taa);
             shadows = Mathf.Clamp(shadows, HplGraphics.ShadowsOff, HplGraphics.ShadowsHigh);

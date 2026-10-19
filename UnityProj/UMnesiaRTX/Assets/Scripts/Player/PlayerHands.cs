@@ -81,6 +81,8 @@ namespace RTXMnesia.Player
                 o.entity.gameObject.SetActive(false);
                 _objects[o.name] = new HandObject { Data = o, Entity = o.entity };
             }
+            foreach (var renderer in go.GetComponentsInChildren<Renderer>(true))
+                HplEnhancedTextures.Apply(renderer, HplGraphics.Textures == 1);
         }
 
         /// <summary>The hands of the player, or null (with one warning) if the resources are not imported.</summary>

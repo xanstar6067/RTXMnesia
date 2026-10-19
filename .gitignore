@@ -36,6 +36,10 @@ Desktop.ini
 *.pdb
 *.mdb
 
+# Python batch tools
+__pycache__/
+*.py[cod]
+
 # Local credentials and agent state
 .env
 .env.*

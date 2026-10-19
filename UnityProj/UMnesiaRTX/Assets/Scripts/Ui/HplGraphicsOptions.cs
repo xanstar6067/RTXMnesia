@@ -72,6 +72,10 @@ namespace RTXMnesia.Ui
                     foreach (int level in HplGraphics.AnisotropyLevels) items.Add(new HplComboItem(level > 1 ? level + "x" : t("OptionsMenu", "Off", "Выкл")));
                     current = s.anisotropy;
                     break;
+                case MenuControl.TextureMemoryBudget:
+                    foreach (int gb in HplGraphics.TextureMemoryBudgetsGb) items.Add(new HplComboItem(gb + " ГБ"));
+                    current = Array.IndexOf(HplGraphics.TextureMemoryBudgetsGb, s.textureMemoryBudgetGb);
+                    break;
                 case MenuControl.Antialiasing when DlssOn(s):
                     // DLSS (RTX tab) does the anti-aliasing; turned off there, the earlier choice comes back.
                     items.Add(new HplComboItem("DLSS", false));
@@ -159,6 +163,7 @@ namespace RTXMnesia.Ui
             MenuControl.ScreenMode => t("OptionsMenu", "Screen", "Экран"),
             MenuControl.FpsLimit => "Ограничение FPS",
             MenuControl.TextureQuality => t("OptionsMenu", "TexQuality", "Качество текстур"),
+            MenuControl.TextureMemoryBudget => "Бюджет видеопамяти",
             MenuControl.Anisotropy => t("OptionsMenu", "Anisotropy", "Анизотропная фильтрация"),
             MenuControl.Antialiasing => t("OptionsMenu", "FullscreenSmooth", "Сглаживание"),
             MenuControl.Shadows => t("OptionsMenu", "Shadows", "Тени"),
@@ -216,6 +221,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.ScreenMode: s.screenMode = index; break;
                 case MenuControl.FpsLimit: s.fpsLimit = HplGraphics.FpsLimits[index]; break;
                 case MenuControl.TextureQuality: s.textureQuality = index; break;
+                case MenuControl.TextureMemoryBudget: s.textureMemoryBudgetGb = HplGraphics.TextureMemoryBudgetsGb[index]; break;
                 case MenuControl.Anisotropy: s.anisotropy = index; break;
                 case MenuControl.Antialiasing: s.antialiasing = index; break;
                 case MenuControl.Shadows: s.shadows = index; break;
