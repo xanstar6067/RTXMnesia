@@ -14,7 +14,7 @@ namespace RTXMnesia.Hpl
     /// <summary>
     /// Applies the graphics part of <see cref="HplUserSettings"/>: screen (mode, resolution, VSync, FPS limit), texture
     /// quality and anisotropy, camera anti-aliasing, shadows, bloom and the blur post effects. The lighting and texture
-    /// sets (classic now; enhanced ones later) are kept here so that renderers and importers can ask for them.
+    /// sets are kept here so that renderers and importers can ask for them.
     /// Settings are applied at startup (before the first scene) and again whenever a map's UI applies them.
     /// Quality settings are only changed in Play: in the editor they would be written to ProjectSettings.
     /// </summary>
@@ -27,7 +27,7 @@ namespace RTXMnesia.Hpl
 
         /// <summary>The lighting set: 0 — classic (HPL2 conversion). Enhanced lighting comes later.</summary>
         public static int Lighting { get; private set; }
-        /// <summary>The texture set: 0 — classic (the game's textures). Enhanced textures come later.</summary>
+        /// <summary>The texture set: 0 — classic, 1 — enhanced PBR, with classic fallback for missing replacements.</summary>
         public static int Textures { get; private set; }
         public static HplAntialiasing Antialiasing { get; private set; } = HplAntialiasing.Taa;
         public static int Shadows { get; private set; } = ShadowsHigh;

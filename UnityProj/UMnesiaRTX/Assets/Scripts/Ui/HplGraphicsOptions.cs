@@ -42,7 +42,7 @@ namespace RTXMnesia.Ui
                     break;
                 case MenuControl.Textures:
                     items.Add(new HplComboItem("Классические"));
-                    items.Add(new HplComboItem("Улучшенные (в разработке)", false));
+                    items.Add(new HplComboItem("Улучшенные"));
                     current = s.textures;
                     break;
                 case MenuControl.Resolution:
