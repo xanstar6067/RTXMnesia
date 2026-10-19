@@ -123,7 +123,7 @@ namespace RTXMnesia.EditorDev
                     for (int i = 0; i < item.Value.Length; i++)
                         if (item.Value[i] != null && pairs.TryGetValue(AssetDatabase.GetAssetPath(item.Value[i]), out var pair))
                         {
-                            if (current[i] != pair.enhanced) throw new InvalidOperationException(relative + ": missed slot " + item.Value[i].name);
+                            if (HplEnhancedRelief.SurfaceMaterial(current[i]) != pair.enhanced) throw new InvalidOperationException(relative + ": missed slot " + item.Value[i].name);
                             slotCount++;
                         }
                 }
@@ -210,7 +210,7 @@ namespace RTXMnesia.EditorDev
                 int targets = snapshots.Count(p => p.Value.Contains(Classic));
                 Check(targets > 0, map + ": contains the original castle stone (" + targets + " renderers)");
                 HplEnhancedTextures.ApplyScene(scene, true);
-                Check(snapshots.Where(p => p.Value.Contains(Classic)).All(p => p.Key.sharedMaterials.Contains(Enhanced)), map + ": all matching walls replaced");
+                Check(snapshots.Where(p => p.Value.Contains(Classic)).All(p => p.Key.sharedMaterials.Select(HplEnhancedRelief.SurfaceMaterial).Contains(Enhanced)), map + ": all matching walls replaced");
                 HplEnhancedTextures.ApplyScene(scene, false);
                 Check(Same(snapshots), map + ": all slots restored to exact original references");
             }
@@ -219,7 +219,7 @@ namespace RTXMnesia.EditorDev
         }
 
         static Dictionary<Renderer, Material[]> Snapshot(Scene scene) => scene.GetRootGameObjects()
-            .SelectMany(go => go.GetComponentsInChildren<Renderer>(true)).ToDictionary(r => r, r => r.sharedMaterials);
+            .SelectMany(go => go.GetComponentsInChildren<Renderer>(true)).ToDictionary(r => r, r => r.sharedMaterials.Select(HplEnhancedRelief.SurfaceMaterial).ToArray());
         static bool Same(Dictionary<Renderer, Material[]> snapshot) => snapshot.All(p => p.Key.sharedMaterials.SequenceEqual(p.Value));
 
         static void TestSlots()
@@ -302,7 +302,7 @@ namespace RTXMnesia.EditorDev
                     // Restore the exact original key in all exit paths, without writing any profile file.
                     PlayerPrefs.SetString(HplUserSettings.PrefsKey, JsonUtility.ToJson(settings));
                     HplGraphics.Apply(settings);
-                    Check(walls.All(r => r.sharedMaterials.Contains(Enhanced)), "Play: graphics Apply changes live material slots");
+                    Check(walls.All(r => r.sharedMaterials.Select(HplEnhancedRelief.SurfaceMaterial).Contains(Enhanced)), "Play: graphics Apply changes live material slots");
                     int totalMaterials = Resources.Load<HplTextureSet>(HplTextureSet.ResourceName).entries.Length;
                     Check(HplEnhancedTextures.LoadedMaterialCount > 0 && HplEnhancedTextures.LoadedMaterialCount < totalMaterials,
                         "Play: loads only materials used in this map");

@@ -7,6 +7,8 @@
 # Amnesia content converted into Unity (generated from source/, never committed)
 **/Assets/AmnesiaImported/
 **/Assets/AmnesiaImported.meta
+**/Assets/_Recovery/
+**/Assets/_Recovery.meta
 
 # Unity-generated folders (projects can be nested)
 **/[Ll]ibrary/

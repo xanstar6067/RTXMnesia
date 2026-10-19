@@ -24,13 +24,11 @@ namespace RTXMnesia.World
         static CustomPassVolume _volume;
         static bool _warnedCount;
 
-        static readonly ShaderTagId[] Tags = { new("GBuffer"), new("Forward") };
-        static readonly int CountId = Shader.PropertyToID("_HplBoxCount");
-        static readonly int CenterId = Shader.PropertyToID("_HplBoxCenter");
-        static readonly int ExtentId = Shader.PropertyToID("_HplBoxExtent");
-        static readonly int ColorId = Shader.PropertyToID("_HplBoxColor");
-        static readonly int UnitRadianceId = Shader.PropertyToID("_HplUnitRadiance");
-        static readonly int AoId = Shader.PropertyToID("_HplBoxAo");
+        // CustomPass instances can first be constructed by Unity's serializer during a domain reload.
+        // ShaderTagId calls native TagToID, which is forbidden there and would poison the static type
+        // initializer until the next reload. Initialize native rendering identifiers from Setup instead.
+        static ShaderTagId[] Tags;
+        static int CountId, CenterId, ExtentId, ColorId, UnitRadianceId, AoId;
 
         readonly Vector4[] _centers = new Vector4[MaxBoxes];
         readonly Vector4[] _extents = new Vector4[MaxBoxes];
@@ -57,6 +55,16 @@ namespace RTXMnesia.World
 
         protected override void Setup(ScriptableRenderContext renderContext, CommandBuffer cmd)
         {
+            if (Tags == null)
+            {
+                Tags = new ShaderTagId[] { new("GBuffer"), new("Forward") };
+                CountId = Shader.PropertyToID("_HplBoxCount");
+                CenterId = Shader.PropertyToID("_HplBoxCenter");
+                ExtentId = Shader.PropertyToID("_HplBoxExtent");
+                ColorId = Shader.PropertyToID("_HplBoxColor");
+                UnitRadianceId = Shader.PropertyToID("_HplUnitRadiance");
+                AoId = Shader.PropertyToID("_HplBoxAo");
+            }
             _shader = Shader.Find(ShaderName);
             if (_shader == null) Debug.LogError("[RTXMnesia] Shader " + ShaderName + " not found: box lights are off");
         }
