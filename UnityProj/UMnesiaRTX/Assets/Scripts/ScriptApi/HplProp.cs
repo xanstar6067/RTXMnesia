@@ -706,9 +706,7 @@ namespace RTXMnesia.ScriptApi
         // mvParticleSystems (null once destroyed) and cLuxProp_PSData to create them again when the effects go on.
         readonly List<Particles.HplParticleSystem> _particleSystems = new();
         readonly List<(string name, string dataName, Matrix4x4 local, Transform parent)> _psData = new();
-        readonly List<(Renderer renderer, int index, Color emissive)> _illumination = new();
-        float _illuminationAmount = float.NaN;
-        MaterialPropertyBlock _block;
+        readonly List<HplEmission> _illumination = new();
 
         void SetupEffectData()
         {
@@ -740,7 +738,10 @@ namespace RTXMnesia.ScriptApi
                     if (m == null || !m.HasProperty("_EmissiveColor")) continue;
                     Color e = m.GetColor("_EmissiveColor");
                     if (e.maxColorComponent <= 0f) continue;
-                    _illumination.Add((renderer, i, e));
+                    if (!renderer.TryGetComponent<HplEmission>(out var emission)) emission = renderer.gameObject.AddComponent<HplEmission>();
+                    emission.Initialize(renderer);
+                    _illumination.Add(emission);
+                    break;
                 }
             }
         }
@@ -804,6 +805,7 @@ namespace RTXMnesia.ScriptApi
                 }
                 if (!fadeAndPlaySounds) EffectsAlpha = 0f;
             }
+            if (!fadeAndPlaySounds) ApplyEffectAppearance();
             if (Map.sound == null) return;
             foreach (var sound in Map.SoundEntitiesUnder(GameObject.transform))
             {
@@ -842,26 +844,24 @@ namespace RTXMnesia.ScriptApi
                 }
             }
 
+            ApplyEffectAppearance();
+        }
+
+        void ApplyEffectAppearance()
+        {
             foreach (var (billboard, onColor, connected) in _billboards)
                 if (!connected && billboard != null) billboard.SetColor(onColor * EffectsAlpha);
 
             SetIlluminationAmount(EffectsAlpha);
         }
 
-        /// <summary>cMeshEntity::SetIlluminationAmount: emission × amount (property blocks).</summary>
+        /// <summary>cMeshEntity::SetIlluminationAmount: emission × amount, visible to every HDRP pass.</summary>
         void SetIlluminationAmount(float amount)
         {
-            // Only a change: every property block write marks the material changed for HDRP's path tracer.
-            if (_illumination.Count == 0 || amount == _illuminationAmount) return;
-            _illuminationAmount = amount;
-            _block ??= new MaterialPropertyBlock();
-            foreach (var (renderer, index, emissive) in _illumination)
-            {
-                if (renderer == null) continue;
-                renderer.GetPropertyBlock(_block, index);
-                _block.SetColor("_EmissiveColor", emissive * amount);
-                renderer.SetPropertyBlock(_block, index);
-            }
+            // HplEmission skips unchanged values. Do not cache the amount in the prop's saved plain fields:
+            // a restored cache could skip applying it to freshly created materials.
+            foreach (var emission in _illumination)
+                if (emission != null) emission.SetAmount(amount);
         }
 
         protected void SetMeshVisible(bool visible)

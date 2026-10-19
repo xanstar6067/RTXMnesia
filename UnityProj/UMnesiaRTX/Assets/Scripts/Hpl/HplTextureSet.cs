@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using RTXMnesia.World;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -126,6 +127,11 @@ namespace RTXMnesia.Hpl
         public static void Apply(Renderer renderer, bool enhanced)
         {
             if (renderer == null) return;
+            if (renderer.TryGetComponent<HplEmission>(out var emission))
+            {
+                emission.ApplyTextureSet(enhanced);
+                return;
+            }
             Initialize();
             if (s_entries.Count == 0) return;
             var materials = renderer.sharedMaterials;

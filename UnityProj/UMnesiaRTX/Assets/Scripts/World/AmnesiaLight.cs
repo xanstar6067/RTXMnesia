@@ -179,19 +179,11 @@ namespace RTXMnesia.World
 
         public bool FlickerActive => _runtime ? _flickering : flickerActive;
 
-        /// <summary>iLight::SetDiffuseColor (also the color flicker returns to).</summary>
-        public void SetColor(Color color)
-        {
-            _flickerOnColor = color;
-            SetColorAndRadius(color, _radius);
-        }
+        /// <summary>iLight::SetDiffuseColor: changes the current color, preserving the configured flicker on color.</summary>
+        public void SetColor(Color color) => SetColorAndRadius(color, _radius);
 
-        /// <summary>iLight::SetRadius (also the radius flicker returns to).</summary>
-        public void SetRadius(float lightRadius)
-        {
-            _flickerOnRadius = lightRadius;
-            SetColorAndRadius(_color, lightRadius);
-        }
+        /// <summary>iLight::SetRadius: changes the current radius, preserving the configured flicker on radius.</summary>
+        public void SetRadius(float lightRadius) => SetColorAndRadius(_color, lightRadius);
 
         public void StopFading() => _fadeTime = 0f;
 
@@ -230,6 +222,10 @@ namespace RTXMnesia.World
         /// <summary>cEngineLight_SaveData::ToLight.</summary>
         public void Restore(SaveData d)
         {
+            // cEngineLight_SaveData::ToLight calls SetFlicker after setting color/radius: its on values are
+            // captured from the save. Ordinary SetColor/SetRadius must not capture them (an unlit lamp uses zero).
+            _flickerOnColor = d.color;
+            _flickerOnRadius = d.radius;
             SetVisible(d.visible);
             SetColor(d.color);
             SetRadius(d.radius);
