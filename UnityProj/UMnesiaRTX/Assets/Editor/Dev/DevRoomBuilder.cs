@@ -173,6 +173,7 @@ namespace RTXMnesia.EditorDev
             fill.intensity = 60;
             fill.shadows = LightShadows.None;
             fill.gameObject.AddComponent<HDAdditionalLightData>();
+            DevRoomReliefBuilder.Add(root);
             AssetDatabase.SaveAssets();
         }
 
