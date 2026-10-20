@@ -16,6 +16,7 @@ namespace RTXMnesia.Dev
         public Label[] labels = Array.Empty<Label>();
         public Behaviour[] inspectionLights = Array.Empty<Behaviour>();
         public MeshFilter[] flat = Array.Empty<MeshFilter>(), relief = Array.Empty<MeshFilter>();
+        public MeshFilter[] masonry = Array.Empty<MeshFilter>();
         public bool InspectionEnabled { get; private set; } = true;
         HplMap _map;
         GUIStyle _style;
@@ -47,9 +48,9 @@ namespace RTXMnesia.Dev
                 var point = camera.WorldToScreenPoint(label.anchor.position);
                 if (point.z > 0) GUI.Label(new Rect(point.x / scale - 135, (Screen.height - point.y) / scale - 26, 270, 52), label.text, _style);
             }
-            GUI.Box(new Rect(12, Screen.height / scale - 80, 730, 68),
-                "СТЕНД РЕЛЬЕФА · обе стороны используют улучшенные текстуры\n" +
-                "Слева: плоская геометрия · справа: настоящий рельеф · POM выключен\n" +
+            GUI.Box(new Rect(12, Screen.height / scale - 80, 850, 68),
+                "СТЕНД РЕЛЬЕФА · улучшенные текстуры · POM выключен\n" +
+                "Кладка слева направо: 1 — плоско · 2 — прежний рельеф · 3 — отдельные камни\n" +
                 "F4: " + (InspectionEnabled ? "выключить проверочный свет, оставить свой фонарь" : "включить проверочный свет"));
             GUI.matrix = previous;
         }
