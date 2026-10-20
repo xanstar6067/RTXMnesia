@@ -30,6 +30,49 @@ namespace RTXMnesia.EditorDev
             new[] { .99f, .12f, .36f, .6f, .79f, .97f });
         static Vector2[] Rows(params float[][] rows) => rows.SelectMany(r => r.Skip(1).Select(x => new Vector2(x, 1 - r[0]))).ToArray();
 
+        public static Mesh BuildBoards()
+        {
+            // This texture's eight courses and staggered end joints, measured in image coordinates.
+            float[] rows = { 0, .130f, .255f, .382f, .505f, .632f, .757f, .882f, 1 };
+            float[] ends = { .151f, .976f, .475f, .980f, .305f, .882f, .624f, .125f };
+            const float halfGap = .002f / Width, back = -.009f;
+            var vertices = new List<Vector3>(); var uv = new List<Vector2>();
+            var tops = new List<int>(); var sides = new List<int>();
+            Vector3 Point(Vector2 p, float height) => new Vector3((p.x - .5f) * Width, (p.y - .5f) * Width, -height);
+            void Quad(Vector3[] p, Vector2[] tex, List<int> target)
+            {
+                int first = vertices.Count;
+                vertices.AddRange(p); uv.AddRange(tex);
+                target.AddRange(new[] { first, first + 1, first + 2, first, first + 2, first + 3 });
+            }
+            for (int row = 0; row < ends.Length; row++) for (int piece = 0; piece < 2; piece++)
+            {
+                float x0 = piece == 0 ? 0 : ends[row] + halfGap, x1 = piece == 0 ? ends[row] - halfGap : 1;
+                float y0 = 1 - rows[row + 1] + (row == 7 ? 0 : halfGap);
+                float y1 = 1 - rows[row] - (row == 0 ? 0 : halfGap);
+                var tex = new[] { new Vector2(x0, y0), new Vector2(x0, y1), new Vector2(x1, y1), new Vector2(x1, y0) };
+                float h = .009f + Mathf.Sin(row * 3.7f + piece) * .0015f;
+                var front = tex.Select(p => Point(p, h)).ToArray();
+                var bottom = tex.Select(p => Point(p, back)).ToArray();
+                Quad(front, tex, tops);
+                Quad(bottom.Reverse().ToArray(), tex.Reverse().ToArray(), sides);
+                var center = (tex[0] + tex[2]) * .5f;
+                for (int edge = 0; edge < 4; edge++)
+                {
+                    int next = (edge + 1) % 4;
+                    Quad(new[] { front[edge], bottom[edge], bottom[next], front[next] },
+                        new[] { tex[edge], Vector2.Lerp(tex[edge], center, .03f), Vector2.Lerp(tex[next], center, .03f), tex[next] }, sides);
+                }
+            }
+            var baseUv = new[] { Vector2.zero, Vector2.up, Vector2.one, Vector2.right };
+            Quad(baseUv.Select(p => Point(p, back - .001f)).ToArray(), baseUv, sides);
+            var mesh = new Mesh { name = "Straight edged floor boards" };
+            mesh.SetVertices(vertices); mesh.SetUVs(0, uv); mesh.subMeshCount = 2;
+            mesh.SetTriangles(tops, 0); mesh.SetTriangles(sides, 1);
+            mesh.RecalculateNormals(); mesh.RecalculateTangents(); mesh.RecalculateBounds();
+            return mesh;
+        }
+
         public static Mesh Build(Texture2D height, Vector2 lo, Vector2 hi, bool wall)
         {
             var seeds = wall ? WallSeeds : FloorSeeds;
@@ -50,12 +93,16 @@ namespace RTXMnesia.EditorDev
             int Index(Vector2 p) => Mathf.Clamp(Mathf.RoundToInt(p.y * (Size - 1)), 0, Size - 1) * Size + Mathf.Clamp(Mathf.RoundToInt(p.x * (Size - 1)), 0, Size - 1);
             var labels = SegmentCourses(field, seeds, wall);
             var stoneMask = StoneMask(field, labels, seeds, Index);
+            // Remove sub-centimetre tendrils and fill tiny bites before the bevel. They are
+            // texture noise, not plausible stone silhouettes. Distances are measured in metres.
+            stoneMask = RegularizeMask(stoneMask, panelHeight / Width);
             var distance = BoundaryDistance(stoneMask, panelHeight / Width);
             var outside = BoundaryDistance(stoneMask.Select(v => !v).ToArray(), panelHeight / Width);
             var elevations = new float[seeds.Length];
             for (int i = 0; i < elevations.Length; i++)
                 elevations[i] = (wall ? .035f : .021f) + Mathf.Sin(i * 7.31f) * (wall ? .004f : .003f);
             var vertices = new List<Vector3>(); var uvs = new List<Vector2>(); var triangles = new List<int>();
+            var weights = new List<Color>();
             var sides = new List<int>();
             for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
             {
@@ -70,6 +117,7 @@ namespace RTXMnesia.EditorDev
                 float h = Mathf.Lerp(mortar, face, shoulder);
                 vertices.Add(new Vector3((point.x - .5f) * Width, (point.y - .5f) * panelHeight, -h));
                 uvs.Add(Uv(point));
+                weights.Add(new Color(Mathf.SmoothStep(0, 1, Mathf.InverseLerp(.45f, .95f, shoulder)), 0, 0, 1));
                 if (x < Size - 1 && y < Size - 1)
                 {
                     triangles.Add(p); triangles.Add(p + Size); triangles.Add(p + 1);
@@ -100,6 +148,8 @@ namespace RTXMnesia.EditorDev
             }
             var mesh = new Mesh { name = wall ? "Stone wall with recessed mortar" : "Stone paving with recessed mortar", indexFormat = IndexFormat.UInt32 };
             mesh.SetVertices(vertices); mesh.SetUVs(0, uvs); mesh.subMeshCount = 2;
+            while (weights.Count < vertices.Count) weights.Add(Color.black);
+            mesh.SetColors(weights);
             mesh.SetTriangles(triangles, 0); mesh.SetTriangles(sides, 1);
             mesh.RecalculateNormals(); mesh.RecalculateTangents(); mesh.RecalculateBounds();
             Debug.Log($"[masonry sample] {mesh.name}: {seeds.Length} stones, {vertices.Count} vertices, {(triangles.Count + sides.Count) / 3} triangles, {mesh.bounds.size.z:F3} m depth");
@@ -264,6 +314,30 @@ namespace RTXMnesia.EditorDev
             for (int y = 1; y < Size - 1; y++) for (int x = 1; x < Size - 1; x++)
             { int p = y * Size + x; smooth[p] = (d[p] * 4 + d[p - 1] + d[p + 1] + d[p - Size] + d[p + Size]) / 8; }
             return smooth;
+        }
+
+        static bool[] RegularizeMask(bool[] mask, float verticalStep)
+        {
+            const float radiusMetres = .008f;
+            float radius = radiusMetres * (Size - 1) / Width;
+            bool[] Filter(bool[] source, bool dilate)
+            {
+                var result = new bool[source.Length];
+                int rx = Mathf.CeilToInt(radius), ry = Mathf.CeilToInt(radius / verticalStep);
+                for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
+                {
+                    bool value = !dilate;
+                    for (int dy = -ry; dy <= ry; dy++) for (int dx = -rx; dx <= rx; dx++)
+                    {
+                        if (dx * dx + dy * dy * verticalStep * verticalStep > radius * radius) continue;
+                        bool sample = source[Mathf.Clamp(y + dy, 0, Size - 1) * Size + Mathf.Clamp(x + dx, 0, Size - 1)];
+                        value = dilate ? value || sample : value && sample;
+                    }
+                    result[y * Size + x] = value;
+                }
+                return result;
+            }
+            return Filter(Filter(Filter(Filter(mask, false), true), true), false);
         }
     }
 }

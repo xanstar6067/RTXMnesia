@@ -38,6 +38,15 @@ namespace RTXMnesia.EditorDev
             BuildCheck.RunBatch();
         }
 
+        public static void ValidateApproachBatch()
+        {
+            if (ImportMenu.HasArg("-rebuildReliefStand")) InstallBatch();
+            CheckBatch();
+            RenderBatch();
+            PlayerSimulation.RunBatch();
+            BuildCheck.RunBatch();
+        }
+
         [MenuItem("Tools/RTXMnesia/Dev Room/Add or update relief stand and lantern supplies")]
         public static void InstallBatch()
         {
@@ -48,7 +57,7 @@ namespace RTXMnesia.EditorDev
             var map = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<HplMap>(true)).Single();
             Add(map.gameObject);
             EditorSceneManager.SaveScene(scene);
-            Debug.Log("[dev_room relief] Installed: three flat/relief pairs, two solid masonry samples, one lantern, 24 large oil bottles. F4 controls inspection lights.");
+            Debug.Log("[dev_room relief] Installed: three flat/relief/solid comparisons, one lantern, 24 large oil bottles. F4 controls inspection lights.");
         }
 
         public static void Add(GameObject mapRoot)
@@ -115,6 +124,7 @@ namespace RTXMnesia.EditorDev
                     detailed = HplReliefMeshBuilder.Build(source, new[] { new HplReliefMeshBuilder.Surface {
                         height = new HplReliefMeshBuilder.HeightField(height), amplitude = EnhancedReliefConverter.Profiles[relative] } }, Vector3.one, 0.018f);
                     if (group < 2) solid = HplMasonrySampleBuilder.Build(height, lo, hi, group == 0);
+                    else solid = HplMasonrySampleBuilder.BuildBoards();
                 }
                 finally { Object.DestroyImmediate(height); }
                 detailed = Save(detailed, Folder + "/" + stem + "_relief.asset");
@@ -123,12 +133,20 @@ namespace RTXMnesia.EditorDev
                 {
                     solid = Save(solid, Folder + "/" + stem + "_solid.asset");
                     solidMaterial = new Material(material) { name = stem + " solid blocks (POM off)" };
-                    solidMaterial.SetTexture("_NormalMap", MicroNormal(prepared, result, stem, hi.x - lo.x));
+                    if (group < 2)
+                    {
+                        solidMaterial.SetTexture("_NormalMap", MicroNormal(prepared, result, stem, hi.x - lo.x));
+                        solidMaterial.SetTexture("_MaskMap", CavityMask(prepared, result, stem, solid, lo, hi, out var cavitySpecular));
+                        solidMaterial.SetTexture("_SpecularColorMap", cavitySpecular);
+                    }
                     solidMaterial.SetFloat("_NormalScale", 1);
                     HDMaterial.ValidateMaterial(solidMaterial);
                     solidMaterial = Save(solidMaterial, Folder + "/" + stem + "_solid.mat");
                     solidSides = new Material(material) { name = stem + " stone sides" };
                     solidSides.SetTexture("_NormalMap", null); solidSides.SetFloat("_NormalScale", 0);
+                    solidSides.SetFloat("_SmoothnessRemapMin", 0); solidSides.SetFloat("_SmoothnessRemapMax", 0);
+                    solidSides.SetColor("_SpecularColor", Color.black);
+                    solidSides.SetTexture("_SpecularColorMap", null);
                     HDMaterial.ValidateMaterial(solidSides);
                     solidSides = Save(solidSides, Folder + "/" + stem + "_sides.mat");
                 }
@@ -143,10 +161,12 @@ namespace RTXMnesia.EditorDev
                     var renderer = go.AddComponent<MeshRenderer>(); renderer.sharedMaterial = side == 2 ? solidMaterial : material;
                     if (side == 2) renderer.sharedMaterials = new[] { solidMaterial, solidSides };
                     renderer.shadowCastingMode = ShadowCastingMode.TwoSided;
-                    if (side == 2) go.AddComponent<MeshCollider>().sharedMesh = solid;
+                    // Visual relief is not collision geometry. The character queries penetration
+                    // several times per tick; feeding it ~300k triangles stalls when close to a face.
+                    if (side == 2) { var collider = go.AddComponent<BoxCollider>(); collider.center = solid.bounds.center; collider.size = solid.bounds.size; }
                     else { var collider = go.AddComponent<BoxCollider>(); collider.center = Vector3.forward * 0.04f; collider.size = new Vector3(2.2f, panelHeight, 0.08f); }
                     (side == 0 ? flat : side == 1 ? relief : masonry).Add(filter);
-                    Label(go.name + " label", titles[group] + "\n" + (side == 0 ? "1 — ПЛОСКО" : side == 1 ? "2 — ПРЕЖНИЙ РЕЛЬЕФ" : "3 — КЛАДКА С УГЛУБЛЁННЫМИ ШВАМИ"),
+                    Label(go.name + " label", titles[group] + "\n" + (side == 0 ? "1 — ПЛОСКО" : side == 1 ? "2 — ПРЕЖНИЙ РЕЛЬЕФ" : group == 2 ? "3 — ДОСКИ С ЩЕЛЯМИ" : "3 — КЛАДКА С УГЛУБЛЁННЫМИ ШВАМИ"),
                         go.transform.position + (group == 0 ? Vector3.up * (panelHeight * .5f + .3f) : new Vector3(0, 0.35f, -0.9f)));
                 }
                 var lamp = new GameObject(titles[group] + " raking light").AddComponent<Light>(); lamp.transform.SetParent(root.transform, false);
@@ -270,6 +290,62 @@ namespace RTXMnesia.EditorDev
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
+        // Private to the solid sample. Face gloss comes from the original roughness; recesses
+        // and bevels become rough using the same coverage field that constructed the geometry.
+        static Texture2D CavityMask(EnhancedMaterialConverter.PreparedMaps prepared, EnhancedMaterialConverter.BatchResult result, string stem, Mesh mesh, Vector2 lo, Vector2 hi, out Texture2D specular)
+        {
+            byte[] bytes = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(prepared.result), result.files.roughness.file));
+            if (EnhancedReliefConverter.Hash(bytes) != result.files.roughness.sha256) throw new InvalidOperationException("Roughness hash mismatch: " + stem);
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
+            string path = Folder + "/" + stem + "_cavity_mask.png";
+            string specularPath = Folder + "/" + stem + "_cavity_specular.png";
+            try
+            {
+                if (!ImageConversion.LoadImage(texture, bytes, false)) throw new InvalidOperationException("Cannot read roughness: " + stem);
+                int size = Mathf.RoundToInt(Mathf.Sqrt(mesh.GetSubMesh(0).vertexCount));
+                var weights = mesh.colors; var pixels = texture.GetPixels32();
+                var reflectance = new Color32[pixels.Length];
+                for (int y = 0; y < texture.height; y++) for (int x = 0; x < texture.width; x++)
+                {
+                    int p = y * texture.width + x;
+                    float u = ((x + .5f) / texture.width - lo.x) / (hi.x - lo.x);
+                    float v = ((y + .5f) / texture.height - lo.y) / (hi.y - lo.y);
+                    float weight = 0;
+                    if (u >= 0 && u <= 1 && v >= 0 && v <= 1)
+                    {
+                        float fx = u * (size - 1), fy = v * (size - 1);
+                        int ix = Mathf.Min((int)fx, size - 2), iy = Mathf.Min((int)fy, size - 2);
+                        weight = Mathf.Lerp(Mathf.Lerp(weights[iy * size + ix].r, weights[iy * size + ix + 1].r, fx - ix),
+                            Mathf.Lerp(weights[(iy + 1) * size + ix].r, weights[(iy + 1) * size + ix + 1].r, fx - ix), fy - iy);
+                    }
+                    pixels[p] = new Color32(0, 255, 255, (byte)Mathf.RoundToInt((255 - pixels[p].r) * weight));
+                    byte factor = (byte)Mathf.RoundToInt(weight * 255);
+                    reflectance[p] = new Color32(factor, factor, factor, 255);
+                }
+                // LoadImage can change an RGBA texture to RGB24 for an RGB roughness PNG.
+                // Restore an alpha-capable format before packing smoothness into A.
+                texture.Reinitialize(texture.width, texture.height, TextureFormat.RGBA32, false);
+                texture.SetPixels32(pixels); texture.Apply();
+                File.WriteAllBytes(AmnesiaPaths.ToAbsolute(path), texture.EncodeToPNG());
+                texture.SetPixels32(reflectance); texture.Apply();
+                File.WriteAllBytes(AmnesiaPaths.ToAbsolute(specularPath), texture.EncodeToPNG());
+            }
+            finally { Object.DestroyImmediate(texture); }
+            foreach (string generated in new[] { path, specularPath })
+            {
+                AssetDatabase.ImportAsset(generated, ImportAssetOptions.ForceSynchronousImport);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(generated);
+                importer.textureType = TextureImporterType.Default; importer.sRGBTexture = false;
+                importer.alphaSource = TextureImporterAlphaSource.FromInput; importer.alphaIsTransparency = false;
+                importer.maxTextureSize = 4096; importer.wrapMode = TextureWrapMode.Repeat;
+                importer.filterMode = FilterMode.Trilinear; importer.anisoLevel = 8; importer.mipmapEnabled = true;
+                importer.textureCompression = TextureImporterCompression.CompressedHQ;
+                importer.SaveAndReimport();
+            }
+            specular = AssetDatabase.LoadAssetAtPath<Texture2D>(specularPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
         public static void CheckBatch()
         {
             EditorSceneManager.OpenScene(DevRoomBuilder.ScenePath, OpenSceneMode.Single);
@@ -291,8 +367,8 @@ namespace RTXMnesia.EditorDev
                 Check(flatMaterial == stand.relief[i].GetComponent<Renderer>().sharedMaterial && flatMaterial.GetFloat("_DisplacementMode") == 0,
                     "identical enhanced material, POM off: pair " + i);
             }
-            Check(stand.masonry.Length == 2, "two saved solid masonry samples");
-            for (int i = 0; i < stand.masonry.Length; i++)
+            Check(stand.masonry.Length == 3, "two masonry samples and straight edged boards saved");
+            for (int i = 0; i < 2; i++)
             {
                 var sample = stand.masonry[i]; var mesh = sample.sharedMesh;
                 Check(mesh.bounds.size.z > (i == 0 ? .055f : .04f) && mesh.bounds.size.z < .08f && mesh.vertexCount > 15000, "masonry depth stays below 8 cm including backing: sample " + i);
@@ -305,15 +381,45 @@ namespace RTXMnesia.EditorDev
                     && AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(micro)) is TextureImporter normalImporter
                     && normalImporter.textureType == TextureImporterType.NormalMap && !normalImporter.flipGreenChannel,
                     "dedicated micro normal, full strength, green converted exactly once: sample " + i);
-                foreach (var candidate in new[] { material, stand.flat[i].GetComponent<Renderer>().sharedMaterial, sample.GetComponent<Renderer>().sharedMaterials[1] })
+                foreach (var candidate in new[] { stand.flat[i].GetComponent<Renderer>().sharedMaterial, stand.relief[i].GetComponent<Renderer>().sharedMaterial })
                 {
                     Check(new[] { "_SmoothnessRemapMin", "_SmoothnessRemapMax", "_MetallicRemapMax" }.All(p => candidate.GetFloat(p) == enhanced.GetFloat(p))
                         && candidate.GetColor("_SpecularColor") == enhanced.GetColor("_SpecularColor")
-                        && candidate.GetTexture("_MaskMap") == enhanced.GetTexture("_MaskMap"), "source gloss and reflectance preserved: " + candidate.name);
+                        && candidate.GetTexture("_MaskMap") == enhanced.GetTexture("_MaskMap")
+                        && candidate.GetTexture("_SpecularColorMap") == enhanced.GetTexture("_SpecularColorMap"), "source gloss and reflectance preserved: " + candidate.name);
                 }
+                Check(material.GetTexture("_MaskMap") != enhanced.GetTexture("_MaskMap") && material.GetFloat("_SmoothnessRemapMax") == enhanced.GetFloat("_SmoothnessRemapMax"),
+                    "private cavity mask; stone-face gloss remap unchanged: sample " + i);
+                Check(material.GetTexture("_SpecularColorMap") != null && material.IsKeywordEnabled("_SPECULARCOLORMAP")
+                    && material.GetColor("_SpecularColor") == enhanced.GetColor("_SpecularColor"),
+                    "private specular coverage removes recess glints and preserves face F0: sample " + i);
+                Check(sample.GetComponent<Renderer>().sharedMaterials[1].GetFloat("_SmoothnessRemapMax") == 0,
+                    "sample outer cut has no glossy highlight: sample " + i);
+                var maskProbe = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
+                try
+                {
+                    ImageConversion.LoadImage(maskProbe, File.ReadAllBytes(AmnesiaPaths.ToAbsolute(AssetDatabase.GetAssetPath(material.GetTexture("_MaskMap")))), false);
+                    var coverage = mesh.colors; var uv = mesh.uv;
+                    int grid = Mathf.RoundToInt(Mathf.Sqrt(mesh.GetSubMesh(0).vertexCount));
+                    int cavities = 0, faces = 0; float maximumCavityGloss = 0, maximumFaceGloss = 0;
+                    for (int p = 0; p < mesh.GetSubMesh(0).vertexCount; p += 7)
+                    {
+                        float gloss = maskProbe.GetPixelBilinear(uv[p].x, uv[p].y).a;
+                        int gx = p % grid, gy = p / grid;
+                        if (gx > 0 && gx < grid - 1 && gy > 0 && gy < grid - 1 && coverage[p].r < .001f &&
+                            coverage[p - 1].r < .001f && coverage[p + 1].r < .001f && coverage[p - grid].r < .001f && coverage[p + grid].r < .001f)
+                        { cavities++; maximumCavityGloss = Mathf.Max(maximumCavityGloss, gloss); }
+                        if (coverage[p].r > .999f) { faces++; maximumFaceGloss = Mathf.Max(maximumFaceGloss, gloss); }
+                    }
+                    Check(cavities > 100 && faces > 100 && maximumCavityGloss < .04f && maximumFaceGloss > .1f,
+                        $"generated mask roughens recesses while retaining face highlights: sample {i}, cavity {maximumCavityGloss:F4}, face {maximumFaceGloss:F4}, counts {cavities}/{faces}");
+                }
+                finally { Object.DestroyImmediate(maskProbe); }
                 Check(material.GetTexture("_BaseColorMap") == stand.flat[i].GetComponent<Renderer>().sharedMaterial.GetTexture("_BaseColorMap") && material.GetFloat("_DisplacementMode") == 0,
                     "same enhanced albedo and no POM: solid sample " + i);
-                Check(sample.GetComponent<MeshCollider>().sharedMesh == mesh, "solid sample collision follows stones: sample " + i);
+                var box = sample.GetComponent<BoxCollider>();
+                Check(sample.GetComponent<MeshCollider>() == null && box != null && box.center == mesh.bounds.center && box.size == mesh.bounds.size,
+                    "bounded primitive collision covers relief; dense render mesh never enters character queries: sample " + i);
                 Check(mesh.subMeshCount == 2 && sample.GetComponent<Renderer>().sharedMaterials.Length == 2 && sample.GetComponent<Renderer>().sharedMaterials[1].GetTexture("_NormalMap") == null,
                     "stone sides have a separate material without projected face normals: sample " + i);
                 var positions = mesh.vertices; var indices = mesh.triangles;
@@ -334,6 +440,16 @@ namespace RTXMnesia.EditorDev
                 Check(indices.All(n => n >= 0 && n < positions.Length) && positions.All(p => float.IsFinite(p.x) && float.IsFinite(p.y) && float.IsFinite(p.z)), "valid solid mesh buffers: sample " + i);
                 Check(mesh.tangents.All(t => float.IsFinite(t.x) && float.IsFinite(t.y) && float.IsFinite(t.z) && new Vector3(t.x, t.y, t.z).sqrMagnitude > .5f), "usable tangent frames on stone faces and sides: sample " + i);
             }
+            var boards = stand.masonry[2];
+            var boardMesh = boards.sharedMesh;
+            Check(boardMesh.vertexCount < 1000 && boardMesh.bounds.size.z > .015f && boardMesh.bounds.size.z < .025f,
+                "boards have real thickness with fewer than 1000 vertices");
+            Check(boardMesh.GetTriangles(0).All(p => Vector3.Dot(boardMesh.normals[p], Vector3.back) > .999f),
+                "flat board faces and hard edges; no rounded stone shoulders");
+            Check(boards.GetComponent<MeshCollider>() == null && boards.GetComponent<BoxCollider>() != null,
+                "boards use a simple walkable collider");
+            Check(boards.GetComponent<Renderer>().sharedMaterial.GetTexture("_MaskMap") == stand.flat[2].GetComponent<Renderer>().sharedMaterial.GetTexture("_MaskMap"),
+                "original wood face roughness preserved");
             foreach (bool enhanced in new[] { true, false, true, false })
             {
                 foreach (var renderer in stand.GetComponentsInChildren<Renderer>()) HplEnhancedTextures.Apply(renderer, enhanced);
@@ -386,6 +502,8 @@ namespace RTXMnesia.EditorDev
             finally { Object.DestroyImmediate(inspection.gameObject); stand.SetInspection(true); }
             camera.transform.position = new Vector3(-7.6f, 1.25f, 4.9f); camera.transform.LookAt(new Vector3(-6.5f, .08f, 3.1f));
             ImportMenu.RenderToFile(camera, Path.Combine(folder, "SolidFloor.png"));
+            camera.transform.position = new Vector3(-15.4f, 1.25f, 4.9f); camera.transform.LookAt(new Vector3(-14.3f, .05f, 3.1f));
+            ImportMenu.RenderToFile(camera, Path.Combine(folder, "SolidBoards.png"));
             camera.transform.position = new Vector3(4.1f, 1.75f, 6); camera.transform.LookAt(new Vector3(4.1f, 0.95f, 4.3f));
             ImportMenu.RenderToFile(camera, Path.Combine(folder, "Supplies.png"));
             RenderMasonryDetail(camera, stand, folder);
