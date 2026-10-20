@@ -6,12 +6,12 @@ using UnityEngine.Rendering;
 
 namespace RTXMnesia.EditorDev
 {
-    /// <summary>Art-directed stand experiment: trace mortar, then build separate bevelled solid stones.
-    /// Seed positions describe this sample's UV islands, not a general-purpose material importer.</summary>
+    /// <summary>Sample-specific masonry: a continuous surface with recessed mortar and firm stone faces.
+    /// Markers identify stones in these texture crops; they are not a general material importer.</summary>
     public static class HplMasonrySampleBuilder
     {
-        const int Size = 256, Sides = 80, Rings = 5;
-        // Coordinates are fractions of the displayed crop, measured from its top left.
+        const int Size = 384;
+        const float Width = 2.2f;
         static readonly Vector2[] WallSeeds = Rows(
             new[] { .04f, .06f, .22f, .38f, .55f, .71f, .9f },
             new[] { .23f, .02f, .15f, .32f, .51f, .69f, .89f },
@@ -28,149 +28,242 @@ namespace RTXMnesia.EditorDev
             new[] { .7f, .025f, .2f, .42f, .65f, .85f, .98f },
             new[] { .88f, .06f, .26f, .46f, .63f, .82f },
             new[] { .99f, .12f, .36f, .6f, .79f, .97f });
-
         static Vector2[] Rows(params float[][] rows) => rows.SelectMany(r => r.Skip(1).Select(x => new Vector2(x, 1 - r[0]))).ToArray();
 
         public static Mesh Build(Texture2D height, Vector2 lo, Vector2 hi, bool wall)
         {
             var seeds = wall ? WallSeeds : FloorSeeds;
-            var field = new float[Size * Size];
+            float panelHeight = wall ? Width * (hi.y - lo.y) / (hi.x - lo.x) : Width;
+            var raw = new float[Size * Size];
             Vector2 Uv(Vector2 p) => lo + Vector2.Scale(p, hi - lo);
-            float Raw(Vector2 p)
-            {
-                var uv = Uv(p); float sum = 0;
-                for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++)
-                    sum += height.GetPixelBilinear(uv.x + x / (float)height.width * 3, uv.y + y / (float)height.height * 3).r;
-                return sum / 9;
-            }
             for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
-                field[y * Size + x] = Raw(new Vector2(x, y) / (Size - 1));
-            var sorted = field.OrderBy(v => v).ToArray();
+            {
+                var uv = Uv(new Vector2(x, y) / (Size - 1));
+                float sum = 0;
+                for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++)
+                    sum += height.GetPixelBilinear(uv.x + dx * .00075f, uv.y + dy * .00075f).r;
+                raw[y * Size + x] = sum / 9;
+            }
+            var sorted = raw.OrderBy(v => v).ToArray();
             float low = sorted[sorted.Length / 20], range = Mathf.Max(.05f, sorted[sorted.Length * 9 / 10] - low);
-            for (int i = 0; i < field.Length; i++) field[i] = Mathf.Clamp01((field[i] - low) / range);
+            var field = raw.Select(v => Mathf.Clamp01((v - low) / range)).ToArray();
             int Index(Vector2 p) => Mathf.Clamp(Mathf.RoundToInt(p.y * (Size - 1)), 0, Size - 1) * Size + Mathf.Clamp(Mathf.RoundToInt(p.x * (Size - 1)), 0, Size - 1);
-            var labels = Segment(field, seeds, Index);
+            var labels = SegmentCourses(field, seeds, wall);
+            var stoneMask = StoneMask(field, labels, seeds, Index);
+            var distance = BoundaryDistance(stoneMask, panelHeight / Width);
+            var outside = BoundaryDistance(stoneMask.Select(v => !v).ToArray(), panelHeight / Width);
+            var elevations = new float[seeds.Length];
+            for (int i = 0; i < elevations.Length; i++)
+                elevations[i] = (wall ? .035f : .021f) + Mathf.Sin(i * 7.31f) * (wall ? .004f : .003f);
             var vertices = new List<Vector3>(); var uvs = new List<Vector2>(); var triangles = new List<int>();
-            var sideTriangles = new List<int>(); bool sides = false;
-            int Vertex(Vector2 p, float h)
+            var sides = new List<int>();
+            for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
             {
-                vertices.Add(new Vector3((p.x - .5f) * 2.2f, (p.y - .5f) * 2.2f, -h));
-                uvs.Add(Uv(p)); return vertices.Count - 1;
+                int p = y * Size + x, stone = labels[p];
+                var point = new Vector2(x, y) / (Size - 1);
+                // A narrow bed of mortar, then a short chipped shoulder, then a broad firm face.
+                // No radial fans, holes, arbitrary inset contours, or stretched side-wall UVs.
+                float d = (distance[p] - outside[p]) * Width / (Size - 1);
+                float shoulder = Mathf.SmoothStep(0, 1, Mathf.Clamp01((d + .009f) / (wall ? .018f : .015f)));
+                float face = elevations[stone] + (raw[p] - raw[Index(seeds[stone])]) * .008f;
+                float mortar = -.008f + raw[p] * .002f;
+                float h = Mathf.Lerp(mortar, face, shoulder);
+                vertices.Add(new Vector3((point.x - .5f) * Width, (point.y - .5f) * panelHeight, -h));
+                uvs.Add(Uv(point));
+                if (x < Size - 1 && y < Size - 1)
+                {
+                    triangles.Add(p); triangles.Add(p + Size); triangles.Add(p + 1);
+                    triangles.Add(p + 1); triangles.Add(p + Size); triangles.Add(p + Size + 1);
+                }
             }
-            void Triangle(int a, int b, int c) { var target = sides ? sideTriangles : triangles; target.Add(a); target.Add(b); target.Add(c); }
-            for (int stone = 0; stone < seeds.Length; stone++)
+            // Close only the outer cut of the sample. Inside, every edge is shared by the stone
+            // and mortar, so shadows and ray tracing see a continuous solid wall.
+            var boundary = new List<int>();
+            for (int x = 0; x < Size - 1; x++) boundary.Add(x);
+            for (int y = 0; y < Size - 1; y++) boundary.Add(y * Size + Size - 1);
+            for (int x = Size - 1; x > 0; x--) boundary.Add((Size - 1) * Size + x);
+            for (int y = Size - 1; y > 0; y--) boundary.Add(y * Size);
+            int start = vertices.Count;
+            foreach (int p in boundary)
             {
-                var center = seeds[stone];
-                var outline = new Vector2[Sides];
-                for (int side = 0; side < Sides; side++)
-                {
-                    float angle = side * Mathf.PI * 2 / Sides;
-                    var direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-                    float radius = 0;
-                    for (int step = 1; step < Size; step++)
-                    {
-                        var p = center + direction * (step / (float)Size);
-                        if (p.x <= 0 || p.x >= 1 || p.y <= 0 || p.y >= 1 || labels[Index(p)] != stone) break;
-                        radius = step / (float)Size;
-                    }
-                    // Mortar remains visible between stones. This cuts into the stone colour rather
-                    // than stretching the mortar colour up its new vertical side.
-                    radius = Mathf.Max(.001f, radius - (wall ? .008f : .006f));
-                    outline[side] = center + direction * radius;
-                }
-                // Smooth only the contour's sub-centimetre stair steps, preserving irregular shapes.
-                for (int pass = 0; pass < 2; pass++)
-                {
-                    var smoothed = new Vector2[Sides];
-                    for (int s = 0; s < Sides; s++) smoothed[s] = (outline[(s + Sides - 1) % Sides] + outline[s] * 2 + outline[(s + 1) % Sides]) / 4;
-                    outline = smoothed;
-                }
-                float random = Mathf.Repeat(Mathf.Sin(stone * 78.233f + 4.1f) * 43758.5453f, 1);
-                float elevation = wall ? Mathf.Lerp(.075f, .125f, random) : Mathf.Lerp(.032f, .062f, random);
-                float tiltX = Mathf.Sin(stone * 7.31f) * (wall ? .05f : .025f), tiltY = Mathf.Cos(stone * 4.17f) * (wall ? .05f : .025f);
-                float Face(Vector2 p) => elevation + (Raw(p) - Raw(center)) * .012f + (p.x - center.x) * tiltX + (p.y - center.y) * tiltY;
-                int top = Vertex(center, Face(center));
-                int rings = vertices.Count;
-                for (int r = 0; r < Rings; r++)
-                {
-                    float t = (r + 1f) / Rings;
-                    // Most of the face stays firm; only the outer shoulder rounds towards the side.
-                    float drop = r == Rings - 1 ? (wall ? .018f : .009f) : r == Rings - 2 ? .0025f : 0;
-                    for (int s = 0; s < Sides; s++)
-                    {
-                        var p = Vector2.Lerp(center, outline[s], t);
-                        Vertex(p, Face(p) - drop);
-                    }
-                }
-                for (int s = 0; s < Sides; s++) Triangle(top, rings + (s + 1) % Sides, rings + s);
-                for (int r = 1; r < Rings; r++) for (int s = 0; s < Sides; s++)
-                {
-                    int a = rings + (r - 1) * Sides + s, b = rings + (r - 1) * Sides + (s + 1) % Sides;
-                    int c = rings + r * Sides + s, d = rings + r * Sides + (s + 1) % Sides;
-                    Triangle(a, b, c); Triangle(c, b, d);
-                }
-                // Duplicate the rim for a crisp face/side normal transition. Close every stone on
-                // its back as well: the result is actual solid geometry, including for ray tracing.
-                int rim = vertices.Count;
-                for (int s = 0; s < Sides; s++)
-                {
-                    int v = Vertex(outline[s], Face(outline[s]) - (wall ? .018f : .009f));
-                    // The photograph contains mortar around the outline, but no photograph of
-                    // the original stone's side. Borrow its interior colour for the new side.
-                    uvs[v] = Uv(Vector2.Lerp(outline[s], center, .35f));
-                }
-                int bottom = vertices.Count;
-                for (int s = 0; s < Sides; s++)
-                {
-                    int v = Vertex(outline[s], -.012f);
-                    // Give the side a genuine second UV direction; identical top/bottom UVs
-                    // collapse its tangent basis and stretch a single texel down the entire side.
-                    uvs[v] = Uv(Vector2.Lerp(outline[s], center, .7f));
-                }
-                int back = Vertex(center, -.012f);
-                sides = true;
-                for (int s = 0; s < Sides; s++)
-                {
-                    int next = (s + 1) % Sides;
-                    Triangle(rim + s, rim + next, bottom + s); Triangle(bottom + s, rim + next, bottom + next);
-                    Triangle(back, bottom + s, bottom + next);
-                }
-                sides = false;
+                vertices.Add(vertices[p]); uvs.Add(uvs[p]);
+                var back = vertices[p]; back.z = .025f;
+                vertices.Add(back); uvs.Add(uvs[p] + Vector2.one * .005f);
             }
-            // The original texture at a recessed level supplies the visible mortar in the gaps.
-            int mortar = Vertex(Vector2.zero, -.008f);
-            Vertex(Vector2.right, -.008f); Vertex(Vector2.one, -.008f); Vertex(Vector2.up, -.008f);
-            Triangle(mortar, mortar + 2, mortar + 1); Triangle(mortar, mortar + 3, mortar + 2);
-            var mesh = new Mesh { name = wall ? "Individual protruding wall blocks" : "Individual protruding paving stones", indexFormat = IndexFormat.UInt32 };
+            int center = vertices.Count; vertices.Add(new Vector3(0, 0, .025f)); uvs.Add(Uv(Vector2.one * .5f));
+            for (int i = 0; i < boundary.Count; i++)
+            {
+                int a = start + i * 2, b = start + ((i + 1) % boundary.Count) * 2;
+                sides.Add(a); sides.Add(b); sides.Add(a + 1);
+                sides.Add(a + 1); sides.Add(b); sides.Add(b + 1);
+                sides.Add(center); sides.Add(a + 1); sides.Add(b + 1);
+            }
+            var mesh = new Mesh { name = wall ? "Stone wall with recessed mortar" : "Stone paving with recessed mortar", indexFormat = IndexFormat.UInt32 };
             mesh.SetVertices(vertices); mesh.SetUVs(0, uvs); mesh.subMeshCount = 2;
-            mesh.SetTriangles(triangles, 0); mesh.SetTriangles(sideTriangles, 1);
+            mesh.SetTriangles(triangles, 0); mesh.SetTriangles(sides, 1);
             mesh.RecalculateNormals(); mesh.RecalculateTangents(); mesh.RecalculateBounds();
-            Debug.Log($"[masonry sample] {mesh.name}: {seeds.Length} solid stones, {vertices.Count} vertices, {(triangles.Count + sideTriangles.Count) / 3} triangles, {mesh.bounds.size.z:F3} m depth");
+            Debug.Log($"[masonry sample] {mesh.name}: {seeds.Length} stones, {vertices.Count} vertices, {(triangles.Count + sides.Count) / 3} triangles, {mesh.bounds.size.z:F3} m depth");
             return mesh;
         }
 
-        // Multi-source Dijkstra follows broad, low height valleys. Every marker retains its own
-        // component, so small bumps inside a stone never become extra miniature stones.
-        static int[] Segment(float[] field, Vector2[] seeds, Func<Vector2, int> index)
+        // The reference has staggered courses. Trace each bed joint left-to-right and each
+        // head joint only within its course. Unconstrained flooding follows texture pits into
+        // the stones and produces diagonal notches; radial clipping makes that even worse.
+        static int[] SegmentCourses(float[] field, Vector2[] seeds, bool wall)
         {
-            var labels = Enumerable.Repeat(-1, field.Length).ToArray();
-            var distance = Enumerable.Repeat(float.PositiveInfinity, field.Length).ToArray();
-            var queue = new SortedSet<(float cost, int pixel)>();
-            for (int i = 0; i < seeds.Length; i++) { int p = index(seeds[i]); labels[p] = i; distance[p] = 0; queue.Add((0, p)); }
-            while (queue.Count > 0)
+            var rows = seeds.Select((p, i) => (p, i)).GroupBy(v => v.p.y).OrderBy(g => g.Key)
+                .Select(g => g.OrderBy(v => v.p.x).ToArray()).ToArray();
+            var filtered = new float[field.Length];
+            const int radius = 3;
+            for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
             {
-                var item = queue.Min; queue.Remove(item);
-                int p = item.pixel, x = p % Size, y = p / Size;
-                Visit(p - 1, x > 0); Visit(p + 1, x < Size - 1); Visit(p - Size, y > 0); Visit(p + Size, y < Size - 1);
-                void Visit(int next, bool valid)
+                float sum = 0;
+                for (int dy = -radius; dy <= radius; dy++) for (int dx = -radius; dx <= radius; dx++)
+                    sum += field[Mathf.Clamp(y + dy, 0, Size - 1) * Size + Mathf.Clamp(x + dx, 0, Size - 1)];
+                filtered[y * Size + x] = sum / ((2 * radius + 1) * (2 * radius + 1));
+            }
+            var beds = new int[rows.Length - 1][];
+            float[] wallBeds = { .115f, .30f, .475f, .665f, .87f };
+            for (int r = 0; r < beds.Length; r++)
+            {
+                float guide = wall ? wallBeds[r] : (rows[r][0].p.y + rows[r + 1][0].p.y) * .5f;
+                beds[r] = Trace(filtered, true, 0, Size - 1, guide, wall ? .022f : .025f);
+            }
+            var labels = new int[field.Length];
+            for (int r = 0; r < rows.Length; r++)
+            {
+                int bottom = r == 0 ? 0 : beds[r - 1].Min(), top = r == beds.Length ? Size - 1 : beds[r].Max();
+                var heads = new int[rows[r].Length - 1][];
+                for (int c = 0; c < heads.Length; c++)
+                    heads[c] = Trace(filtered, false, bottom, top, (rows[r][c].p.x + rows[r][c + 1].p.x) * .5f, .045f);
+                for (int y = bottom; y <= top; y++) for (int x = 0; x < Size; x++)
                 {
-                    if (!valid) return;
-                    float cost = item.cost + 1 + 90 * Mathf.Pow(1 - (field[p] + field[next]) * .5f, 5);
-                    if (cost >= distance[next]) return;
-                    queue.Remove((distance[next], next)); distance[next] = cost; labels[next] = labels[p]; queue.Add((cost, next));
+                    if (r > 0 && y < beds[r - 1][x] || r < beds.Length && y >= beds[r][x]) continue;
+                    int c = 0;
+                    while (c < heads.Length && x >= heads[c][y - bottom]) c++;
+                    labels[y * Size + x] = rows[r][c].i;
                 }
             }
             return labels;
+        }
+
+        // Minimum-cost valley path in a narrow authored corridor, with a penalty for slope.
+        static int[] Trace(float[] field, bool horizontal, int first, int last, float guide, float corridor)
+        {
+            int lo = Mathf.Max(0, Mathf.RoundToInt((guide - corridor) * (Size - 1)));
+            int hi = Mathf.Min(Size - 1, Mathf.RoundToInt((guide + corridor) * (Size - 1)));
+            int width = hi - lo + 1, length = last - first + 1;
+            var costs = new float[width]; var previous = new int[length * width];
+            for (int along = 0; along < length; along++)
+            {
+                var next = new float[width];
+                for (int j = 0; j < width; j++)
+                {
+                    float best = float.PositiveInfinity; int from = j;
+                    for (int k = Mathf.Max(0, j - 1); k <= Mathf.Min(width - 1, j + 1); k++)
+                    {
+                        float cost = costs[k] + (j == k ? 0 : .035f);
+                        if (cost < best) { best = cost; from = k; }
+                    }
+                    int across = j + lo, axis = along + first;
+                    float v = field[horizontal ? across * Size + axis : axis * Size + across];
+                    float offset = (across / (float)(Size - 1) - guide) / corridor;
+                    next[j] = best + v + .035f * offset * offset;
+                    previous[along * width + j] = from;
+                }
+                costs = next;
+            }
+            int end = 0;
+            for (int j = 1; j < width; j++) if (costs[j] < costs[end]) end = j;
+            var path = new int[length];
+            for (int along = length - 1; along >= 0; along--)
+            { path[along] = end + lo; end = previous[along * width + end]; }
+            return path;
+        }
+
+        // A course partition alone also raises the pale mortar between the dark stone outlines.
+        // Grow faces from their markers, stopping at the dark edge band. A one-pixel minimum
+        // filter bridges small breaks in that band; enclosed texture pits are then filled.
+        static bool[] StoneMask(float[] field, int[] labels, Vector2[] seeds, Func<Vector2, int> index)
+        {
+            var allowed = new bool[field.Length];
+            for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
+            {
+                float value = 1;
+                for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++)
+                    value = Mathf.Min(value, field[Mathf.Clamp(y + dy, 0, Size - 1) * Size + Mathf.Clamp(x + dx, 0, Size - 1)]);
+                allowed[y * Size + x] = value > .28f;
+            }
+            var mask = new bool[field.Length]; var queue = new Queue<int>();
+            foreach (var seed in seeds) { int p = index(seed); mask[p] = true; queue.Enqueue(p); }
+            while (queue.Count > 0)
+            {
+                int p = queue.Dequeue(), x = p % Size, y = p / Size;
+                Visit(p - 1, x > 0); Visit(p + 1, x < Size - 1); Visit(p - Size, y > 0); Visit(p + Size, y < Size - 1);
+                void Visit(int q, bool valid)
+                {
+                    if (!valid || mask[q] || !allowed[q] || labels[p] != labels[q]) return;
+                    mask[q] = true; queue.Enqueue(q);
+                }
+            }
+            // Flood the actual exterior. Unreached background is an internal texture blemish,
+            // not a second mortar joint through the middle of a stone.
+            var exterior = new bool[field.Length];
+            for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
+            {
+                int p = y * Size + x;
+                bool edge = x == 0 || x == Size - 1 || y == 0 || y == Size - 1
+                    || labels[p - 1] != labels[p] || labels[p + 1] != labels[p]
+                    || labels[p - Size] != labels[p] || labels[p + Size] != labels[p];
+                if (edge && !mask[p]) { exterior[p] = true; queue.Enqueue(p); }
+                // Keep a mortar line even at an incomplete source edge band.
+                if (edge && x > 0 && x < Size - 1 && y > 0 && y < Size - 1)
+                { mask[p] = false; if (!exterior[p]) { exterior[p] = true; queue.Enqueue(p); } }
+            }
+            while (queue.Count > 0)
+            {
+                int p = queue.Dequeue(), x = p % Size, y = p / Size;
+                Visit(p - 1, x > 0); Visit(p + 1, x < Size - 1); Visit(p - Size, y > 0); Visit(p + Size, y < Size - 1);
+                void Visit(int q, bool valid)
+                {
+                    if (!valid || exterior[q] || mask[q]) return;
+                    exterior[q] = true; queue.Enqueue(q);
+                }
+            }
+            for (int p = 0; p < mask.Length; p++) mask[p] = !exterior[p];
+            return mask;
+        }
+
+        static float[] BoundaryDistance(bool[] mask, float verticalStep)
+        {
+            var d = new float[mask.Length];
+            float diagonalStep = Mathf.Sqrt(1 + verticalStep * verticalStep);
+            for (int y = 0; y < Size; y++) for (int x = 0; x < Size; x++)
+            {
+                int p = y * Size + x;
+                d[p] = mask[p] ? Size : 0;
+            }
+            for (int p = 0; p < d.Length; p++)
+            {
+                int x = p % Size, y = p / Size;
+                if (x > 0) d[p] = Mathf.Min(d[p], d[p - 1] + 1);
+                if (y > 0) { d[p] = Mathf.Min(d[p], d[p - Size] + verticalStep);
+                    if (x > 0) d[p] = Mathf.Min(d[p], d[p - Size - 1] + diagonalStep);
+                    if (x < Size - 1) d[p] = Mathf.Min(d[p], d[p - Size + 1] + diagonalStep); }
+            }
+            for (int p = d.Length - 1; p >= 0; p--)
+            {
+                int x = p % Size, y = p / Size;
+                if (x < Size - 1) d[p] = Mathf.Min(d[p], d[p + 1] + 1);
+                if (y < Size - 1) { d[p] = Mathf.Min(d[p], d[p + Size] + verticalStep);
+                    if (x > 0) d[p] = Mathf.Min(d[p], d[p + Size - 1] + diagonalStep);
+                    if (x < Size - 1) d[p] = Mathf.Min(d[p], d[p + Size + 1] + diagonalStep); }
+            }
+            // Filter the sub-grid stair steps, never the centimetre-scale stone shape.
+            var smooth = (float[])d.Clone();
+            for (int y = 1; y < Size - 1; y++) for (int x = 1; x < Size - 1; x++)
+            { int p = y * Size + x; smooth[p] = (d[p] * 4 + d[p - 1] + d[p + 1] + d[p - Size] + d[p + Size]) / 8; }
+            return smooth;
         }
     }
 }
