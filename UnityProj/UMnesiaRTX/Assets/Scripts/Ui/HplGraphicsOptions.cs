@@ -23,6 +23,9 @@ namespace RTXMnesia.Ui
         /// <summary>Translation: category, entry, fallback text.</summary>
         public delegate string Translate(string category, string entry, string fallback);
 
+        /// <summary>The anti-aliasing methods at the start of the image method list (off, FXAA, SMAA, TAA); DLSS follows.</summary>
+        const int AaMethods = 4;
+
         public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.RtPathTracing;
 
         /// <summary>DLSS is chosen and runs on this GPU: it replaces the anti-aliasing of the graphics tab.</summary>
@@ -35,10 +38,10 @@ namespace RTXMnesia.Ui
             switch (control)
             {
                 case MenuControl.Lighting:
+                    // The enhanced lighting is still to come; ray tracing is a separate switch (ray tracing tab).
                     items.Add(new HplComboItem("Классическое"));
-                    // Its settings are on the RTX tab; DXR needs DirectX 12 and a GPU with ray tracing.
-                    items.Add(new HplComboItem("Трассировка лучей", SystemInfo.supportsRayTracing));
-                    current = s.lighting;
+                    items.Add(new HplComboItem("Улучшенное (скоро)", false));
+                    current = 0;
                     break;
                 case MenuControl.Textures:
                     items.Add(new HplComboItem("Классические"));
@@ -76,17 +79,24 @@ namespace RTXMnesia.Ui
                     foreach (int gb in HplGraphics.TextureMemoryBudgetsGb) items.Add(new HplComboItem(gb + " ГБ"));
                     current = Array.IndexOf(HplGraphics.TextureMemoryBudgetsGb, s.textureMemoryBudgetGb);
                     break;
-                case MenuControl.Antialiasing when DlssOn(s):
-                    // DLSS (RTX tab) does the anti-aliasing; turned off there, the earlier choice comes back.
-                    items.Add(new HplComboItem("DLSS", false));
-                    break;
-                case MenuControl.Antialiasing:
+                case MenuControl.ImageMethod:
+                {
+                    // One list for the anti-aliasing and the DLSS modes: the first four are the AA methods, the
+                    // rest are DLSS (DLAA, then the scaling modes). Picking an AA method turns DLSS off; DLSS replaces
+                    // the AA while it is on, and the earlier AA choice comes back after it is turned off.
+                    bool available = HplDlss.Available;
                     items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
                     items.Add(new HplComboItem("FXAA"));
                     items.Add(new HplComboItem("SMAA"));
                     items.Add(new HplComboItem("TAA"));
-                    current = s.antialiasing;
+                    items.Add(new HplComboItem("DLAA (без масштабирования)", available));
+                    items.Add(new HplComboItem("DLSS: Качество", available));
+                    items.Add(new HplComboItem("DLSS: Баланс", available));
+                    items.Add(new HplComboItem("DLSS: Производительность", available));
+                    items.Add(new HplComboItem("DLSS: Макс. производительность", available));
+                    current = DlssOn(s) ? AaMethods - 1 + s.dlssMode : s.antialiasing;
                     break;
+                }
                 case MenuControl.Shadows:
                     items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
                     items.Add(new HplComboItem(t("OptionsMenu", "Low", "Низкое")));
@@ -94,18 +104,12 @@ namespace RTXMnesia.Ui
                     items.Add(new HplComboItem(t("OptionsMenu", "High", "Высокое")));
                     current = s.shadows;
                     break;
-                case MenuControl.DlssMode:
-                {
-                    bool available = HplDlss.Available;
+                case MenuControl.HdrMode:
                     items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
-                    items.Add(new HplComboItem("DLAA (без масштабирования)", available));
-                    items.Add(new HplComboItem("Качество", available));
-                    items.Add(new HplComboItem("Баланс", available));
-                    items.Add(new HplComboItem("Производительность", available));
-                    items.Add(new HplComboItem("Макс. производительность", available));
-                    current = s.dlssMode;
+                    items.Add(new HplComboItem("Авто"));
+                    items.Add(new HplComboItem(t("OptionsMenu", "On", "Вкл")));
+                    current = s.hdrMode;
                     break;
-                }
                 case MenuControl.DlssPreset:
                 {
                     // NVIDIA offers each model only for some modes; the others are shown grey.
@@ -158,6 +162,7 @@ namespace RTXMnesia.Ui
         public static string Label(MenuControl control, Translate t) => control switch
         {
             MenuControl.Lighting => "Освещение",
+            MenuControl.HdrMode => "HDR",
             MenuControl.Textures => "Текстуры",
             MenuControl.Resolution => t("OptionsMenu", "Resolution", "Разрешение"),
             MenuControl.ScreenMode => t("OptionsMenu", "Screen", "Экран"),
@@ -165,9 +170,8 @@ namespace RTXMnesia.Ui
             MenuControl.TextureQuality => t("OptionsMenu", "TexQuality", "Качество текстур"),
             MenuControl.TextureMemoryBudget => "Бюджет видеопамяти",
             MenuControl.Anisotropy => t("OptionsMenu", "Anisotropy", "Анизотропная фильтрация"),
-            MenuControl.Antialiasing => t("OptionsMenu", "FullscreenSmooth", "Сглаживание"),
+            MenuControl.ImageMethod => "Метод",
             MenuControl.Shadows => t("OptionsMenu", "Shadows", "Тени"),
-            MenuControl.DlssMode => "NVIDIA DLSS",
             MenuControl.DlssPreset => "Модель DLSS",
             MenuControl.RtShadows => "Тени (трассировка)",
             MenuControl.RtPathTracing => "Path tracing",
@@ -209,7 +213,8 @@ namespace RTXMnesia.Ui
             if (index < 0 || index >= items.Count || !items[index].enabled) return;
             switch (control)
             {
-                case MenuControl.Lighting: s.lighting = index; break;
+                // Not stored: the lighting list has only the classic lighting for now (s.lighting is the ray tracing switch).
+                case MenuControl.Lighting: break;
                 case MenuControl.Textures: s.textures = index; break;
                 case MenuControl.Resolution:
                 {
@@ -223,13 +228,21 @@ namespace RTXMnesia.Ui
                 case MenuControl.TextureQuality: s.textureQuality = index; break;
                 case MenuControl.TextureMemoryBudget: s.textureMemoryBudgetGb = HplGraphics.TextureMemoryBudgetsGb[index]; break;
                 case MenuControl.Anisotropy: s.anisotropy = index; break;
-                case MenuControl.Antialiasing: s.antialiasing = index; break;
-                case MenuControl.Shadows: s.shadows = index; break;
-                case MenuControl.DlssMode:
-                    s.dlssMode = index;
-                    // A model NVIDIA does not offer for the new mode falls back to its default.
-                    if (s.dlssPreset != 0 && (HplDlss.AvailablePresets((HplDlssMode)index) & (uint)s.dlssPreset) == 0) s.dlssPreset = 0;
+                case MenuControl.ImageMethod:
+                    if (index < AaMethods)
+                    {
+                        s.antialiasing = index;
+                        s.dlssMode = (int)HplDlssMode.Off;
+                    }
+                    else
+                    {
+                        s.dlssMode = index - AaMethods + 1;
+                        // A model NVIDIA does not offer for the new mode falls back to its default.
+                        if (s.dlssPreset != 0 && (HplDlss.AvailablePresets((HplDlssMode)s.dlssMode) & (uint)s.dlssPreset) == 0) s.dlssPreset = 0;
+                    }
                     break;
+                case MenuControl.HdrMode: s.hdrMode = index; break;
+                case MenuControl.Shadows: s.shadows = index; break;
                 case MenuControl.DlssPreset: s.dlssPreset = (int)HplDlss.Presets()[index]; break;
                 case MenuControl.RtShadows: s.rtShadows = index; break;
                 case MenuControl.RtAo: s.rtAo = index; break;

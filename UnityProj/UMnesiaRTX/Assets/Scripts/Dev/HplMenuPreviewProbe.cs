@@ -49,7 +49,7 @@ namespace RTXMnesia.Dev
             yield return new WaitForSecondsRealtime(0.3f);
             string optionsPath = Path.Combine(folder, "Options.png");
             Capture(target, optionsPath, camera, menuCanvas);
-            for (int tab = 1; tab < 4; tab++)
+            for (int tab = 1; tab < Ui.HplPauseMenu.OptionsTabs; tab++)
             {
                 map.GameUi.OpenOptions(tab);
                 yield return new WaitForSecondsRealtime(0.2f);
@@ -123,7 +123,7 @@ namespace RTXMnesia.Dev
         }
 
         /// <summary>
-        /// The graphics tab: its drop-down lists, a disabled choice, picking choices, applying them (quality settings,
+        /// The graphics tabs: their drop-down lists, a disabled choice, picking choices, applying them (quality settings,
         /// camera anti-aliasing, shadows, the settings volume, blur flags) and putting the user's settings back.
         /// </summary>
         IEnumerator GraphicsOptions(HplMap map, RenderTexture target, Camera camera, Canvas menuCanvas, string folder, System.Action<int> result)
@@ -134,56 +134,73 @@ namespace RTXMnesia.Dev
                 if (ok) Debug.Log("PASS: graphics options: " + what);
                 else { failures++; Debug.LogError("FAIL: graphics options: " + what); }
             }
+            bool Has(Ui.HplGameUi gameUi, MenuControl control)
+            {
+                for (int i = 0; i < gameUi.Menu.ButtonCount; i++) if (gameUi.Menu.ControlAt(i) == control) return true;
+                return false;
+            }
+            bool HasAll(Ui.HplGameUi gameUi, string tabName, params MenuControl[] controls)
+            {
+                bool all = true;
+                foreach (var c in controls)
+                    if (!Has(gameUi, c)) { all = false; Debug.LogError(tabName + " tab misses " + c); }
+                return all;
+            }
             var ui = map.GameUi;
             string savedPrefs = PlayerPrefs.HasKey(HplUserSettings.PrefsKey) ? PlayerPrefs.GetString(HplUserSettings.PrefsKey) : null;
             var original = ui.Settings.Copy();
 
-            ui.OpenOptions(1);
+            // The display tab: screen settings and HDR (scrolling area, every item has a button even when scrolled out).
+            ui.OpenOptions(Ui.HplPauseMenu.DisplayTabIndex);
             yield return null;
-            bool allCombos = true;
-            foreach (var c in new[] { MenuControl.Lighting, MenuControl.Textures, MenuControl.Resolution, MenuControl.ScreenMode, MenuControl.FpsLimit,
-                                      MenuControl.TextureQuality, MenuControl.Anisotropy, MenuControl.Antialiasing, MenuControl.Shadows,
-                                      MenuControl.VSync, MenuControl.Bloom, MenuControl.ImageTrail, MenuControl.RadialBlur, MenuControl.GammaLess })
-            {
-                bool found = false;
-                for (int i = 0; i < ui.Menu.ButtonCount; i++) found |= ui.Menu.ControlAt(i) == c;
-                if (!found) { allCombos = false; Debug.LogError("Graphics tab misses " + c); }
-            }
-            Check(allCombos, "every list, check box and the gamma are on the tab");
-
+            Check(HasAll(ui, "Display", MenuControl.Resolution, MenuControl.ScreenMode, MenuControl.FpsLimit, MenuControl.VSync, MenuControl.GammaLess,
+                         MenuControl.HdrMode, MenuControl.HdrPeakLess, MenuControl.HdrWhiteLess, MenuControl.HdrBlackLess, MenuControl.HdrShadowsLess, MenuControl.HdrCalibrate),
+                  "the display tab has the screen lists, the gamma and the HDR settings");
+            Check(ui.Menu.ScrollMax > 0, $"the display tab scrolls ({ui.Menu.ScrollMax:0} px)");
             ui.Choose(MenuControl.Resolution);
             yield return null;
             Check(ui.OpenCombo != null && ui.OpenCombo.control == MenuControl.Resolution, "the resolution list opens");
-            Capture(target, Path.Combine(folder, "Options_1_Resolution.png"), camera, menuCanvas);
+            Capture(target, Path.Combine(folder, "Options_Display_Resolution.png"), camera, menuCanvas);
             ui.ChooseComboItem(-1);
             ui.Choose(MenuControl.Cancel);
-            ui.OpenOptions(1);
-            yield return null;
 
-            ui.Choose(MenuControl.Lighting);
-            ui.ChooseComboItem(1);
-            if (SystemInfo.supportsRayTracing)
-                Check(ui.OpenCombo == null && ui.DraftSettings.lighting == 1, "ray tracing lighting picked (DXR supported), the list closes");
-            else
-                Check(ui.OpenCombo != null && ui.DraftSettings.lighting == 0, "ray tracing lighting cannot be picked without DXR, the list stays open");
-            if (ui.OpenCombo == null) ui.Choose(MenuControl.Lighting);
-            ui.ChooseComboItem(0);
-            Check(ui.OpenCombo == null && ui.DraftSettings.lighting == 0, "classic lighting picked, the list closes");
+            ui.OpenOptions(Ui.HplPauseMenu.DisplayTabIndex);
+            yield return null;
+            Capture(target, Path.Combine(folder, "Options_Display.png"), camera, menuCanvas);
+            if (ui.DraftSettings.vSync) ui.Choose(MenuControl.VSync);
             ui.Choose(MenuControl.FpsLimit);
             yield return null;
-            Capture(target, Path.Combine(folder, "Options_1_FpsLimit.png"), camera, menuCanvas);
+            Capture(target, Path.Combine(folder, "Options_Display_FpsLimit.png"), camera, menuCanvas);
             ui.ChooseComboItem(2);
-            ui.Choose(MenuControl.Antialiasing); ui.ChooseComboItem((int)Hpl.HplAntialiasing.Fxaa);
+
+            // The graphics tab: lighting, textures, shadows and effects.
+            ui.Choose(MenuControl.GraphicsTab);
+            yield return null;
+            Check(HasAll(ui, "Graphics", MenuControl.Lighting, MenuControl.Textures, MenuControl.TextureQuality, MenuControl.TextureMemoryBudget, MenuControl.Anisotropy,
+                         MenuControl.Shadows, MenuControl.Bloom, MenuControl.ImageTrail, MenuControl.RadialBlur), "the graphics tab has the lighting, textures, shadows and effects");
+            int lightingBefore = ui.DraftSettings.lighting;
+            ui.Choose(MenuControl.Lighting);
+            ui.ChooseComboItem(1);
+            Check(ui.OpenCombo != null && ui.DraftSettings.lighting == lightingBefore, "the enhanced lighting cannot be picked yet, the list stays open");
+            ui.ChooseComboItem(0);
+            Check(ui.OpenCombo == null && ui.DraftSettings.lighting == lightingBefore, "classic lighting picked, the list closes and the ray tracing switch is not touched");
             ui.Choose(MenuControl.TextureQuality); ui.ChooseComboItem(1);
             ui.Choose(MenuControl.Anisotropy); ui.ChooseComboItem(4);
             ui.Choose(MenuControl.Shadows); ui.ChooseComboItem(0);
             if (ui.DraftSettings.imageTrail) ui.Choose(MenuControl.ImageTrail);
             if (ui.DraftSettings.radialBlur) ui.Choose(MenuControl.RadialBlur);
-            var d = ui.DraftSettings;
-            Check(d.fpsLimit == 120 && d.antialiasing == (int)Hpl.HplAntialiasing.Fxaa && d.textureQuality == 1 && d.anisotropy == 4 &&
-                  d.shadows == 0 && !d.imageTrail && !d.radialBlur, "choices change the draft");
             yield return null;
-            Capture(target, Path.Combine(folder, "Options_1_Changed.png"), camera, menuCanvas);
+            Capture(target, Path.Combine(folder, "Options_Graphics.png"), camera, menuCanvas);
+
+            // The image tab: one list for the anti-aliasing and DLSS.
+            ui.Choose(MenuControl.ImageTab);
+            yield return null;
+            Check(HasAll(ui, "Image", MenuControl.ImageMethod, MenuControl.DlssPreset), "the image tab has the method and the DLSS model lists");
+            ui.Choose(MenuControl.ImageMethod); ui.ChooseComboItem((int)Hpl.HplAntialiasing.Fxaa);
+            var d = ui.DraftSettings;
+            Check(d.fpsLimit == 120 && d.antialiasing == (int)Hpl.HplAntialiasing.Fxaa && d.dlssMode == 0 && d.textureQuality == 1 && d.anisotropy == 4 &&
+                  d.shadows == 0 && !d.imageTrail && !d.radialBlur, "choices change the draft (an AA method turns DLSS off)");
+            Capture(target, Path.Combine(folder, "Options_Image.png"), camera, menuCanvas);
             ui.Choose(MenuControl.Apply);
             yield return null;
             yield return null;
@@ -202,30 +219,23 @@ namespace RTXMnesia.Dev
             Check(volume != null && volume.isActiveAndEnabled && volume.sharedProfile.TryGet<UnityEngine.Rendering.HighDefinition.MotionBlur>(out var blur) && blur.intensity.value == 0f,
                   "the settings volume turns HDRP motion blur off");
 
-            // The RTX tab: DLSS mode and model; with DLSS on the graphics tab's anti-aliasing shows "DLSS".
-            ui.OpenOptions(Ui.HplPauseMenu.OptionsTabs - 1);
+            // DLSS through the method list.
+            ui.OpenOptions(Ui.HplPauseMenu.ImageTabIndex);
             yield return null;
-            bool rtxControls = false, presetList = false;
-            for (int i = 0; i < ui.Menu.ButtonCount; i++)
-            {
-                rtxControls |= ui.Menu.ControlAt(i) == MenuControl.DlssMode;
-                presetList |= ui.Menu.ControlAt(i) == MenuControl.DlssPreset;
-            }
-            Check(rtxControls && presetList, "the RTX tab has the DLSS mode and model lists");
-            Capture(target, Path.Combine(folder, "Options_RTX_Off.png"), camera, menuCanvas);
+            Capture(target, Path.Combine(folder, "Options_Image_Off.png"), camera, menuCanvas);
             if (Hpl.HplDlss.Available)
             {
-                ui.Choose(MenuControl.DlssMode);
+                ui.Choose(MenuControl.ImageMethod);
                 yield return null;
                 int rows = 0;
                 for (int i = 0; i < ui.Menu.ButtonCount; i++) if (ui.Menu.ControlAt(i) == MenuControl.ComboItem) rows++;
-                Check(rows == 6, $"the open DLSS list is drawn on the RTX tab ({rows} of 6 choices)");
-                Capture(target, Path.Combine(folder, "Options_RTX_ModeList.png"), camera, menuCanvas);
-                ui.ChooseComboItem((int)Hpl.HplDlssMode.Performance);
+                Check(rows == 9, $"the open method list is drawn ({rows} of 9 choices)");
+                Capture(target, Path.Combine(folder, "Options_Image_MethodList.png"), camera, menuCanvas);
+                ui.ChooseComboItem(3 + (int)Hpl.HplDlssMode.Performance);
                 Check(ui.DraftSettings.dlssMode == (int)Hpl.HplDlssMode.Performance, "DLSS Performance picked");
                 ui.Choose(MenuControl.DlssPreset);
                 yield return null;
-                Capture(target, Path.Combine(folder, "Options_RTX_Models.png"), camera, menuCanvas);
+                Capture(target, Path.Combine(folder, "Options_Image_Models.png"), camera, menuCanvas);
                 ui.ChooseComboItem(0);
                 ui.Choose(MenuControl.Apply);
                 for (int i = 0; i < 5; i++) yield return null;
@@ -233,47 +243,40 @@ namespace RTXMnesia.Dev
                       "DLSS applied: the player camera allows dynamic resolution, its own anti-aliasing is off");
                 var hdCamera = UnityEngine.Rendering.HighDefinition.HDCamera.GetOrCreate(camera);
                 Check(hdCamera.actualWidth < camera.pixelWidth, $"DLSS renders below the output size ({hdCamera.actualWidth} of {camera.pixelWidth})");
-                ui.OpenOptions(Ui.HplPauseMenu.OptionsTabs - 1);
+                ui.OpenOptions(Ui.HplPauseMenu.ImageTabIndex);
                 yield return null;
-                Capture(target, Path.Combine(folder, "Options_RTX_Performance.png"), camera, menuCanvas);
-                ui.OpenOptions(1);
-                yield return null;
-                var aa = HplGraphicsOptions.Items(MenuControl.Antialiasing, ui.Settings, ui.Menu.Translate, out _);
-                Check(aa.Count == 1 && aa[0].label == "DLSS" && !aa[0].enabled, "the graphics tab's anti-aliasing shows DLSS and cannot be changed");
-                Capture(target, Path.Combine(folder, "Options_1_DlssAA.png"), camera, menuCanvas);
+                var methods = HplGraphicsOptions.Items(MenuControl.ImageMethod, ui.Settings, ui.Menu.Translate, out int current);
+                Check(current == 3 + (int)Hpl.HplDlssMode.Performance && methods[current].label.StartsWith("DLSS"), "the method list shows the chosen DLSS mode");
+                Capture(target, Path.Combine(folder, "Options_Image_Performance.png"), camera, menuCanvas);
             }
-            else Debug.Log("DLSS is not available on this GPU: the RTX tab shows why");
+            else Debug.Log("DLSS is not available on this GPU: the image tab shows why");
 
-            // Ray tracing lighting: its settings appear on the RTX tab.
+            // Ray tracing: its own switch, independent of the lighting list.
             if (SystemInfo.supportsRayTracing)
             {
-                ui.OpenOptions(1);
+                ui.OpenOptions(Ui.HplPauseMenu.RayTabIndex);
                 yield return null;
-                ui.Choose(MenuControl.Lighting);
-                ui.ChooseComboItem(1);
+                Capture(target, Path.Combine(folder, "Options_Ray_Off.png"), camera, menuCanvas);
+                if (ui.DraftSettings.lighting == 1) ui.Choose(MenuControl.RtEnabled);
+                ui.Choose(MenuControl.RtShadows);
+                Check(ui.OpenCombo == null, "while ray tracing is off its lists do not open");
+                ui.Choose(MenuControl.RtEnabled);
+                Check(ui.DraftSettings.lighting == 1, "the ray tracing switch turns it on");
                 // The checks above turned the shadows off.
+                ui.Choose(MenuControl.GraphicsTab);
                 ui.Choose(MenuControl.Shadows);
                 ui.ChooseComboItem(Hpl.HplGraphics.ShadowsHigh);
-                ui.Choose(MenuControl.RtxTab);
+                ui.Choose(MenuControl.RayTab);
                 yield return null;
-                bool rtShadows = false, rtAo = false, rtReflections = false, rtGi = false, rtAll = false, rtLantern = false, rtPath = false;
-                for (int i = 0; i < ui.Menu.ButtonCount; i++)
-                {
-                    rtShadows |= ui.Menu.ControlAt(i) == MenuControl.RtShadows;
-                    rtAo |= ui.Menu.ControlAt(i) == MenuControl.RtAo;
-                    rtReflections |= ui.Menu.ControlAt(i) == MenuControl.RtReflections;
-                    rtGi |= ui.Menu.ControlAt(i) == MenuControl.RtGi;
-                    rtAll |= ui.Menu.ControlAt(i) == MenuControl.RtAllShadows;
-                    rtLantern |= ui.Menu.ControlAt(i) == MenuControl.RtLanternShadows;
-                    rtPath |= ui.Menu.ControlAt(i) == MenuControl.RtPathTracing;
-                }
-                Check(rtShadows && rtAo && rtReflections && rtGi && rtAll && rtLantern && rtPath, "with ray tracing lighting the RTX tab has the lists of RT shadows, shadows from all lights, lantern shadows, RTAO, reflections, RTGI and path tracing");
+                Check(HasAll(ui, "Ray tracing", MenuControl.RtEnabled, MenuControl.RtShadows, MenuControl.RtAo, MenuControl.RtReflections, MenuControl.RtGi,
+                             MenuControl.RtAllShadows, MenuControl.RtLanternShadows, MenuControl.RtPathTracing),
+                      "the ray tracing tab has the lists of RT shadows, shadows from all lights, lantern shadows, RTAO, reflections, RTGI and path tracing");
                 ui.Choose(MenuControl.RtShadows);
                 yield return null;
                 int rows = 0;
                 for (int i = 0; i < ui.Menu.ButtonCount; i++) if (ui.Menu.ControlAt(i) == MenuControl.ComboItem) rows++;
                 Check(rows == Hpl.HplRayTracing.ShadowLights.Length, $"the open RT shadows list is drawn ({rows} of {Hpl.HplRayTracing.ShadowLights.Length} choices)");
-                Capture(target, Path.Combine(folder, "Options_RTX_RtShadowsList.png"), camera, menuCanvas);
+                Capture(target, Path.Combine(folder, "Options_Ray_RtShadowsList.png"), camera, menuCanvas);
                 ui.ChooseComboItem(1);
                 Check(ui.DraftSettings.rtShadows == 1, "RT shadows Low picked");
                 ui.Choose(MenuControl.Apply);
@@ -282,9 +285,9 @@ namespace RTXMnesia.Dev
                 foreach (var light in World.AmnesiaLight.All)
                     if (light != null && light.TryGetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(out var hdl) && hdl.useRayTracedShadows) traced++;
                 Check(Hpl.HplRayTracing.Active && traced > 0 && traced <= Hpl.HplRayTracing.ShadowLights[1], $"ray tracing applied: {traced} lights with ray-traced shadows (at most {Hpl.HplRayTracing.ShadowLights[1]})");
-                ui.OpenOptions(Ui.HplPauseMenu.OptionsTabs - 1);
+                ui.OpenOptions(Ui.HplPauseMenu.RayTabIndex);
                 yield return null;
-                Capture(target, Path.Combine(folder, "Options_RTX_RtShadows.png"), camera, menuCanvas);
+                Capture(target, Path.Combine(folder, "Options_Ray_On.png"), camera, menuCanvas);
             }
 
             // The user's settings back (applied and saved as they were).

@@ -74,8 +74,9 @@ namespace RTXMnesia.EditorDev
                 var ui = root.AddComponent<HplGameUi>();
                 ui.Init(map, true);
                 typeof(HplMap).GetProperty(nameof(HplMap.GameUi)).SetValue(map, ui);
-                ui.OpenOptions(4);
-                Check(ui.Choose(MenuControl.HdrTab), "HDR tab reachable");
+                ui.OpenOptions(HplPauseMenu.DisplayTabIndex);
+                ui.DraftSettings.hdrMode = 1;
+                Check(ui.Choose(MenuControl.HdrCalibrate), "HDR calibration window reachable");
                 ui.DraftSettings.hdrPeak = 1000;
                 Check(ui.Choose(MenuControl.HdrPeakMore) && ui.DraftSettings.hdrPeak == 1010 && HplHdr.Peak == 1010, "peak live preview");
                 Check(ui.Choose(MenuControl.HdrWhiteMore) && HplHdr.CalibrationPattern == 1, "white preview selection");
@@ -96,7 +97,7 @@ namespace RTXMnesia.EditorDev
                     for (int pattern = 0; pattern < 3; pattern++)
                     {
                         HplHdr.CalibrationPattern = pattern;
-                        ui.Menu.Refresh(false, true, 4, ui.DraftSettings, 4, 1, Vector2.zero);
+                        ui.Menu.Refresh(false, true, HplPauseMenu.DisplayTabIndex, ui.DraftSettings, 4, 1, Vector2.zero, extras: new HplMenuExtras { hdrCalibration = true });
                         Canvas.ForceUpdateCanvases();
                         var image = new Texture2D(800, 600, TextureFormat.RGB24, false);
                         var pixels = new Color32[800 * 600];
@@ -115,9 +116,9 @@ namespace RTXMnesia.EditorDev
                 Check(!ui.ShowingOptions && HplHdr.Peak == saved.hdrPeak && HplHdr.PaperWhite == saved.hdrPaperWhite &&
                     !HplHdr.CalibrationVisible, "cancel restores output and hides calibration");
                 Check(PlayerPrefs.GetString(HplUserSettings.PrefsKey, "") == prefs, "preview never writes preferences");
-                ui.OpenOptions(4);
+                ui.OpenOptions(HplPauseMenu.DisplayTabIndex);
                 ui.Choose(MenuControl.GraphicsTab);
-                Check(!HplHdr.CalibrationVisible && ui.Choose(MenuControl.Resolution), "other tabs still work");
+                Check(!HplHdr.CalibrationVisible && ui.Choose(MenuControl.Lighting), "other tabs still work");
             }
             finally
             {

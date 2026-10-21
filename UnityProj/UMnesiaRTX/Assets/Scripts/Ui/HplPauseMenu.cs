@@ -10,7 +10,7 @@ namespace RTXMnesia.Ui
     public enum MenuControl
     {
         Resume, Options, Quit, ConfirmQuit, Cancel, Apply,
-        GameTab, GraphicsTab, SoundTab, InputTab, HdrTab, RtxTab,
+        GameTab, DisplayTab, GraphicsTab, ImageTab, RayTab, SoundTab, InputTab,
         Subtitles, Hints, Crosshair, Fullscreen, VSync, VolumeLess, VolumeMore,
         SensitivityLess, SensitivityMore, InvertMouse, SmoothMouse,
         VolumeSlider, SensitivitySlider, NewGame, ReturnTitle, ConfirmNewGame, ConfirmReturnTitle,
@@ -18,15 +18,17 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, TextureMemoryBudget, Anisotropy, Antialiasing, Shadows, DlssMode, DlssPreset, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows, RtPathTracing,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, TextureMemoryBudget, Anisotropy, ImageMethod, Shadows, DlssPreset, HdrMode, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows, RtPathTracing,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,
         NameCreate, NameCancel, MessageOk,
         // Start game window (cLuxMainMenu_StartGame), the hard mode save, the Justine campaign.
         StartNormal, StartHard, StartGameStart, HardSave, ConfirmHardSave, Justine, MainCampaign,
-        HdrMode, HdrPeakLess, HdrPeakMore, HdrPeakSlider, HdrWhiteLess, HdrWhiteMore, HdrWhiteSlider,
+        HdrPeakLess, HdrPeakMore, HdrPeakSlider, HdrWhiteLess, HdrWhiteMore, HdrWhiteSlider,
         HdrBlackLess, HdrBlackMore, HdrBlackSlider, HdrShadowsLess, HdrShadowsMore, HdrShadowsSlider, HdrPreview, HdrDetect, HdrDefaults,
+        // Ray tracing switch, the scroll bar arrows of the options, the HDR calibration window.
+        RtEnabled, ScrollUp, ScrollDown, HdrCalibrate, HdrCalibrationClose,
     }
 
     /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>
@@ -46,6 +48,8 @@ namespace RTXMnesia.Ui
         /// <summary>In game in hard mode: the save button, the player's tinderboxes and whether this menu saved.</summary>
         public bool hardModeSave, hardModeSaved;
         public int tinderboxes;
+        /// <summary>The HDR calibration window (opened from the display tab) is open.</summary>
+        public bool hdrCalibration;
     }
 
     /// <summary>The open drop-down list (cWidgetComboBox menu): its control, first shown choice and the highlighted one.</summary>
@@ -58,7 +62,7 @@ namespace RTXMnesia.Ui
     }
 
     /// <summary>In-game cLuxMainMenu: menu.cfg layout and gui_main_menu.skin on the same Canvas system as the HUD.</summary>
-    public sealed class HplPauseMenu
+    public sealed partial class HplPauseMenu
     {
         readonly HplMap _map;
         readonly HplMenuAssets _assets;
@@ -118,6 +122,8 @@ namespace RTXMnesia.Ui
             _logo.texture = _assets != null ? _assets.titleLogo : null;
             _logo.enabled = _titleScreen && _logo.texture != null;
             _menuText = Text("Menu font", _assets != null ? _assets.menuFont : map.hud.defaultFont);
+            // The scrolling area of the options: above the window's pieces, below the text and the lists over it.
+            CreateScrollLayer(_assets != null ? _assets.guiFont : map.hud.defaultFont);
             _guiText = Text("GUI font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
             // An open drop-down list is drawn over the window, its own pieces and text above the window's text.
             _popupText = Text("Drop-down list font", _assets != null ? _assets.guiFont : map.hud.defaultFont);
@@ -183,7 +189,7 @@ namespace RTXMnesia.Ui
 
         public void Refresh(bool confirmQuit, bool options, int tab, HplUserSettings settings, int selected, float opacity, Vector2 pointer,
                             MenuControl confirmation = MenuControl.ConfirmQuit, IReadOnlyList<string> saves = null, int selectedSave = -1,
-                            HplKeyConfig keyConfig = null, HplMenuCombo combo = null, HplMenuExtras extras = null)
+                            HplKeyConfig keyConfig = null, HplMenuCombo combo = null, HplMenuExtras extras = null, float scroll = 0)
         {
             extras ??= new HplMenuExtras();
             HplHdr.CalibrationVisible = false;
@@ -192,6 +198,13 @@ namespace RTXMnesia.Ui
             _guiText.Clear();
             _popupText.Clear();
             _topText.Clear();
+            _scrollText.Clear();
+            _scrollPieceIndex = 0;
+            _scrollFull.Clear();
+            _disabledButtons.Clear();
+            _noNavButtons.Clear();
+            _inScroll = _skipDraw = false;
+            _scroll = scroll;
             _topPieceIndex = 0;
             _buttons.Clear();
             _buttonData.Clear();
@@ -261,14 +274,16 @@ namespace RTXMnesia.Ui
             else if (keyConfig != null) KeyConfig(keyConfig);
             else if (options)
             {
-                Options(tab, settings);
-                if (combo != null && (tab == 1 || tab == 5)) ComboList(combo, settings);
+                if (extras.hdrCalibration) HdrCalibration(settings);
+                else Options(tab, settings);
+                if (combo != null) ComboList(combo, settings);
             }
             else if (saves != null) LoadGame(saves, selectedSave);
             else Main(extras);
             for (int i = _pieceIndex; i < _pieces.Count; i++) _pieces[i].enabled = false;
             for (int i = _popupPieceIndex; i < _popupPieces.Count; i++) _popupPieces[i].enabled = false;
             for (int i = _topPieceIndex; i < _topPieces.Count; i++) _topPieces[i].enabled = false;
+            for (int i = _scrollPieceIndex; i < _scrollPieces.Count; i++) _scrollPieces[i].enabled = false;
             if (HasCursor)
             {
                 _cursor.enabled = true;
@@ -550,300 +565,6 @@ namespace RTXMnesia.Ui
             SkinButton(new Rect(x + 83, y, 80, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
         }
 
-        void Options(int tab, HplUserSettings settings)
-        {
-            Window(new Rect(90, 70, 620, 460), tab == 4);
-            Draw(_guiText, T("MainMenu", "Options", "Настройки"), new Vector2(125, 50), Vector2.one * 25, Color.white);
-            string[] tabs = { "OptionsGame", "OptionsGraphics", "OptionsSound", "OptionsInput", "OptionsHDR", "OptionsRTX" };
-            string[] fallbacks = { "Игра", "Графика", "Звук", "Управление", "HDR", "RTX" };
-            for (int i = 0; i < OptionsTabs; i++)
-            {
-                Rect rect = new(106 + i * 98, 117, 94, 28);
-                Button(rect, T("MainMenu", tabs[i], fallbacks[i]), (MenuControl)((int)MenuControl.GameTab + i));
-                if (i == tab) Piece(null, new Rect(rect.x, rect.yMax + 3, rect.width, 1), new Color(1, 1, 1, 0.7f));
-            }
-            switch (tab)
-            {
-                case 0:
-                    Toggle(195, "ShowSubtitles", "Субтитры", settings.subtitles, MenuControl.Subtitles);
-                    Toggle(245, "ShowHints", "Подсказки", settings.hints, MenuControl.Hints);
-                    Toggle(295, "ShowCrosshair", "Прицел", settings.crosshair, MenuControl.Crosshair);
-                    // menu.cfg Options ShowCommentary shows the developer commentary option.
-                    if (_map.menuConfig == null || _map.menuConfig.GetString("Options", "ShowCommentary", "false") == "true")
-                        Toggle(345, "Commentary", "Комментарии", settings.commentary, MenuControl.Commentary);
-                    break;
-                case 1:
-                    Graphics(settings);
-                    break;
-                case 2:
-                    Adjust(200, "Volume", "Общая громкость", Mathf.RoundToInt(settings.masterVolume * 100) + "%", settings.masterVolume, MenuControl.VolumeLess, MenuControl.VolumeMore);
-                    break;
-                case 3:
-                    Toggle(195, "InvertMouse", "Инверсия мыши", settings.invertMouse, MenuControl.InvertMouse);
-                    Toggle(245, "SmoothMouse", "Сглаживание мыши", settings.smoothMouse, MenuControl.SmoothMouse);
-                    Adjust(305, "MouseSensitivity", "Чувствительность мыши", settings.mouseSensitivity.ToString("0.0", CultureInfo.InvariantCulture), (settings.mouseSensitivity - 0.2f) / 4.8f, MenuControl.SensitivityLess, MenuControl.SensitivityMore);
-                    // cLuxMainMenu_Options: the key config button under the input settings.
-                    string keyConfig = T("OptionsMenu", "KeyConfigButton", "Конфигурация клавиш");
-                    float keyWidth = _guiText.font != null ? _guiText.font.GetLength(Vector2.one * 18, keyConfig) : 200;
-                    Button(new Rect(140, 380, keyWidth + 20, 25), keyConfig, MenuControl.KeyConfig, null, default, HplFontAlign.Left);
-                    break;
-                case 4:
-                    Hdr(settings);
-                    break;
-                case 5:
-                    Rtx(settings);
-                    break;
-            }
-            SkinButton(new Rect(500, 485, 80, 30), T("MainMenu", "OK", "OK"), MenuControl.Apply);
-            SkinButton(new Rect(590, 485, 95, 30), T("MainMenu", "Cancel", "Отмена"), MenuControl.Cancel);
-        }
-
-        /// <summary>The tabs of the options window: game, graphics, sound, input, HDR, RTX.</summary>
-        public const int OptionsTabs = 6;
-
-        /// <summary>
-        /// The RTX tab: NVIDIA DLSS on the left (on any NVIDIA RTX GPU, with or without ray tracing), the ray tracing
-        /// settings on the right — only with the "Ray tracing" lighting of the graphics tab.
-        /// </summary>
-        void Rtx(HplUserSettings settings)
-        {
-            const float leftX = 120, rightX = 420, top = 158, comboStep = 45;
-            var size = Vector2.one * 16;
-            var grey = new Color(0.6f, 0.6f, 0.6f, 1);
-            float y = top;
-            Combo(leftX, y, MenuControl.DlssMode, settings);
-            y += comboStep;
-            _disabled = !HplGraphicsOptions.DlssOn(settings);
-            Combo(leftX, y, MenuControl.DlssPreset, settings);
-            _disabled = false;
-            y += comboStep + 4;
-            string info;
-            if (!HplDlss.Available) info = "DLSS недоступен: нужна видеокарта\nNVIDIA RTX и её драйвер.";
-            else if (settings.dlssMode == (int)HplDlssMode.Off) info = "DLSS выключен: сглаживание\nвыбирается на вкладке «Графика».";
-            else if (HplDlss.Active && HplDlss.Mode == (HplDlssMode)settings.dlssMode && HplDlss.RenderSize(out var render, out var output))
-                info = "Рендер " + render.x + " x " + render.y + "\nВывод " + output.x + " x " + output.y;
-            else info = "Применится после «OK».";
-            DrawLines(info, leftX, y, size, grey);
-            y += 48;
-            if (SystemInfo.supportsRayTracing && settings.lighting == 1)
-            {
-                Combo(leftX, y, MenuControl.RtPathTracing, settings);
-                y += comboStep + 4;
-                if (settings.rtPathTracing > 0) { DrawLines(PathTracingNote, leftX, y, size, grey); y += 48; }
-            }
-            if (SystemInfo.supportsRayTracing) { DrawLines(CompareHint, leftX, y, size, grey); y += 48; }
-            if (HplDlss.Available) DrawLines(FrameGenerationNote, leftX, y, size, grey);
-
-            y = top;
-            if (SystemInfo.supportsRayTracing && settings.lighting == 1)
-            {
-                Combo(rightX, y, MenuControl.RtShadows, settings);
-                y += comboStep;
-                _disabled = settings.rtShadows == 0;
-                Combo(rightX, y, MenuControl.RtAllShadows, settings);
-                _disabled = false;
-                y += comboStep;
-                Combo(rightX, y, MenuControl.RtLanternShadows, settings);
-                y += comboStep;
-                Combo(rightX, y, MenuControl.RtAo, settings);
-                y += comboStep;
-                Combo(rightX, y, MenuControl.RtReflections, settings);
-                y += comboStep;
-                Combo(rightX, y, MenuControl.RtGi, settings);
-                y += comboStep + 4;
-                string traced = !HplRayTracing.Applied(settings)
-                    ? "Применится после «OK»."
-                    : settings.rtShadows == 0 ? "Тени: картами теней."
-                    : "С трассировкой: " + HplRayTracing.TracedLights + " из " + HplRayTracing.ShadowedLights + "\nисточников с тенями в кадре" + (HplRayTracing.TracedHandLights > 0 ? " + фонарь." : ".");
-                DrawLines(traced, rightX, y, size, grey);
-                return;
-            }
-            Draw(_guiText, "Трассировка лучей", new Vector2(rightX, y), size, Color.white);
-            y += 24;
-            string rt = !SystemInfo.supportsRayTracing
-                ? "Недоступна: нужны DirectX 12\nи видеокарта с трассировкой лучей."
-                : "Включите освещение «Трассировка\nлучей» на вкладке «Графика».";
-            DrawLines(rt, rightX, y, size, grey);
-        }
-
-        /// <summary>The comparison key (Effects.HplRtxCompare) under the ray tracing settings.</summary>
-        /// <summary>What the path tracer of HDRP does not give (HplRayTracing.PathTracingSamples).</summary>
-        const string PathTracingNote = "Чисто, пока в кадре всё стоит;\nбез окружающего света и тумана.";
-        /// <summary>Frame generation: Unity has none of its own; NVIDIA's driver one is turned on in the NVIDIA App.</summary>
-        const string FrameGenerationNote = "Генерация кадров: NVIDIA Smooth\nMotion в NVIDIA App (RTX 40/50).";
-        const string CompareHint ="В игре клавиша C: сравнение\nс другим освещением.";
-
-        /// <summary>Text with line breaks (the GUI text draws one line), 20 units per line.</summary>
-        void DrawLines(string text, float x, float y, Vector2 size, Color color)
-        {
-            string[] lines = text.Split('\n');
-            for (int i = 0; i < lines.Length; i++) Draw(_guiText, lines[i], new Vector2(x, y + i * 20), size, color);
-        }
-
-        // The calibration patch is drawn in the camera buffer, through a hole in the UI background.
-        // Putting it in an ordinary UI texture would clamp its luminance to Paper White / Max Nits.
-        static readonly Rect HdrPatch = new(420, 224, 250, 150);
-        string HdrText(string ru, string en) => _map.language != null &&
-            _map.language.language != null && _map.language.language.StartsWith("eng", System.StringComparison.OrdinalIgnoreCase) ? en : ru;
-
-        void Hdr(HplUserSettings settings)
-        {
-            _shade.color = Color.clear;
-            string mode = settings.hdrMode switch { 0 => HdrText("Выкл.", "Off"), 1 => HdrText("Авто", "Auto"), _ => HdrText("Вкл.", "On") };
-            Button(new Rect(130, 164, 245, 24), "HDR: " + mode, MenuControl.HdrMode, null, Vector2.one * 17, HplFontAlign.Left);
-            string status = HplHdr.Pending ? HdrText("Переключение…", "Switching…") : HplHdr.Active
-                ? HdrText("HDR активен", "HDR active") : HplHdr.Available ? HdrText("Вывод SDR", "SDR output") : HdrText("HDR недоступен", "HDR unavailable");
-            Draw(_guiText, status, new Vector2(420, 165), Vector2.one * 16, Color.white);
-            SmallAdjust(130, 200, HdrText("Пиковая яркость", "Peak luminance"), settings.hdrPeak.ToString("0") + " nit",
-                (settings.hdrPeak - HplHdr.MinPeak) / (HplHdr.MaxPeak - HplHdr.MinPeak), MenuControl.HdrPeakLess, MenuControl.HdrPeakMore, MenuControl.HdrPeakSlider);
-            SmallAdjust(130, 256, HdrText("Яркость белого / UI", "Paper white / UI"), settings.hdrPaperWhite.ToString("0") + " nit",
-                (settings.hdrPaperWhite - HplHdr.MinWhite) / (HplHdr.MaxWhite - HplHdr.MinWhite), MenuControl.HdrWhiteLess, MenuControl.HdrWhiteMore, MenuControl.HdrWhiteSlider);
-            SmallAdjust(130, 312, HdrText("Уровень чёрного", "Black level"), settings.hdrBlack.ToString("0.000", CultureInfo.InvariantCulture) + " nit",
-                settings.hdrBlack / HplHdr.MaxBlack, MenuControl.HdrBlackLess, MenuControl.HdrBlackMore, MenuControl.HdrBlackSlider);
-            SmallAdjust(130, 368, HdrText("Глубина теней", "Shadow depth"), settings.hdrShadows.ToString("0.00", CultureInfo.InvariantCulture),
-                (settings.hdrShadows - HplHdr.MinShadows) / (HplHdr.MaxShadows - HplHdr.MinShadows), MenuControl.HdrShadowsLess, MenuControl.HdrShadowsMore, MenuControl.HdrShadowsSlider);
-            Button(new Rect(125, 424, 240, 23), HdrText("Данные дисплея", "Use display values"), MenuControl.HdrDetect, null, Vector2.one * 16);
-            Button(new Rect(125, 452, 240, 23), HdrText("По умолчанию", "Defaults"), MenuControl.HdrDefaults, null, Vector2.one * 16);
-            string[] names = { HdrText("Пик", "Peak"), HdrText("Белый", "White"), HdrText("Чёрный", "Black") };
-            Button(new Rect(410, 194, 270, 23), "< " + names[HplHdr.CalibrationPattern] + " >", MenuControl.HdrPreview, null, Vector2.one * 16);
-            string[] help = {
-                HdrText("Повышайте пик до исчезновения\nкреста, затем немного уменьшите.\nОтключите динамический тонмап\nдисплея для точной калибровки.", "Raise peak until the cross disappears,\nthen lower it slightly. Disable the\ndisplay's dynamic tone mapping\nfor accurate calibration."),
-                HdrText("Белое поле и текст должны быть\nкомфортными в вашем освещении.\nЭта настройка также влияет\nна общую яркость сцены.", "Keep the white tile and text\ncomfortable in your room lighting.\nThis also controls the overall\nbrightness of the scene."),
-                HdrText("Начните с нуля. Крест должен\nбыть едва различим на чёрном.\nНа OLED обычно оставляйте 0.\nНе высветляйте тёмные комнаты.", "Start at zero. The cross should be\nbarely visible against black.\nFor OLED, usually leave at zero.\nAvoid lifting dark rooms.") };
-            string hint = HplHdr.Active ? help[HplHdr.CalibrationPattern] :
-                HdrText("Образец SDR — только иллюстрация.\nВключите HDR в Windows и игре.\nВ редакторе нужен DX12;\nдля DX11 проверяйте сборку.", "SDR illustration, not HDR calibration.\nEnable HDR in Windows and the game.\nEditor HDR requires DX12;\nuse a standalone player for DX11.");
-            string[] lines = hint.Split('\n');
-            for (int i = 0; i < lines.Length; i++)
-                Draw(_guiText, lines[i], new Vector2(420, 388 + i * 18), Vector2.one * 13, Color.white);
-            float width = Screen.height > 0 ? Screen.width * 600f / Screen.height : 800;
-            HplHdr.CalibrationRect = new Rect((HdrPatch.x + (width - 800) * 0.5f) / width, HdrPatch.y / 600,
-                HdrPatch.width / width, HdrPatch.height / 600);
-            HplHdr.CalibrationVisible = _root.activeInHierarchy && _opacity > 0.99f;
-        }
-
-        /// <summary>
-        /// cLuxMainMenu_KeyConfig::CreateGui (620 × 460 window): the category selector, the action / primary /
-        /// secondary headers (font × 1.25), a row per action of the category (inputs 140 × 16, 10 apart, primary at
-        /// 240, secondary 150 further), empty or shared inputs red, the tooltip of the selected row, "Default keys",
-        /// OK and Cancel. A slot waiting for an input shows "...".
-        /// </summary>
-        void KeyConfig(HplKeyConfig keys)
-        {
-            var window = new Rect(90, 70, 620, 460);
-            Window(window);
-            Draw(_guiText, T("KeyConfig", "KeyConfigTitle", "Конфигурация клавиш"), new Vector2(125, 50), Vector2.one * 25, Color.white);
-            var header = Vector2.one * 18 * 1.25f;
-            var size = Vector2.one * 16;
-            float x = window.x + 30, y = window.y + 85;
-            string category = T("KeyConfig", "Category", "Категория");
-            Draw(_guiText, category, new Vector2(x, y), header, Color.white);
-            float comboX = x + (_guiText.font != null ? _guiText.font.GetLength(header, category) : 100) + 10;
-            string[] categories = { T("KeyConfig", "Movement", "Движение"), T("KeyConfig", "Actions", "Действия"), T("KeyConfig", "Misc", "Разное") };
-            var combo = new Rect(comboX, y, 175, 25);
-            Piece(null, combo, new Color(0, 0, 0, 0.5f));
-            Button(combo, categories[Mathf.Clamp(keys.Category, 0, 2)] + "  >", MenuControl.KeyCategory);
-
-            x += 15;
-            y += 25 + 5;
-            Draw(_guiText, T("KeyConfig", "HeaderAction", "Действие"), new Vector2(x, y), header, Color.white);
-            Draw(_guiText, T("KeyConfig", "HeaderPrimary", "Основная"), new Vector2(x + 240 + 70, y), header, Color.white, HplFontAlign.Center);
-            Draw(_guiText, T("KeyConfig", "HeaderSecondary", "Дополнительная"), new Vector2(x + 390 + 70, y), header, Color.white, HplFontAlign.Center);
-            y += header.y + 10;
-
-            int selectedEntry = -1;
-            foreach (int i in keys.EntriesOf(keys.Category))
-            {
-                var e = keys.Entries[i];
-                Draw(_guiText, T("Actions", e.name, e.name), new Vector2(x, y), size, Color.white);
-                for (int s = 0; s < 2; s++)
-                {
-                    var rect = new Rect(x + (s == 0 ? 240 : 390), y, 140, 16);
-                    bool waiting = keys.WaitingEntry == i && keys.WaitingSlot == s;
-                    Piece(null, rect, waiting ? new Color(1, 1, 1, 0.25f) : new Color(0, 0, 0, 0.45f));
-                    string name = HplKeyBindings.ButtonName(e.inputs[s]);
-                    string label = waiting ? "..." : name == "" ? "" : T("ButtonNames", name, name);
-                    int index = _buttons.Count;
-                    _buttons.Add((rect, MenuControl.KeySlot));
-                    _buttonData.Add(i * 2 + s);
-                    var color = e.invalid[s] ? Color.red : index == _selected ? Highlight : Color.white;
-                    Draw(_guiText, label, new Vector2(rect.center.x, rect.y), size, color, HplFontAlign.Center);
-                    if (index == _selected) selectedEntry = i;
-                }
-                y += 16 + 10;
-            }
-            string tip = selectedEntry >= 0 ? T("Actions", keys.Entries[selectedEntry].name + "Tooltip", "") : "";
-
-            // Tip label (400 × 30, black 0.5 background) and the buttons along the bottom.
-            float bottom = window.y + window.height - 25 - 10;
-            if (tip != "")
-            {
-                Piece(null, new Rect(window.x + 40, bottom, 400, 30), new Color(0, 0, 0, 0.5f));
-                var rows = _guiText.font != null ? _guiText.font.GetWordWrapRows(396, Vector2.one * 14, tip) : new List<string> { tip };
-                for (int r = 0; r < rows.Count && r < 2; r++) Draw(_guiText, rows[r], new Vector2(window.x + 42, bottom + r * 15), Vector2.one * 14, Color.white);
-            }
-            string defaults = T("KeyConfig", "SetDefault", "Задать клавиши по умолчанию");
-            float defaultsWidth = (_guiText.font != null ? _guiText.font.GetLength(Vector2.one * 18, defaults) : 200) + 20;
-            SkinButton(new Rect(window.x + 40, bottom - 35, defaultsWidth, 25), defaults, MenuControl.KeyDefaults);
-            float okX = window.x + window.width - 80 * 2 - 3 - 5;
-            SkinButton(new Rect(okX, bottom, 80, 30), T("Global", "OK", "OK"), MenuControl.KeyOk);
-            SkinButton(new Rect(okX + 83, bottom, 80, 30), T("Global", "Cancel", "Отмена"), MenuControl.Cancel);
-        }
-
-        /// <summary>
-        /// The graphics tab in two columns: drop-down lists with their label above (as in cLuxMainMenu_Options), the
-        /// check boxes, and the gamma under the screen settings.
-        /// </summary>
-        void Graphics(HplUserSettings settings)
-        {
-            const float leftX = 120, rightX = 420, top = 158, comboStep = 45, toggleStep = 27;
-            float y = top;
-            foreach (var c in new[] { MenuControl.Lighting, MenuControl.Textures, MenuControl.Resolution, MenuControl.ScreenMode, MenuControl.FpsLimit })
-            {
-                Combo(leftX, y, c, settings);
-                y += comboStep;
-            }
-            SmallToggle(leftX, y, T("OptionsMenu", "VSync", "Вертикальная синхронизация"), settings.vSync, MenuControl.VSync);
-            y += toggleStep + 4;
-            // The SDR gamma is a separate setting from the HDR brightness (HDR tab): always editable, but it only
-            // applies to SDR output, so with HDR active the label says so.
-            string gammaLabel = T("OptionsMenu", "Gamma", "Гамма");
-            if (HplHdr.Active) gammaLabel += HdrText(" (только SDR)", " (SDR only)");
-            SmallAdjust(leftX, y, gammaLabel, settings.gamma.ToString("0.00", CultureInfo.InvariantCulture),
-                        (settings.gamma - HplUserSettings.MinGamma) / (HplUserSettings.MaxGamma - HplUserSettings.MinGamma),
-                        MenuControl.GammaLess, MenuControl.GammaMore, MenuControl.GammaSlider);
-            y = top;
-            foreach (var c in new[] { MenuControl.TextureQuality, MenuControl.TextureMemoryBudget, MenuControl.Anisotropy, MenuControl.Antialiasing, MenuControl.Shadows })
-            {
-                // With DLSS on (RTX tab) the anti-aliasing list shows "DLSS" and cannot be opened.
-                _disabled = c == MenuControl.Antialiasing && HplGraphicsOptions.DlssOn(settings);
-                Combo(rightX, y, c, settings);
-                _disabled = false;
-                y += comboStep;
-            }
-            // Own text: the game's Russian "Bloom" entry reads "Потускнение" (dimming), the opposite of the effect.
-            SmallToggle(rightX, y, "Свечение (Bloom)", settings.bloom, MenuControl.Bloom);
-            y += toggleStep;
-            SmallToggle(rightX, y, T("OptionsMenu", "ImageTrail", "След при движении"), settings.imageTrail, MenuControl.ImageTrail);
-            y += toggleStep;
-            SmallToggle(rightX, y, T("OptionsMenu", "RadialBlur", "Радиальное размытие"), settings.radialBlur, MenuControl.RadialBlur);
-        }
-
-        /// <summary>A closed drop-down list (cWidgetComboBox): label, background with the choice and the arrow button.</summary>
-        void Combo(float x, float y, MenuControl control, HplUserSettings settings)
-        {
-            var size = Vector2.one * 16;
-            Draw(_guiText, HplGraphicsOptions.Label(control, Translate), new Vector2(x, y), size, Color.white);
-            var items = HplGraphicsOptions.Items(control, settings, Translate, out int current);
-            var rect = new Rect(x, y + 19, 230, 22);
-            _comboRects[control] = rect;
-            Piece(null, rect, new Color(0, 0, 0, 0.5f));
-            Piece("ComboBoxBackground", rect, Color.white);
-            Piece("ComboBoxButtonIcon", new Rect(rect.xMax - 18, rect.y + 2, 18, 18), Color.white);
-            Button(new Rect(rect.x + 4, rect.y + 2, rect.width - 22, 18), items.Count > 0 ? items[current].label : "", control, null, size, HplFontAlign.Left);
-            // A disabled list (grey) stays not pressable.
-            if (!_disabled) _buttons[_buttons.Count - 1] = (rect, control);
-        }
-
         /// <summary>
         /// The open list under its combo box (moved up if it would leave the screen): up to 12 choices of font height
         /// + 2, the highlighted one on a light background, disabled ones grey; more choices - scroll arrows.
@@ -890,58 +611,10 @@ namespace RTXMnesia.Ui
             }
         }
 
-        /// <summary>A check box of a column (font 16).</summary>
-        void SmallToggle(float x, float y, string label, bool value, MenuControl control)
-        {
-            Piece(value ? "CheckBoxEnabledChecked" : "CheckBoxEnabledUnchecked", new Rect(x, y + 1, 16, 16), Color.white);
-            Button(new Rect(x + 24, y, 250, 20), label, control, null, Vector2.one * 16, HplFontAlign.Left);
-            _buttons[_buttons.Count - 1] = (new Rect(x - 4, y - 2, 280, 22), control);
-        }
-
-        /// <summary>A slider of a column: label and value, then the less button, the slider and the more button.</summary>
-        void SmallAdjust(float x, float y, string label, string value, float fraction, MenuControl less, MenuControl more, MenuControl slider)
-        {
-            var size = Vector2.one * 16;
-            Draw(_guiText, label, new Vector2(x, y), size, Color.white);
-            Draw(_guiText, value, new Vector2(x + 230, y), size, Color.white, HplFontAlign.Right);
-            float barY = y + 22;
-            Button(new Rect(x, barY, 20, 20), "<", less, null, size);
-            Button(new Rect(x + 210, barY, 20, 20), ">", more, null, size);
-            var bar = new Rect(x + 26, barY + 7, 178, 6);
-            Piece("SliderHoriBackground", bar, Color.white);
-            Piece("SliderHoriArrowUp", new Rect(bar.x + Mathf.Clamp01(fraction) * (bar.width - 12), barY + 2, 12, 18), Color.white);
-            _sliders.Add((new Rect(bar.x, barY - 2, bar.width, 24), slider));
-        }
-
-        void Toggle(float y, string key, string fallback, bool value, MenuControl control)
-        {
-            Piece(value ? "CheckBoxEnabledChecked" : "CheckBoxEnabledUnchecked", new Rect(140, y + 2, 18, 18), Color.white);
-            Button(new Rect(175, y, 470, 28), T("OptionsMenu", key, fallback), control, null, default, HplFontAlign.Left);
-            _buttons[_buttons.Count - 1] = (new Rect(135, y, 510, 28), control);
-        }
-
-        void Adjust(float y, string key, string fallback, string value, float fraction, MenuControl less, MenuControl more)
-        {
-            Draw(_guiText, T("OptionsMenu", key, fallback), new Vector2(140, y), Vector2.one * 18, Color.white);
-            Button(new Rect(440, y, 30, 28), "<", less);
-            Button(new Rect(620, y, 30, 28), ">", more);
-            Draw(_guiText, value, new Vector2(545, y), Vector2.one * 18, Color.white, HplFontAlign.Center);
-            Piece("SliderHoriBackground", new Rect(475, y + 34, 140, 6), Color.white);
-            Piece("SliderHoriArrowUp", new Rect(475 + Mathf.Clamp01(fraction) * 128, y + 29, 12, 18), Color.white);
-            _sliders.Add((new Rect(475, y + 25, 140, 28), less switch
-            {
-                MenuControl.VolumeLess => MenuControl.VolumeSlider,
-                MenuControl.GammaLess => MenuControl.GammaSlider,
-                _ => MenuControl.SensitivitySlider,
-            }));
-        }
-
         void Button(Rect rect, string label, MenuControl action, HplGuiText layer = null, Vector2 size = default, HplFontAlign align = HplFontAlign.Center)
         {
-            int index = _buttons.Count;
             // A disabled button is not pressable: it gets an empty rectangle.
-            _buttons.Add((_disabled ? Rect.zero : rect, action));
-            _buttonData.Add(-1);
+            int index = AddButton(rect, action);
             if (size == default) size = Vector2.one * 18;
             var color = _disabled ? new Color(0.5f, 0.5f, 0.5f, 1) : index == _selected ? Highlight : Color.white;
             Draw(layer != null ? layer : _guiText, label, new Vector2(align == HplFontAlign.Left ? rect.x : rect.center.x, rect.y), size, color, align);
@@ -960,9 +633,7 @@ namespace RTXMnesia.Ui
         /// </summary>
         void SkinButton(Rect r, string label, MenuControl action, bool highlighted = false)
         {
-            int index = _buttons.Count;
-            _buttons.Add((r, action));
-            _buttonData.Add(-1);
+            int index = AddButton(r, action);
             Vector2 Size(string type)
             {
                 var t = _assets != null ? _assets.Find(type).texture : null;
@@ -980,7 +651,7 @@ namespace RTXMnesia.Ui
             Piece("ButtonUpCornerRD", new Rect(r.xMax - rd.x, r.yMax - rd.y, rd.x, rd.y), Color.white);
             Piece("ButtonUpCornerLD", new Rect(r.x, r.yMax - ld.y, ld.x, ld.y), Color.white);
             Draw(_guiText, label, new Vector2(r.center.x, r.y + r.height / 2 - SkinFontSize / 2f), Vector2.one * SkinFontSize,
-                 index == _selected || highlighted ? Highlight : Color.white, HplFontAlign.Center);
+                 _disabled ? Grey : index == _selected || highlighted ? Highlight : Color.white, HplFontAlign.Center);
         }
 
         void Window(Rect r, bool hdrHole = false)
@@ -1037,6 +708,11 @@ namespace RTXMnesia.Ui
 
         void Piece(string type, Rect rect, Color color)
         {
+            if (_layer == 0 && _inScroll)
+            {
+                if (!_skipDraw) ScrollPiece(type, rect, color);
+                return;
+            }
             if (_layer > 0)
             {
                 PopupPiece(type, rect, color);
@@ -1060,6 +736,11 @@ namespace RTXMnesia.Ui
         void Draw(HplGuiText layer, string text, Vector2 pos, Vector2 size, Color color, HplFontAlign align = HplFontAlign.Left)
         {
             color.a *= _opacity;
+            if (_layer == 0 && _inScroll)
+            {
+                if (!_skipDraw) _scrollText.DrawFont(text, pos - Viewport.position, size, color, align);
+                return;
+            }
             if (_layer > 0) layer = _layer == 2 ? _topText : _popupText;
             layer.DrawFont(text, pos, size, color, align);
         }

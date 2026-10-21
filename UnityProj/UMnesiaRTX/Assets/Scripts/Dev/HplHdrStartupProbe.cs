@@ -49,9 +49,16 @@ namespace RTXMnesia.Dev
                 foreach (var source in map.GetComponentsInChildren<AudioSource>())
                     if (source.clip != null && source.loop && source.isPlaying) musicSource = true;
                 Check(musicSource, "No looping AudioSource is playing the title music");
-                ui.OpenOptions(4);
-                Check(ui.Choose(MenuControl.HdrTab), "HDR tab was not created in SDR");
-                for (int i = 0; i < 3; i++) Check(ui.Choose(MenuControl.HdrMode), "HDR mode could not be changed in SDR");
+                ui.OpenOptions(RTXMnesia.Ui.HplPauseMenu.DisplayTabIndex);
+                Check(ui.Choose(MenuControl.HdrMode), "HDR settings were not created in SDR");
+                for (int i = 0; i < 3; i++)
+                {
+                    Check(ui.Choose(MenuControl.HdrMode), "HDR mode list could not be opened in SDR");
+                    ui.ChooseComboItem(i);
+                    Check(ui.DraftSettings.hdrMode == i, "HDR mode could not be changed in SDR");
+                }
+                Check(ui.Choose(MenuControl.HdrCalibrate), "HDR calibration window could not be opened in SDR");
+                Check(ui.Choose(MenuControl.HdrCalibrationClose), "HDR calibration window could not be closed");
                 Check(ui.Choose(MenuControl.Cancel) && !ui.ShowingOptions && !HplHdr.CalibrationVisible,
                     "HDR options could not be cancelled");
                 Check(_exceptions == 0, "Exceptions occurred during startup or HDR options");

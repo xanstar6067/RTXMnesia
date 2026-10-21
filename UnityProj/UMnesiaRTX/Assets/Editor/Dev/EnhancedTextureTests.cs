@@ -452,7 +452,7 @@ namespace RTXMnesia.EditorDev
                 var ui = root.AddComponent<HplGameUi>();
                 ui.Init(map, true);
                 typeof(RTXMnesia.ScriptApi.HplMap).GetProperty("GameUi").SetValue(map, ui);
-                ui.OpenOptions(1);
+                ui.OpenOptions(HplPauseMenu.GraphicsTabIndex);
                 Check(ui.Choose(MenuControl.TextureMemoryBudget), "GPU menu: memory dropdown is reachable");
                 var camera = root.AddComponent<Camera>();
                 camera.enabled = false;
@@ -466,7 +466,7 @@ namespace RTXMnesia.EditorDev
                 canvas.planeDistance = 1;
                 void Capture(string name, HplMenuCombo combo = null)
                 {
-                    ui.Menu.Refresh(false, true, 1, ui.DraftSettings, 1, 1, Vector2.zero, combo: combo);
+                    ui.Menu.Refresh(false, true, HplPauseMenu.GraphicsTabIndex, ui.DraftSettings, 1, 1, Vector2.zero, combo: combo);
                     Canvas.ForceUpdateCanvases();
                     var image = new Texture2D(800, 600, TextureFormat.RGB24, false);
                     var pixels = new Color32[800 * 600];

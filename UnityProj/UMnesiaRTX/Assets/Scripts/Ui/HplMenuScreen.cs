@@ -42,6 +42,9 @@ namespace RTXMnesia.Ui
         readonly HplMap _map;
         readonly HplPauseMenu _menu;
         int _selected, _optionsTab;
+        /// <summary>The scroll position (virtual pixels) of the options tab, the scroll bar being dragged.</summary>
+        float _scroll;
+        bool _dragScroll;
         readonly List<string> _saveFiles = new(), _saveLabels = new();
         int _selectedSave = -1;
         MenuControl? _dragSlider;
@@ -92,7 +95,10 @@ namespace RTXMnesia.Ui
             _combo = null;
             _extras.profiles = null;
             _extras.startGame = false;
+            _extras.hdrCalibration = false;
             _extras.message = null;
+            _scroll = 0;
+            _dragScroll = false;
             CloseEnterName();
         }
 
@@ -103,6 +109,11 @@ namespace RTXMnesia.Ui
             if (_combo != null)
             {
                 _combo = null;
+                return;
+            }
+            if (_extras.hdrCalibration)
+            {
+                CloseHdrCalibration();
                 return;
             }
             if (ShowingKeyConfig)
@@ -135,7 +146,8 @@ namespace RTXMnesia.Ui
             UpdateHardModeExtras();
             _menu.Refresh(ConfirmingQuit, ShowingOptions, _optionsTab, DraftSettings ?? _ui.Settings,
                 _selected, _ui.MenuOpacity, HplGameUi.PointerPosition, PendingConfirmation, ShowingLoad || ConfirmingQuit && PendingConfirmation == MenuControl.ConfirmLoad ? _saveLabels : null, _selectedSave,
-                _keyConfig, _combo, _extras);
+                _keyConfig, _combo, _extras, _scroll);
+            _scroll = Mathf.Clamp(_scroll, 0, _menu.ScrollMax);
             if (_focus.HasValue)
             {
                 for (int i = 0; i < _menu.ButtonCount; i++)
@@ -188,14 +200,16 @@ namespace RTXMnesia.Ui
             }
             if (EnteringName && !ConfirmingQuit) Type(keyboard);
             if (mouse != null && ShowingOptions && !ShowingKeyConfig) DragSlider(mouse);
+            if (mouse != null && ShowingOptions && !ShowingKeyConfig && !_extras.hdrCalibration && !ConfirmingQuit) WheelScroll(mouse);
             int hovered = mouse != null ? _menu.HitTest(mouse.position.ReadValue()) : -1;
             if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0f && hovered >= 0) _selected = hovered;
             if (keyboard != null)
             {
-                int count = _menu.ButtonCount;
-                if (keyboard.upArrowKey.wasPressedThisFrame) _selected = (_selected + count - 1) % count;
-                if (keyboard.downArrowKey.wasPressedThisFrame) _selected = (_selected + 1) % count;
-                if (keyboard.tabKey.wasPressedThisFrame) _selected = (_selected + count + (keyboard.shiftKey.isPressed ? -1 : 1)) % count;
+                int before = _selected;
+                if (keyboard.upArrowKey.wasPressedThisFrame) _selected = NextEnabled(_selected, -1);
+                if (keyboard.downArrowKey.wasPressedThisFrame) _selected = NextEnabled(_selected, 1);
+                if (keyboard.tabKey.wasPressedThisFrame) _selected = NextEnabled(_selected, keyboard.shiftKey.isPressed ? -1 : 1);
+                if (_selected != before) ScrollToSelected();
                 if (ShowingOptions && keyboard.leftArrowKey.wasPressedThisFrame) AdjustSelected(-1);
                 if (ShowingOptions && keyboard.rightArrowKey.wasPressedThisFrame) AdjustSelected(1);
                 // Within the button count of the window (the key config rows change with the category).
@@ -422,8 +436,42 @@ namespace RTXMnesia.Ui
             _combo = null;
         }
 
+        /// <summary>The next button in a direction that keyboard navigation may stop on (not disabled, not a scroll arrow).</summary>
+        int NextEnabled(int from, int step)
+        {
+            int count = _menu.ButtonCount;
+            if (count == 0) return from;
+            for (int k = 1; k <= count; k++)
+            {
+                int index = ((from + step * k) % count + count) % count;
+                if (!_menu.SkipNavAt(index)) return index;
+            }
+            return from;
+        }
+
+        /// <summary>Keyboard selection: scrolls the options so that the selected control is inside the area.</summary>
+        void ScrollToSelected()
+        {
+            if (!ShowingOptions || ShowingKeyConfig || _extras.hdrCalibration || _selected < 0 || !_menu.TryGetScrollRect(_selected, out var rect)) return;
+            var view = _menu.ViewportRect;
+            if (rect.y < view.y + 4) _scroll -= view.y + 4 - rect.y;
+            else if (rect.yMax > view.yMax - 4) _scroll += rect.yMax - (view.yMax - 4);
+            _scroll = Mathf.Clamp(_scroll, 0, _menu.ScrollMax);
+        }
+
+        /// <summary>The wheel scrolls the tab (an open list uses the wheel itself).</summary>
+        void WheelScroll(Mouse mouse)
+        {
+            float wheel = mouse.scroll.ReadValue().y;
+            if (wheel != 0f) _scroll = Mathf.Clamp(_scroll - Mathf.Sign(wheel) * _menu.ScrollStepSize, 0, _menu.ScrollMax);
+        }
+
         void DragSlider(Mouse mouse)
         {
+            if (mouse.leftButton.wasPressedThisFrame && !_extras.hdrCalibration && _menu.TryScrollTrack(mouse.position.ReadValue())) _dragScroll = true;
+            if (_dragScroll && mouse.leftButton.isPressed) _scroll = _menu.ScrollTrackValue(mouse.position.ReadValue()) * _menu.ScrollMax;
+            if (!mouse.leftButton.isPressed) _dragScroll = false;
+            if (_dragScroll) return;
             if (mouse.leftButton.wasPressedThisFrame && _menu.TrySlider(mouse.position.ReadValue(), out var slider)) _dragSlider = slider;
             if (_dragSlider.HasValue && mouse.leftButton.isPressed)
             {
@@ -460,6 +508,8 @@ namespace RTXMnesia.Ui
         {
             if (tab >= 0) _optionsTab = Mathf.Clamp(tab, 0, HplPauseMenu.OptionsTabs - 1);
             ShowingOptions = true;
+            _scroll = 0;
+            _extras.hdrCalibration = false;
             _dragSlider = null;
             DraftSettings = _ui.Settings.Copy();
             _selected = _optionsTab;
@@ -482,10 +532,11 @@ namespace RTXMnesia.Ui
                 Activate(_selected, direction);
                 return;
             }
-            if (control >= MenuControl.GameTab && control <= MenuControl.RtxTab)
+            if (control >= MenuControl.GameTab && control <= MenuControl.InputTab)
             {
                 _optionsTab = (_optionsTab + HplPauseMenu.OptionsTabs + direction) % HplPauseMenu.OptionsTabs;
                 _selected = _optionsTab;
+                _scroll = 0;
                 _dragSlider = null;
                 Refresh();
             }
@@ -498,18 +549,23 @@ namespace RTXMnesia.Ui
             }
             else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
                      control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary ||
-                     control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur ||
-                     control >= MenuControl.HdrMode && control <= MenuControl.HdrDefaults) Activate(_selected, direction);
+                     control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur or MenuControl.RtEnabled ||
+                     control >= MenuControl.HdrPeakLess && control <= MenuControl.HdrDefaults) Activate(_selected, direction);
         }
 
         void Activate(int index, int direction = 0)
         {
             if (index < 0 || index >= _menu.ButtonCount) return;
             var control = _menu.ControlAt(index);
+            // A disabled control does nothing (the pointer cannot reach it, the keyboard can).
+            if (_menu.IsDisabledAt(index)) return;
             // Arrows on a < or > button move the value their way; a click moves it the button's way.
             int less = direction == 0 ? -1 : direction, more = direction == 0 ? 1 : direction;
             switch (control)
             {
+                case MenuControl c when HplGraphicsOptions.IsCombo(c):
+                    OpenComboList(c);
+                    break;
                 case MenuControl.Resume: _ui.BeginClose(); break;
                 case MenuControl.Options: OpenOptions(); break;
                 // The main campaign asks for the mode first (cLuxMainMenu_StartGame); Justine has no hard mode.
@@ -694,10 +750,20 @@ namespace RTXMnesia.Ui
                     _ui.Settings.Save();
                     Show();
                     break;
-                case MenuControl.GameTab: case MenuControl.GraphicsTab: case MenuControl.SoundTab: case MenuControl.InputTab: case MenuControl.HdrTab: case MenuControl.RtxTab:
+                case MenuControl.GameTab: case MenuControl.DisplayTab: case MenuControl.GraphicsTab: case MenuControl.ImageTab: case MenuControl.RayTab: case MenuControl.SoundTab: case MenuControl.InputTab:
                     _optionsTab = (int)control - (int)MenuControl.GameTab;
                     _selected = _optionsTab;
+                    _scroll = 0;
                     break;
+                // The ray tracing switch (the field keeps its old name, settings files and tests use it).
+                case MenuControl.RtEnabled: DraftSettings.lighting = DraftSettings.lighting == 1 ? 0 : 1; break;
+                case MenuControl.ScrollUp: _scroll = Mathf.Clamp(_scroll - _menu.ScrollStepSize, 0, _menu.ScrollMax); break;
+                case MenuControl.ScrollDown: _scroll = Mathf.Clamp(_scroll + _menu.ScrollStepSize, 0, _menu.ScrollMax); break;
+                case MenuControl.HdrCalibrate:
+                    _extras.hdrCalibration = true;
+                    _selected = 0;
+                    break;
+                case MenuControl.HdrCalibrationClose: CloseHdrCalibration(); break;
                 case MenuControl.Subtitles: DraftSettings.subtitles = !DraftSettings.subtitles; break;
                 case MenuControl.Hints: DraftSettings.hints = !DraftSettings.hints; break;
                 case MenuControl.Crosshair: DraftSettings.crosshair = !DraftSettings.crosshair; break;
@@ -708,11 +774,6 @@ namespace RTXMnesia.Ui
                 case MenuControl.Bloom: DraftSettings.bloom = !DraftSettings.bloom; break;
                 case MenuControl.ImageTrail: DraftSettings.imageTrail = !DraftSettings.imageTrail; break;
                 case MenuControl.RadialBlur: DraftSettings.radialBlur = !DraftSettings.radialBlur; break;
-                case MenuControl.Lighting: case MenuControl.Textures: case MenuControl.Resolution: case MenuControl.ScreenMode:
-                case MenuControl.FpsLimit: case MenuControl.TextureQuality: case MenuControl.TextureMemoryBudget: case MenuControl.Anisotropy:
-                case MenuControl.Antialiasing: case MenuControl.Shadows: case MenuControl.DlssMode: case MenuControl.DlssPreset: case MenuControl.RtShadows: case MenuControl.RtAo: case MenuControl.RtReflections: case MenuControl.RtGi: case MenuControl.RtAllShadows: case MenuControl.RtLanternShadows: case MenuControl.RtPathTracing:
-                    OpenComboList(control);
-                    break;
                 case MenuControl.ComboItem: PickComboItem(_menu.DataAt(index)); break;
                 case MenuControl.ComboScrollUp:
                 case MenuControl.ComboScrollDown:
@@ -729,7 +790,6 @@ namespace RTXMnesia.Ui
                 // cLuxMainMenu_Options: the gamma slider steps 0.05 between 0.3 and 2.
                 case MenuControl.GammaLess: DraftSettings.gamma = Mathf.Clamp(DraftSettings.gamma + 0.05f * less, HplUserSettings.MinGamma, HplUserSettings.MaxGamma); break;
                 case MenuControl.GammaMore: DraftSettings.gamma = Mathf.Clamp(DraftSettings.gamma + 0.05f * more, HplUserSettings.MinGamma, HplUserSettings.MaxGamma); break;
-                case MenuControl.HdrMode: DraftSettings.hdrMode = (DraftSettings.hdrMode + 3 + more) % 3; break;
                 case MenuControl.HdrPeakLess: DraftSettings.hdrPeak += 10 * less; HplHdr.CalibrationPattern = 0; break;
                 case MenuControl.HdrPeakMore: DraftSettings.hdrPeak += 10 * more; HplHdr.CalibrationPattern = 0; break;
                 case MenuControl.HdrWhiteLess: DraftSettings.hdrPaperWhite += 5 * less; HplHdr.CalibrationPattern = 1; break;
@@ -760,7 +820,16 @@ namespace RTXMnesia.Ui
         void CloseKeyConfig()
         {
             _keyConfig = null;
-            _selected = 3; // the input tab
+            _selected = _optionsTab; // the input tab
+        }
+
+        /// <summary>Back from the HDR calibration window to the display tab (the draft settings kept).</summary>
+        void CloseHdrCalibration()
+        {
+            _extras.hdrCalibration = false;
+            HplHdr.CalibrationVisible = false;
+            _selected = _optionsTab;
+            Refresh();
         }
 
         /// <summary>A scene that cannot be loaded is a build setup error: logged, and the menu goes back to its list.</summary>
