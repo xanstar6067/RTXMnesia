@@ -48,9 +48,11 @@ namespace RTXMnesia.Dev
                 var point = camera.WorldToScreenPoint(label.anchor.position);
                 if (point.z > 0) GUI.Label(new Rect(point.x / scale - 135, (Screen.height - point.y) / scale - 26, 270, 52), label.text, _style);
             }
-            GUI.Box(new Rect(12, Screen.height / scale - 80, 850, 68),
+            GUI.Box(new Rect(12, Screen.height / scale - 116, 850, 104),
                 "СТЕНД РЕЛЬЕФА · улучшенные текстуры · POM выключен\n" +
                 "Кладка слева направо: 1 — плоско · 2 — прежний рельеф · 3 — углублённые швы\n" +
+                "Ряд выше: 4 — новая кладка по маске, сетка 1 см · 5 — она же, сетка 5 см (как в игре)\n" +
+                "За полами: 6 / 7 — новый каменный пол, сетка 1 / 5 см · 8 — новые доски с глубокими щелями\n" +
                 "F4: " + (InspectionEnabled ? "выключить проверочный свет, оставить свой фонарь" : "включить проверочный свет"));
             GUI.matrix = previous;
         }

@@ -186,7 +186,7 @@ namespace RTXMnesia.Importer
                             {
                                 surfaces[i].heightMetres = profile.approved.height;
                                 surfaces[i].boards = profile.approved.boards;
-                                surfaces[i].geometryNormals = !profile.approved.boards;
+                                surfaces[i].geometryNormals = !profile.approved.boards && !profile.approved.mapNormals;
                                 slots[i].normalResource = profile.approved.normal;
                                 slots[i].maskResource = profile.approved.mask;
                                 slots[i].specularResource = profile.approved.specular;
@@ -290,11 +290,19 @@ namespace RTXMnesia.Importer
         {
             var catalog = AssetDatabase.LoadAssetAtPath<HplReliefSet>(CatalogPath);
             if (catalog == null) { catalog = ScriptableObject.CreateInstance<HplReliefSet>(); AssetDatabase.CreateAsset(catalog, CatalogPath); }
-            var pairs = catalog.entries.Where(e => e != null && !string.IsNullOrEmpty(e.detailedResource)).ToDictionary(e => e.detailedResource);
-            foreach (var entry in entries) pairs[entry.detailedResource] = entry;
+            var fresh = entries.ToArray();
+            // An entry generated now replaces older ones for the same renderers (same mesh, scale and slots):
+            // the runtime takes the first match, and a profile change alters the variant identity.
+            var pairs = catalog.entries.Where(e => e != null && !string.IsNullOrEmpty(e.detailedResource) &&
+                !fresh.Any(n => n.detailedResource != e.detailedResource && SameRenderers(n, e))).ToDictionary(e => e.detailedResource);
+            foreach (var entry in fresh) pairs[entry.detailedResource] = entry;
             catalog.entries = pairs.Values.OrderBy(e => e.detailedResource, StringComparer.Ordinal).ToArray();
             EditorUtility.SetDirty(catalog);
         }
+
+        static bool SameRenderers(HplReliefSet.Entry a, HplReliefSet.Entry b) =>
+            a.original == b.original && (a.objectScale - b.objectScale).sqrMagnitude <= 0.000001f && a.slots.Length == b.slots.Length &&
+            a.slots.Zip(b.slots, (x, y) => x.albedo == y.albedo && (x.scale - y.scale).sqrMagnitude <= 0.00000001f && (x.offset - y.offset).sqrMagnitude <= 0.00000001f).All(v => v);
 
         static Mesh BuildWithinBudget(Mesh mesh, HplReliefMeshBuilder.Surface[] surfaces, Vector3 scale, float spacing, int budget)
         {
@@ -341,12 +349,12 @@ namespace RTXMnesia.Importer
                 .Select(p => (path: p, data: JsonUtility.FromJson<EnhancedMaterialConverter.BatchResult>(File.ReadAllText(p)))).ToArray();
             foreach (var pair in Profiles)
             {
-                if (approvedOnly && pair.Key != ApprovedReliefProfiles.Wall && pair.Key != ApprovedReliefProfiles.Boards) continue;
+                bool approved = pair.Key == ApprovedReliefProfiles.Wall || pair.Key == ApprovedReliefProfiles.Boards || ApprovedReliefProfiles.HasManual(pair.Key);
+                if (approvedOnly && !approved) continue;
                 var material = AssetDatabase.LoadAssetAtPath<Material>(AmnesiaPaths.MaterialsRoot + "/" + pair.Key);
                 if (material == null || !catalog.entries.Any(e => e.classic == material)) continue;
-                bool approved = pair.Key == ApprovedReliefProfiles.Wall || pair.Key == ApprovedReliefProfiles.Boards;
                 string stand = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief/" + Path.GetFileNameWithoutExtension(pair.Key) + "_solid.asset";
-                if (approved && (approvedOnly || File.Exists(AmnesiaPaths.ToAbsolute(stand))))
+                if (approved && (approvedOnly || ApprovedReliefProfiles.HasManual(pair.Key) || File.Exists(AmnesiaPaths.ToAbsolute(stand))))
                 {
                     var approvedProfile = ApprovedReliefProfiles.Prepare(pair.Key);
                     var albedo = material.GetTexture("_BaseColorMap");

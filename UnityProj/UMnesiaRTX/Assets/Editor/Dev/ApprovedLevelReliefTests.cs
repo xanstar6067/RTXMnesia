@@ -193,28 +193,16 @@ namespace RTXMnesia.EditorDev
                 var heights = Enumerable.Range(0, positions.Length).Where(i => uv[i].x > .04f && uv[i].x < .66f && uv[i].y > .68f && uv[i].y < .95f)
                     .Select(i => Vector3.Dot(wall.transform.TransformPoint(positions[i]) - face.point, face.normal)).ToArray();
                 float range = heights.Max() - heights.Min();
-                Require(range > .025f && range < .06f, "actual castle wall depth range: " + range.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) + " m");
+                // Manual profile: joints about 2 cm behind faces at the original plane.
+                Require(range > .015f && range < .06f, "actual castle wall depth range: " + range.ToString("F4", System.Globalization.CultureInfo.InvariantCulture) + " m");
                 if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null)
                 {
-                    var camera = new GameObject("Approved wall inspection").AddComponent<Camera>(); camera.tag = "MainCamera";
-                    camera.nearClipPlane = .02f; camera.farClipPlane = 80; camera.fieldOfView = 60;
-                    var hd = camera.gameObject.AddComponent<HDAdditionalCameraData>(); hd.antialiasing = HDAdditionalCameraData.AntialiasingMode.None;
-                    hd.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color; hd.backgroundColorHDR = Color.black;
-                    camera.transform.position = face.point + face.normal * 1.1f + Vector3.Cross(Vector3.up, face.normal) * .7f;
-                    camera.transform.LookAt(face.point);
-                    var volume = new GameObject("Relief inspection exposure").AddComponent<Volume>(); volume.isGlobal = true; volume.priority = 10000;
-                    var profile = ScriptableObject.CreateInstance<VolumeProfile>(); volume.sharedProfile = profile;
-                    var exposure = profile.Add<Exposure>(true); exposure.mode.Override(ExposureMode.Fixed); exposure.fixedExposure.Override(1);
-                    profile.Add<Tonemapping>(true).mode.Override(TonemappingMode.ACES);
-                    profile.Add<VisualEnvironment>(true).skyType.Override(0);
-                    var light = new GameObject("Inspection light").AddComponent<Light>(); light.type = LightType.Point; light.range = 8;
-                    light.transform.position = face.point + face.normal * .7f - Vector3.Cross(Vector3.up, face.normal) * 1.1f + Vector3.up * .25f;
-                    light.gameObject.AddComponent<HDAdditionalLightData>(); light.lightUnit = LightUnit.Candela; light.intensity = 60; light.shadows = LightShadows.Soft;
+                    var (camera, profile) = Inspection(face.point, face.normal);
                     foreach (var r in renderers) r.enabled = r == wall;
                     RenderPair(camera, wall, original, "archives_wall_module");
                     foreach (var r in renderers) r.enabled = true;
                     RenderPair(camera, wall, original, "archives_wall_level");
-                    volume.sharedProfile = null; Object.DestroyImmediate(profile);
+                    Object.DestroyImmediate(profile);
                 }
                 File.WriteAllText(Path.Combine(Folder, "ApprovedLevel.txt"), $"PASS: {targets} approved castle wall instances; depth range {range:F4} m; actual level and module rendered when GPU available\n");
             }
@@ -223,6 +211,26 @@ namespace RTXMnesia.EditorDev
                 HplEnhancedTextures.Shutdown();
                 if (setup.Length > 0 && setup.All(s => !string.IsNullOrEmpty(s.path))) EditorSceneManager.RestoreSceneManagerSetup(setup);
             }
+        }
+
+        /// <summary>Fixed camera, exposure and raking point light in front of a wall face; shared by the relief probes.</summary>
+        internal static (Camera camera, VolumeProfile profile) Inspection(Vector3 point, Vector3 normal)
+        {
+            var camera = new GameObject("Approved wall inspection").AddComponent<Camera>(); camera.tag = "MainCamera";
+            camera.nearClipPlane = .02f; camera.farClipPlane = 80; camera.fieldOfView = 60;
+            var hd = camera.gameObject.AddComponent<HDAdditionalCameraData>(); hd.antialiasing = HDAdditionalCameraData.AntialiasingMode.None;
+            hd.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color; hd.backgroundColorHDR = Color.black;
+            camera.transform.position = point + normal * 1.1f + Vector3.Cross(Vector3.up, normal) * .7f;
+            camera.transform.LookAt(point);
+            var volume = new GameObject("Relief inspection exposure").AddComponent<Volume>(); volume.isGlobal = true; volume.priority = 10000;
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>(); volume.sharedProfile = profile;
+            var exposure = profile.Add<Exposure>(true); exposure.mode.Override(ExposureMode.Fixed); exposure.fixedExposure.Override(1);
+            profile.Add<Tonemapping>(true).mode.Override(TonemappingMode.ACES);
+            profile.Add<VisualEnvironment>(true).skyType.Override(0);
+            var light = new GameObject("Inspection light").AddComponent<Light>(); light.type = LightType.Point; light.range = 8;
+            light.transform.position = point + normal * .7f - Vector3.Cross(Vector3.up, normal) * 1.1f + Vector3.up * .25f;
+            light.gameObject.AddComponent<HDAdditionalLightData>(); light.lightUnit = LightUnit.Candela; light.intensity = 60; light.shadows = LightShadows.Soft;
+            return (camera, profile);
         }
 
         static void RenderPair(Camera camera, MeshRenderer renderer, Mesh original, string stem)
@@ -236,7 +244,7 @@ namespace RTXMnesia.EditorDev
             Require(before.Zip(after, (a, b) => Mathf.Abs(a.r-b.r) + Mathf.Abs(a.g-b.g) + Mathf.Abs(a.b-b.b)).Average() > .002f, stem + ": visible geometry changes under identical lighting/materials");
         }
 
-        static (Vector3 point, Vector3 normal) Face(Renderer renderer, Mesh mesh)
+        internal static (Vector3 point, Vector3 normal) Face(Renderer renderer, Mesh mesh)
         {
             var triangles = mesh.triangles; var p = mesh.vertices; var uv = mesh.uv; float area = -1; int best = -1;
             for (int t = 0; t < triangles.Length; t += 3)

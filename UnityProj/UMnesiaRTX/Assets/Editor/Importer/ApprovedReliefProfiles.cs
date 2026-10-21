@@ -7,11 +7,13 @@ using Object = UnityEngine.Object;
 
 namespace RTXMnesia.Importer
 {
-    /// <summary>Transfers approved stand surfaces into their original atlas, never into classic assets.</summary>
+    /// <summary>Approved relief profiles in their original UVs, never in classic assets: the castle wall and stone floor
+    /// from tools/Build-ManualRelief.py when its maps exist, otherwise (and for the boards) the dev_room stand surfaces.</summary>
     public static class ApprovedReliefProfiles
     {
         public const string Wall = "static_objects/castlebase/wall/castlebase_wall.mat";
         public const string Boards = "static_objects/cellarbase/floor/cellarbase_wood_floor.mat";
+        public const string Floor = "static_objects/castlebase/castlebase_floor.mat";
         public const string ResourceRoot = "HplApprovedRelief";
         const string Root = AmnesiaPaths.ImportedAssetsRoot + "/Resources/" + ResourceRoot;
         public sealed class Data
@@ -19,9 +21,20 @@ namespace RTXMnesia.Importer
             public Func<Vector2, float> height;
             public string normal, mask, specular, signature;
             public bool boards;
+            /// <summary>The normal map carries the whole shape: vertex normals stay those of the plane.</summary>
+            public bool mapNormals;
         }
+
+        [Serializable] class ManualInfo { public float[] height_encoding_metres; }
+
+        /// <summary>Maps of tools/Build-ManualRelief.py (shape from the original HPL normal / depth maps).</summary>
+        public static string ManualFolder(string relative) => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(AmnesiaPaths.SourceRoot)),
+            "sourceRTXRemix", Path.ChangeExtension(relative, null), "manual-relief-v1");
+        public static bool HasManual(string relative) => relative != Boards && File.Exists(Path.Combine(ManualFolder(relative), "relief.json"));
+
         public static Data Prepare(string relative)
         {
+            if (HasManual(relative)) return PrepareManual(relative);
             bool boards = relative == Boards;
             string stem = Path.GetFileNameWithoutExtension(relative);
             var prepared = JsonUtility.FromJson<EnhancedMaterialConverter.PreparedMaps>(File.ReadAllText(AmnesiaPaths.ToAbsolute(
@@ -48,15 +61,6 @@ namespace RTXMnesia.Importer
             };
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Root));
             string source = Path.GetDirectoryName(prepared.result);
-            Color32[] Read(string file, string hash, out int width, out int height)
-            {
-                byte[] bytes = File.ReadAllBytes(file);
-                if (hash != null && EnhancedReliefConverter.Hash(bytes) != hash) throw new InvalidOperationException("Changed approved source: " + file);
-                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
-                try { if (!ImageConversion.LoadImage(texture, bytes, false)) throw new InvalidOperationException("Invalid PNG: " + file);
-                    width = texture.width; height = texture.height; return texture.GetPixels32(); }
-                finally { Object.DestroyImmediate(texture); }
-            }
             var normal = Read(Path.Combine(source, result.files.normal_ogl.file), result.files.normal_ogl.sha256, out int w, out int h);
             var roughness = Read(Path.Combine(source, result.files.roughness.file), result.files.roughness.sha256, out int rw, out int rh);
             if (w != rw || h != rh) throw new InvalidOperationException("Normal/roughness dimensions differ: " + relative);
@@ -94,25 +98,73 @@ namespace RTXMnesia.Importer
                 roughness[p] = new Color32(0, 255, 255, (byte)Mathf.RoundToInt((255 - roughness[p].r) * coverage / 255f));
                 specular[p] = new Color32(coverage, coverage, coverage, 255);
             }
-            string Save(string role, Color32[] pixels, bool isNormal)
-            {
-                string path = Root + "/" + stem + "_" + role + ".png";
-                var texture = new Texture2D(w, h, TextureFormat.RGBA32, false, true);
-                try { texture.SetPixels32(pixels); texture.Apply(); File.WriteAllBytes(AmnesiaPaths.ToAbsolute(path), texture.EncodeToPNG()); }
-                finally { Object.DestroyImmediate(texture); }
-                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
-                importer.sRGBTexture = false; importer.flipGreenChannel = false; importer.convertToNormalmap = false;
-                importer.alphaSource = TextureImporterAlphaSource.FromInput; importer.alphaIsTransparency = false;
-                importer.maxTextureSize = 4096; importer.mipmapEnabled = true; importer.wrapMode = TextureWrapMode.Repeat;
-                importer.filterMode = FilterMode.Trilinear; importer.anisoLevel = 8; importer.isReadable = false;
-                importer.textureCompression = TextureImporterCompression.CompressedHQ;
-                importer.SaveAndReimport();
-                return ResourceRoot + "/" + stem + "_" + role;
-            }
-            data.normal = Save("normal", normal, true); data.mask = Save("mask", roughness, false); data.specular = Save("specular", specular, false);
+            data.normal = Save(stem, "normal", normal, w, h, true); data.mask = Save(stem, "mask", roughness, w, h, false);
+            data.specular = Save(stem, "specular", specular, w, h, false);
             return data;
+        }
+
+        // Wall and stone floor: shape from tools/Build-ManualRelief.py. Faces stay at the original plane,
+        // joints are recessed, so flat map decals remain visible. Standard F0 (no specular map).
+        static Data PrepareManual(string relative)
+        {
+            string stem = Path.GetFileNameWithoutExtension(relative), folder = ManualFolder(relative);
+            var info = JsonUtility.FromJson<ManualInfo>(File.ReadAllText(Path.Combine(folder, "relief.json")));
+            float lo = info.height_encoding_metres[0], hi = info.height_encoding_metres[1];
+            string signature = "manual-v1";
+            foreach (string file in new[] { "relief.json", "height.png", "normal.png", "mask.png" })
+                signature += "|" + EnhancedReliefConverter.Hash(File.ReadAllBytes(Path.Combine(folder, file)));
+            var heightPixels = Read(Path.Combine(folder, "height.png"), null, out int hw, out int hh);
+            var metres = new float[heightPixels.Length];
+            for (int i = 0; i < metres.Length; i++) metres[i] = Mathf.Lerp(lo, hi, heightPixels[i].r / 255f);
+            Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Root));
+            var normal = Read(Path.Combine(folder, "normal.png"), null, out int w, out int h);
+            var mask = Read(Path.Combine(folder, "mask.png"), null, out int mw, out int mh);
+            if (mw != w || mh != h) throw new InvalidOperationException("Manual normal/mask dimensions differ: " + relative);
+            // A specular coverage map of an earlier approved profile is no longer referenced.
+            string oldSpecular = Root + "/" + stem + "_specular.png";
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(oldSpecular) != null) AssetDatabase.DeleteAsset(oldSpecular);
+            return new Data
+            {
+                signature = signature, mapNormals = true,
+                // LoadImage rows start at the bottom, as UV v: sample directly, repeating like the material.
+                height = uv =>
+                {
+                    float x = Mathf.Repeat(uv.x, 1) * hw - .5f, y = Mathf.Repeat(uv.y, 1) * hh - .5f;
+                    int ix = Mathf.FloorToInt(x), iy = Mathf.FloorToInt(y);
+                    float At(int a, int b) => metres[((b % hh + hh) % hh) * hw + (a % hw + hw) % hw];
+                    return Mathf.Lerp(Mathf.Lerp(At(ix, iy), At(ix + 1, iy), x - ix), Mathf.Lerp(At(ix, iy + 1), At(ix + 1, iy + 1), x - ix), y - iy);
+                },
+                normal = Save(stem, "normal", normal, w, h, true),
+                mask = Save(stem, "mask", mask, w, h, false),
+            };
+        }
+
+        static Color32[] Read(string file, string hash, out int width, out int height)
+        {
+            byte[] bytes = File.ReadAllBytes(file);
+            if (hash != null && EnhancedReliefConverter.Hash(bytes) != hash) throw new InvalidOperationException("Changed approved source: " + file);
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
+            try { if (!ImageConversion.LoadImage(texture, bytes, false)) throw new InvalidOperationException("Invalid PNG: " + file);
+                width = texture.width; height = texture.height; return texture.GetPixels32(); }
+            finally { Object.DestroyImmediate(texture); }
+        }
+
+        static string Save(string stem, string role, Color32[] pixels, int w, int h, bool isNormal)
+        {
+            string path = Root + "/" + stem + "_" + role + ".png";
+            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false, true);
+            try { texture.SetPixels32(pixels); texture.Apply(); File.WriteAllBytes(AmnesiaPaths.ToAbsolute(path), texture.EncodeToPNG()); }
+            finally { Object.DestroyImmediate(texture); }
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+            importer.sRGBTexture = false; importer.flipGreenChannel = false; importer.convertToNormalmap = false;
+            importer.alphaSource = TextureImporterAlphaSource.FromInput; importer.alphaIsTransparency = false;
+            importer.maxTextureSize = 4096; importer.mipmapEnabled = true; importer.wrapMode = TextureWrapMode.Repeat;
+            importer.filterMode = FilterMode.Trilinear; importer.anisoLevel = 8; importer.isReadable = false;
+            importer.textureCompression = TextureImporterCompression.CompressedHQ;
+            importer.SaveAndReimport();
+            return ResourceRoot + "/" + stem + "_" + role;
         }
     }
 }

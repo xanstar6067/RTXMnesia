@@ -67,8 +67,9 @@ namespace RTXMnesia.EditorDev
                         detail.subMeshCount == entry.original.subMeshCount && coarse.subMeshCount == entry.original.subMeshCount,
                         "separate valid LOD meshes: " + entry.original.name);
                     foreach (var slot in entry.slots.Where(s => !string.IsNullOrEmpty(s.normalResource)))
+                        // Manual wall / floor profiles keep the standard F0: no specular coverage map.
                         Check(Resources.Load<Texture2D>(slot.normalResource) != null && Resources.Load<Texture2D>(slot.maskResource) != null &&
-                            Resources.Load<Texture2D>(slot.specularResource) != null, "approved surface maps available lazily");
+                            (string.IsNullOrEmpty(slot.specularResource) || Resources.Load<Texture2D>(slot.specularResource) != null), "approved surface maps available lazily");
                     Resources.UnloadAsset(detail); Resources.UnloadAsset(coarse);
                 }
                 foreach (string map in new[] { "00_rainy_hall", "01_old_archives", "05_wine_cellar", "10_daniels_room" })
@@ -97,8 +98,8 @@ namespace RTXMnesia.EditorDev
                                 current.Select((m, i) => (m, slot: entry.slots[i])).Where(p => !string.IsNullOrEmpty(p.slot.normalResource)).All(p =>
                                     p.m.GetTexture("_NormalMap") == Resources.Load<Texture2D>(p.slot.normalResource) &&
                                     p.m.GetTexture("_MaskMap") == Resources.Load<Texture2D>(p.slot.maskResource) &&
-                                    p.m.GetTexture("_SpecularColorMap") == Resources.Load<Texture2D>(p.slot.specularResource) &&
-                                    p.m.IsKeywordEnabled("_MATERIAL_FEATURE_SPECULAR_COLOR"));
+                                    (string.IsNullOrEmpty(p.slot.specularResource) || p.m.GetTexture("_SpecularColorMap") == Resources.Load<Texture2D>(p.slot.specularResource) &&
+                                    p.m.IsKeywordEnabled("_MATERIAL_FEATURE_SPECULAR_COLOR")));
                         }), map + ": no POM on displaced material slots");
                         Check(colliders.All(p => p.Key.sharedMesh == p.Value), map + ": collider meshes untouched");
                         var applied = meshes.Keys.ToDictionary(f => f, f => f.sharedMesh);
