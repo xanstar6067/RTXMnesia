@@ -93,6 +93,7 @@ namespace RTXMnesia.Dev
                     HplGraphics.Apply(s);
                     yield return SetLantern(map, mode.Contains("lantern"));
                     var hidden = mode.Contains("only") ? HideOthers(map) : new List<Light>();
+                    if (mode.Contains("nofill")) HideFills(hidden);
                     map.effects.Fade.FadeIn(0f);
                     player.active = true;
                     Vector3 dir0 = target - feet;
@@ -166,6 +167,18 @@ namespace RTXMnesia.Dev
                 hidden.Add(l);
             }
             return hidden;
+        }
+
+        /// <summary>Mode "nofill": the fill lights of the enhanced lighting (map lights without a source) off — is RTGI enough?</summary>
+        static void HideFills(List<Light> hidden)
+        {
+            foreach (var light in AmnesiaLight.All)
+            {
+                if (light == null || !light.noTracedShadows || light.enhancedAdded || light.handHeld || light.box) continue;
+                if (!light.TryGetComponent<Light>(out var l) || !l.enabled) continue;
+                l.enabled = false;
+                hidden.Add(l);
+            }
         }
 
         /// <summary>The lantern in the hand (the item is given first) or put away; waits for the draw / holster.</summary>
