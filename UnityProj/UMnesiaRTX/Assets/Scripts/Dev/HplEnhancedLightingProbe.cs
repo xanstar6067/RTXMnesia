@@ -63,6 +63,8 @@ namespace RTXMnesia.Dev
             var report = new StringBuilder();
             Directory.CreateDirectory(folder);
             string defaultModes = string.IsNullOrEmpty(modes) ? "classic_raster,classic_rt,enhanced_raster,enhanced_rt" : modes;
+            // Flicker switches lights off at random: the modes would not be comparable.
+            foreach (var light in AmnesiaLight.All) if (light != null && !light.handHeld) light.SetFlickerActive(false);
             foreach (string lamp in (lit ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
                 if (map.GetEntityByName(lamp.Trim()) is Props.PropLamp p) p.SetLit(true, false);
@@ -90,10 +92,15 @@ namespace RTXMnesia.Dev
                     s.antialiasing = (int)HplAntialiasing.Taa;
                     s.rtPathTracing = 0;
                     s.rtLanternShadows = !mode.Contains("noshadow");
+                    if (mode.Contains("tex")) s.textures = 1;
                     HplGraphics.Apply(s);
                     yield return SetLantern(map, mode.Contains("lantern"));
                     var hidden = mode.Contains("only") ? HideOthers(map) : new List<Light>();
                     if (mode.Contains("nofill")) HideFills(hidden);
+                    if (mode.Contains("cull0"))
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                            if (r.transform.parent != null && r.transform.parent.name.StartsWith("wall_default", StringComparison.Ordinal))
+                                foreach (var m in r.materials) { m.SetFloat("_CullMode", 0); m.SetFloat("_CullModeForward", 0); }
                     map.effects.Fade.FadeIn(0f);
                     player.active = true;
                     Vector3 dir0 = target - feet;
@@ -131,8 +138,83 @@ namespace RTXMnesia.Dev
                     Destroy(image);
                     rt.Release();
                     Destroy(rt);
+                    if (mode.Contains("mats"))
+                    {
+                        // Which materials the view's target shows, and whether they have enhanced textures.
+                        var seen = new HashSet<string>();
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                        {
+                            if (r.bounds.SqrDistance(target) > 2.5f * 2.5f) continue;
+                            foreach (var m in r.sharedMaterials)
+                            {
+                                if (m == null) continue;
+                                var classic = HplEnhancedTextures.ClassicMaterial(m);
+                                bool has = HplEnhancedTextures.ResolveMaterial(classic, true) != classic;
+                                string key = $"{classic.name} enhancedNow={m != classic} hasEnhanced={has} shader={m.shader.name} smooth={(m.HasProperty("_Smoothness") ? m.GetFloat("_Smoothness") : -1):0.00} height={m.IsKeywordEnabled("_HEIGHTMAP")}";
+                                if (seen.Add(key)) report.AppendLine($"    mat {r.transform.parent?.name}: {key}");
+                            }
+                        }
+                    }
+                    if (name == "P")
+                    {
+                        // Debug: what is between the torch and the room.
+                        var torch = HplSpace.Position(new Vector3(2.05f, 0.25f, 18.99f));
+                        var hits = Physics.RaycastAll(torch, (feet + Vector3.up * 1.5f - torch).normalized, 6f, ~0, QueryTriggerInteraction.Ignore);
+                        foreach (var h in hits)
+                        {
+                            var r = h.collider.GetComponentInParent<Renderer>() ?? h.collider.GetComponentInChildren<Renderer>();
+                            report.AppendLine($"    ray hit {h.collider.name} d={h.distance:0.00} renderer={(r != null ? r.name + " " + r.shadowCastingMode + " underMap=" + r.transform.IsChildOf(map.transform) : "none")}");
+                        }
+                        int[] counts = new int[4]; int outside = 0;
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None)) { counts[(int)r.shadowCastingMode]++; if (!r.transform.IsChildOf(map.transform)) outside++; }
+                        report.AppendLine($"    renderers off/on/two/only = {string.Join("/", counts)}, outside map {outside}");
+                        foreach (var px in new[] { new Vector2(980, 330), new Vector2(880, 215), new Vector2(960, 260) })
+                        {
+                            var ray = camera.ViewportPointToRay(new Vector3(px.x / 1600f, 1f - px.y / 900f, 0));
+                            if (!Physics.Raycast(ray, out var hit, 20f, ~0, QueryTriggerInteraction.Ignore)) { report.AppendLine($"    px {px}: no hit"); continue; }
+                            report.AppendLine($"    px {px}: hit {hit.collider.transform.parent?.name}/{hit.collider.name} hpl={HplSpace.Position(hit.point)} n={hit.normal} toTorch={(torch - hit.point).normalized}");
+                            var seg = torch - hit.point;
+                            foreach (var h in Physics.RaycastAll(hit.point + seg.normalized * 0.005f, seg.normalized, seg.magnitude - 0.01f, ~0, QueryTriggerInteraction.Collide))
+                                report.AppendLine($"        between: {h.collider.transform.parent?.name}/{h.collider.name} layer={h.collider.gameObject.layer} trigger={h.collider.isTrigger} hpl={HplSpace.Position(h.point)}");
+                            foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                                if (r.bounds.IntersectRay(new Ray(hit.point + seg.normalized * 0.005f, seg.normalized), out float d) && d < seg.magnitude)
+                                    report.AppendLine($"        renderer on segment: {r.transform.parent?.name}/{r.name} cast={r.shadowCastingMode} mat={r.sharedMaterial?.name} d={d:0.00}");
+                        }
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                        {
+                            var p = r.transform.parent;
+                            if (p == null || (p.name != "wall_default_11" && p.name != "wall_default_246" && p.name != "wall_default_12" && p.name != "wall_default_247")) continue;
+                            var mesh = r.GetComponent<MeshFilter>()?.sharedMesh;
+                            if (mesh == null) continue;
+                            Vector3 n = Vector3.zero; var nm = mesh.normals; var vs = mesh.vertices;
+                            float minX = float.MaxValue, maxX = float.MinValue;
+                            for (int i = 0; i < nm.Length; i++)
+                            {
+                                n += r.transform.TransformDirection(nm[i]);
+                                float x = HplSpace.Position(r.transform.TransformPoint(vs[i])).x;
+                                minX = Mathf.Min(minX, x); maxX = Mathf.Max(maxX, x);
+                            }
+                            var tri = mesh.triangles;
+                            Vector3 wn = Vector3.zero;
+                            for (int i = 0; i < tri.Length; i += 3)
+                            {
+                                Vector3 a = r.transform.TransformPoint(vs[tri[i]]), b = r.transform.TransformPoint(vs[tri[i + 1]]), c = r.transform.TransformPoint(vs[tri[i + 2]]);
+                                wn += Vector3.Cross(b - a, c - a);
+                            }
+                            report.AppendLine($"    {p.name}/{r.name}: mean vertex normal (unity) {n.normalized}, winding normal (unity, Unity front = clockwise) {(-wn).normalized}, hpl x {minX:0.00}..{maxX:0.00}, tris {tri.Length / 3}");
+                        }
+                        var slab = new Bounds();
+                        slab.SetMinMax(HplSpace.Position(new Vector3(3.4f, -0.5f, 17f)), HplSpace.Position(new Vector3(1.9f, 1.5f, 20.5f)));
+                        slab.SetMinMax(Vector3.Min(slab.min, slab.max), Vector3.Max(slab.min, slab.max));
+                        foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                            if (r.bounds.Intersects(slab))
+                                report.AppendLine($"    in wall: {r.transform.parent?.name}/{r.name} {r.GetType().Name} cast={r.shadowCastingMode} mat={r.sharedMaterial?.name} shader={r.sharedMaterial?.shader.name} hplMin={HplSpace.Position(r.bounds.min)} hplMax={HplSpace.Position(r.bounds.max)}");
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                            if (r.shadowCastingMode == ShadowCastingMode.Off && r.bounds.SqrDistance(torch) < 4f)
+                                report.AppendLine($"    off near torch: {r.transform.parent?.name}/{r.name} mat={r.sharedMaterial?.name} shader={r.sharedMaterial?.shader.name} size={r.bounds.size}");
+                    }
                     string line = $"{name} {mode}: mean {mean:0.0}, {ms:0.0} ms, enhanced applied={HplEnhancedLighting.Applied} " +
-                                  $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights}, " +
+                                  $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} wax={HplEnhancedLighting.WaxCandles}, " +
                                   $"RT={HplRayTracing.Active} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}";
                     report.AppendLine(line);
                     Debug.Log("[EnhancedLighting] " + line);

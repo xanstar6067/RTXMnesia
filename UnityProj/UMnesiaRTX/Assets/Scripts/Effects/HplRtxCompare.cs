@@ -5,10 +5,10 @@ using UnityEngine;
 namespace RTXMnesia.Effects
 {
     /// <summary>
-    /// Comparison of the lightings in game (key C, not in the original): the current frame is kept, the lighting
-    /// switches between the classic one and ray tracing, and a wipe line sweeps the new image over the kept one from
-    /// left to right (<see cref="HplScreenEffectsPass"/>); a label in the HUD names the new lighting. The switch is
-    /// not saved: the options window applies the chosen lighting again.
+    /// Ray tracing on / off in game (key C, not in the original): the current frame is kept, the "Ray tracing" setting
+    /// of the user (tab "Трассировка", field lighting) switches and is saved — the options window shows the new state —
+    /// and a wipe line sweeps the new image over the kept one from left to right (<see cref="HplScreenEffectsPass"/>);
+    /// a label in the HUD names the new state. The lighting set (classic / enhanced) is not touched.
     /// </summary>
     public static class HplRtxCompare
     {
@@ -26,9 +26,9 @@ namespace RTXMnesia.Effects
         public static bool Wiping => s_phase == Phase.Wipe;
         /// <summary>The wipe line from 0 (left edge) to 1 (right edge), eased.</summary>
         public static float Progress => s_phase == Phase.Wipe ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((Time.unscaledTime - s_start) / WipeTime)) : 0f;
-        /// <summary>The lighting shown after the switch is ray tracing.</summary>
+        /// <summary>Ray tracing is on after the switch.</summary>
         public static bool RayTracing { get; private set; }
-        public static string Label => RayTracing ? "Трассировка лучей" : "Классическое освещение";
+        public static string Label => RayTracing ? "Трассировка лучей: вкл" : "Трассировка лучей: выкл";
         /// <summary>The HUD label: shown at the switch, fades out after the wipe.</summary>
         public static float LabelAlpha
         {
@@ -40,7 +40,7 @@ namespace RTXMnesia.Effects
             }
         }
 
-        /// <summary>Key C: starts a comparison from the applied settings (ignored while one is running).</summary>
+        /// <summary>Key C: switches the given (applied) settings, ignored while a switch is running.</summary>
         public static void Toggle(HplUserSettings settings)
         {
             if (!Available || settings == null || s_phase != Phase.Idle) return;
@@ -66,9 +66,9 @@ namespace RTXMnesia.Effects
                     break;
                 case Phase.Switch:
                 {
-                    var s = s_settings.Copy();
-                    s.lighting = HplRayTracing.Active ? 0 : 1;
-                    HplGraphics.Apply(s);
+                    s_settings.lighting = HplRayTracing.Active ? 0 : 1;
+                    HplGraphics.Apply(s_settings);
+                    s_settings.Save();
                     RayTracing = HplRayTracing.Active;
                     s_phase = Phase.Wipe;
                     s_start = s_labelStart = Time.unscaledTime;

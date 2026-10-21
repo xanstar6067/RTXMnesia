@@ -331,6 +331,8 @@ namespace RTXMnesia.Dev
             if (ui != null)
             {
                 var userSettings = ui.Settings;
+                // Key C saves the setting: the user's stored settings are put back below.
+                string storedPrefs = PlayerPrefs.GetString(HplUserSettings.PrefsKey, null);
                 var start = saved.Copy();
                 start.lighting = 0;
                 ui.Settings = start;
@@ -341,7 +343,8 @@ namespace RTXMnesia.Dev
                 while (!Effects.HplRtxCompare.Wiping && frames++ < 30) yield return null;
                 Check(Effects.HplRtxCompare.Wiping && HplRayTracing.Active, $"key C: the frame is kept and ray tracing switches on ({frames} frames)");
                 yield return new WaitForSecondsRealtime(Effects.HplRtxCompare.WipeTime * 0.45f);
-                Check(Effects.HplRtxCompare.LabelAlpha > 0f && Effects.HplRtxCompare.Label == "Трассировка лучей", "key C: the HUD names the new lighting");
+                Check(Effects.HplRtxCompare.LabelAlpha > 0f && Effects.HplRtxCompare.Label == "Трассировка лучей: вкл", "key C: the HUD names the new state");
+                Check(ui.Settings.lighting == 1 && HplUserSettings.ReadSaved().lighting == 1, "key C: the ray tracing setting itself is on and saved");
                 float progress = Effects.HplRtxCompare.Progress;
                 SaveFrame(rt, $"{mapName}_compare_wipe");
                 Check(progress > 0.05f && progress < 0.95f, $"key C: the wipe runs (progress {progress:0.00})");
@@ -350,9 +353,14 @@ namespace RTXMnesia.Dev
                 Effects.HplRtxCompare.Toggle(ui.Settings);
                 frames = 0;
                 while (!Effects.HplRtxCompare.Wiping && frames++ < 30) yield return null;
-                Check(Effects.HplRtxCompare.Wiping && !HplRayTracing.Active && Effects.HplRtxCompare.Label == "Классическое освещение", "key C again: back to the classic lighting");
+                Check(Effects.HplRtxCompare.Wiping && !HplRayTracing.Active && Effects.HplRtxCompare.Label == "Трассировка лучей: выкл"
+                      && ui.Settings.lighting == 0 && HplUserSettings.ReadSaved().lighting == 0 && ui.Settings.lightingSet == start.lightingSet,
+                      "key C again: ray tracing off and saved, the lighting set unchanged");
                 yield return new WaitForSecondsRealtime(Effects.HplRtxCompare.WipeTime + 0.1f);
                 ui.Settings = userSettings;
+                if (storedPrefs == null) PlayerPrefs.DeleteKey(HplUserSettings.PrefsKey);
+                else PlayerPrefs.SetString(HplUserSettings.PrefsKey, storedPrefs);
+                PlayerPrefs.Save();
             }
 
             HplGraphics.Apply(saved);

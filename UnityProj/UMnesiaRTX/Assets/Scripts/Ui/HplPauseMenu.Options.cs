@@ -415,7 +415,7 @@ namespace RTXMnesia.Ui
         /// <summary>Frame generation: Unity has none of its own; NVIDIA's driver one is turned on in the NVIDIA App.</summary>
         const string FrameGenerationNote = "NVIDIA Smooth Motion включается в NVIDIA App для UMnesiaRTX.exe (RTX 40 и 50); в игре своей генерации кадров нет.";
         /// <summary>The comparison key (Effects.HplRtxCompare).</summary>
-        const string CompareHint = "В игре клавиша C: сравнение с другим освещением.";
+        const string CompareHint = "В игре клавиша C включает и выключает трассировку лучей (сохраняется).";
 
         // The calibration patch is drawn in the camera buffer, through a hole in the UI background.
         // Putting it in an ordinary UI texture would clamp its luminance to Paper White / Max Nits.

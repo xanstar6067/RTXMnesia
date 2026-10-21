@@ -162,7 +162,8 @@ def main():
             main, units = xml.find('Main'), xml.find('TextureUnits')
             if main.get('Type', '').lower() != 'soliddiffuse':
                 raise ValueError(f'Special material outside supported batch: {material}')
-            use_height |= units.find('Height') is not None and main.get('PhysicsMaterial', '').lower() != 'glass' and not cutout
+            # Physics "Glass" marks opaque window walls too (castlebase_wall_win: stone around the panes); see-through glass is not SolidDiffuse.
+            use_height |= units.find('Height') is not None and not cutout
         if cutout:
             if any(v['alpha_cutoff'] != 0.5 for v in data['material_settings'].values()):
                 raise ValueError(f'Unsupported alpha coverage threshold: {file}')

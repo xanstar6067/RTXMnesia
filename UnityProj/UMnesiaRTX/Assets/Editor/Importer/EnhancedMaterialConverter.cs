@@ -248,7 +248,9 @@ namespace RTXMnesia.Importer
             material.SetFloat("_AORemapMax", 1f);
             material.SetFloat("_SmoothnessRemapMin", 0f);
             material.SetFloat("_SmoothnessRemapMax", 1f);
-            bool useHeight = textures[3] != null && src.Texture("Height") != null && !string.Equals(src.PhysicsMaterial, "Glass", StringComparison.OrdinalIgnoreCase) && classic.GetFloat("_AlphaCutoffEnable") == 0;
+            // Physics "Glass" also marks opaque window walls (castlebase_wall_win: stone around the panes); see-through glass is
+            // not a Solid material and never gets here.
+            bool useHeight = textures[3] != null && src.Texture("Height") != null && classic.GetFloat("_AlphaCutoffEnable") == 0;
             float heightCm = (src.PhysicsMaterial ?? "").StartsWith("Wood", StringComparison.OrdinalIgnoreCase) ? 0.5f : HeightCm;
             material.SetTexture("_HeightMap", useHeight ? textures[3] : null);
             material.SetFloat("_DisplacementMode", useHeight ? 2f : 0f);

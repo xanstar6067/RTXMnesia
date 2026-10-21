@@ -25,6 +25,12 @@ namespace RTXMnesia.World
     public static class HplEnhancedLighting
     {
         public const string ResourceFolder = "HplEnhancedLighting/";
+        /// <summary>Resources path of the diffusion profile of lit candle wax (created by the editor, EnsureCandleWaxProfile).</summary>
+        public const string CandleWaxProfile = ResourceFolder + "CandleWax";
+        /// <summary>Thickness of candle wax for the thin-object transmission (0..1 of the profile's 0-5 mm).</summary>
+        public const float WaxThickness = 0.35f;
+        /// <summary>Translucent candle wax (unfinished, off).</summary>
+        public const bool WaxEnabled = false;
         /// <summary>
         /// One candle flame, cd: the classic candlestick at its map color (Candela(1.7) × 0.85 → 15), so a room lit by
         /// candles keeps its brightness near them; the other fires are counted in candles from it.
@@ -34,6 +40,8 @@ namespace RTXMnesia.World
         /// <summary>Illuminance (lux) where a light ends: an albedo-0.5 wall at EV100 3 is ~0.4% of white there.</summary>
         public const float VisibleLux = 0.25f;
         public const float MaxRange = 25f;
+        /// <summary>Shadow map bias of the lamps (HDRP defaults 0.75 / 0.5); 2 still let seams through, 4 none.</summary>
+        public const float ShadowNormalBias = 4f, ShadowSlopeBias = 0f, ShadowNearPlane = 0.02f;
 
         [Serializable]
         sealed class Overlay
@@ -78,12 +86,38 @@ namespace RTXMnesia.World
             public int baseShadowLevel;
             public LightShadows shadows;
             public ShadowUpdateMode updateMode;
+            public float normalBias, slopeBias, nearPlane;
         }
 
         static HplMap s_map;
         static Overlay s_overlay;
         static readonly List<Changed> s_changed = new();
+        static readonly List<(Renderer renderer, ShadowCastingMode mode)> s_casters = new();
         static GameObject s_addedRoot;
+        static readonly List<(MeshFilter filter, Mesh original, Renderer renderer, Mesh split, Material wax)> s_wax = new();
+        static DiffusionProfileSettings s_waxProfile;
+        static bool s_waxProfileLoaded;
+
+        static DiffusionProfileSettings WaxProfile
+        {
+            get
+            {
+                if (!s_waxProfileLoaded)
+                {
+                    s_waxProfileLoaded = true;
+                    s_waxProfile = Resources.Load<DiffusionProfileSettings>(CandleWaxProfile);
+                    if (s_waxProfile == null) HplLog.PortError("Enhanced lighting: no diffusion profile Resources/" + CandleWaxProfile);
+                }
+                return s_waxProfile;
+            }
+        }
+
+        /// <summary>The global settings volume (HplGraphics): HDRP knows a diffusion profile only from a volume's list.</summary>
+        public static void ApplyVolume(VolumeProfile profile)
+        {
+            if (WaxProfile == null || profile.TryGet(out DiffusionProfileList _)) return;
+            profile.Add<DiffusionProfileList>(true).diffusionProfiles.Override(new[] { WaxProfile });
+        }
 
         /// <summary>The enhanced lighting is chosen (graphics tab).</summary>
         public static bool Enabled => HplGraphics.Lighting == 1;
@@ -92,6 +126,8 @@ namespace RTXMnesia.World
         /// <summary>Lights of the map changed and lights added (checks).</summary>
         public static int ChangedLights => s_changed.Count;
         public static int AddedLights => s_addedRoot != null ? s_addedRoot.transform.childCount : 0;
+        /// <summary>Candle meshes whose wax was given the translucent material (checks).</summary>
+        public static int WaxCandles => s_wax.Count;
 
         /// <summary>The map is built (HplMap.Build, Play only): its overlay is read and applied if the enhanced lighting is chosen.</summary>
         public static void Attach(HplMap map)
@@ -175,25 +211,50 @@ namespace RTXMnesia.World
         /// </summary>
         static void ApplyRules()
         {
+            // HPL2's level geometry is one-sided: a single plane or relief seen by a lamp from behind cast no shadow
+            // map. Both sides cast (the thin walls themselves are handled by the lamps' bias, see ShadowNormalBias).
+            foreach (var r in s_map.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (r.shadowCastingMode != ShadowCastingMode.On) continue;
+                s_casters.Add((r, r.shadowCastingMode));
+                r.shadowCastingMode = ShadowCastingMode.TwoSided;
+            }
             foreach (var entity in s_map.GetComponentsInChildren<AmnesiaEntity>(true))
             {
                 if (entity.entityType != "Lamp") continue;
-                var flames = new List<(Vector3 position, float radius)>();
+                var flames = new List<(Vector3 position, float radius, float lift)>();
                 float candles = 0f;
                 foreach (var ps in entity.GetComponentsInChildren<AmnesiaParticleSystem>(true))
-                    if (Flame(ps.file, out float r, out float c)) { flames.Add((ps.transform.position, r)); candles += c; }
+                    if (Flame(ps.file, out float r, out float c, out float h)) { flames.Add((ps.transform.position, r, h)); candles += c; }
                 if (flames.Count == 0) continue;
+                // The lamp's own model does not shadow its flame: a point light just above a torch's cup threw the
+                // cup's shadow over the whole wall and floor below (the real flame is larger than the cup's rim).
+                foreach (var r in entity.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    if (r.shadowCastingMode == ShadowCastingMode.Off) continue;
+                    if (!s_casters.Exists(c => c.renderer == r)) s_casters.Add((r, r.shadowCastingMode));
+                    r.shadowCastingMode = ShadowCastingMode.Off;
+                }
                 Vector3 center = Vector3.zero;
-                float flameRadius = 0f;
-                foreach (var f in flames) { center += f.position; flameRadius = Mathf.Max(flameRadius, f.radius); }
+                float flameRadius = 0f, lift = 0f;
+                foreach (var f in flames) { center += f.position; flameRadius = Mathf.Max(flameRadius, f.radius); lift = Mathf.Max(lift, f.lift); }
                 center /= flames.Count;
                 float spread = 0f;
                 foreach (var f in flames) spread = Mathf.Max(spread, Vector3.Distance(f.position, center));
-                // The light in the flame (the particle system starts at its base).
-                Vector3 target = center + Vector3.up * flameRadius;
+                // The light in the body of the flame: the particle system starts at its base, inside a torch's cup.
+                // There the cup hid the light from ray-traced shadows, and its rim was nearer than the shadow map's
+                // near plane: the prongs threw huge shadows and the light went through the wall behind.
+                Vector3 target = center + Vector3.up * lift;
                 var lights = new List<AmnesiaLight>();
                 foreach (var light in entity.GetComponentsInChildren<AmnesiaLight>(true))
                     if (!light.box && !light.handHeld && s_map.GetLight(light.name) == light) lights.Add(light);
+                var wicks = new List<Vector3>();
+                foreach (var f in flames)
+                    if (f.radius <= 0.02f) wicks.Add(f.position);
+                // Unfinished (2026-10-21): HDMaterial.SetDiffusionProfile throws on a runtime copy in the editor
+                // ("Adding asset to object ... failed"); the profile has to be set by its hash properties instead.
+                if (WaxEnabled && wicks.Count > 0)
+                    foreach (var r in entity.GetComponentsInChildren<MeshRenderer>(true)) SplitWax(r, wicks);
                 foreach (var light in lights)
                 {
                     var record = Record(light);
@@ -217,14 +278,95 @@ namespace RTXMnesia.World
         }
 
         /// <summary>
-        /// A fire particle system: the radius of its flame (the source of soft shadows) and its brightness in candles
-        /// (a torch about 10, a stove's fire 20, an oil flame 3).
+        /// Lit wax glows: the flame's light goes through the thin walls of the candle, warm and strongest near the flame
+        /// (falling off with 1/d^2 down the candle), and goes out with the lamp. HPL2's candle is one mesh with its
+        /// holder, so the wax is found by its shape: from each wick down, a narrow column of vertices until the mesh
+        /// widens into the holder's pan. Its triangles become a second submesh with a translucent copy of the material.
         /// </summary>
-        static bool Flame(string file, out float radius, out float candles)
+        static void SplitWax(MeshRenderer renderer, List<Vector3> wicks)
+        {
+            var filter = renderer.GetComponent<MeshFilter>();
+            var mesh = filter != null ? filter.sharedMesh : null;
+            var material = renderer.sharedMaterial;
+            if (mesh == null || !mesh.isReadable || mesh.subMeshCount != 1 || renderer.sharedMaterials.Length != 1 ||
+                material == null || material.shader.name != "HDRP/Lit" || WaxProfile == null) return;
+            var vertices = mesh.vertices;
+            var world = new Vector3[vertices.Length];
+            for (int i = 0; i < vertices.Length; i++) world[i] = renderer.transform.TransformPoint(vertices[i]);
+            var wax = new bool[vertices.Length];
+            foreach (var wick in wicks) MarkWax(world, wick, wax);
+            var triangles = mesh.triangles;
+            var rest = new List<int>(triangles.Length);
+            var waxTriangles = new List<int>();
+            for (int i = 0; i < triangles.Length; i += 3)
+            {
+                bool w = wax[triangles[i]] && wax[triangles[i + 1]] && wax[triangles[i + 2]];
+                var list = w ? waxTriangles : rest;
+                list.Add(triangles[i]); list.Add(triangles[i + 1]); list.Add(triangles[i + 2]);
+            }
+            if (waxTriangles.Count == 0 || rest.Count == 0) return;
+            var split = UnityEngine.Object.Instantiate(mesh);
+            split.name = mesh.name + " (wax)";
+            split.hideFlags = HideFlags.DontSave;
+            split.subMeshCount = 2;
+            split.SetTriangles(rest, 0);
+            split.SetTriangles(waxTriangles, 1);
+            var waxMaterial = new Material(material) { name = material.name + " (wax)", hideFlags = HideFlags.DontSave };
+            waxMaterial.SetFloat("_MaterialID", (float)MaterialId.LitTranslucent);
+            waxMaterial.SetFloat("_TransmissionEnable", 1f);
+            waxMaterial.SetFloat("_Thickness", WaxThickness);
+            waxMaterial.SetTexture("_ThicknessMap", null);
+            // The glow is the light let through; HPL2's emission of the candle stays on the holder's submesh.
+            if (waxMaterial.HasProperty("_EmissiveColor")) waxMaterial.SetColor("_EmissiveColor", Color.black);
+            HDMaterial.SetDiffusionProfile(waxMaterial, WaxProfile);
+            HDMaterial.ValidateMaterial(waxMaterial);
+            s_wax.Add((filter, mesh, renderer, split, waxMaterial));
+            filter.sharedMesh = split;
+            renderer.sharedMaterials = new[] { material, waxMaterial };
+        }
+
+        /// <summary>Marks the wax below a wick: 5 mm bins of the widest vertex around the axis, down to the holder's pan.</summary>
+        static void MarkWax(Vector3[] world, Vector3 wick, bool[] wax)
+        {
+            const float Bin = 0.005f, Depth = 0.4f, Above = 0.02f, Search = 0.08f, Widening = 1.4f;
+            var widest = new float[(int)(Depth / Bin) + 1];
+            for (int i = 0; i < widest.Length; i++) widest[i] = -1f;
+            foreach (var p in world)
+            {
+                float h = wick.y - p.y, r = new Vector2(p.x - wick.x, p.z - wick.z).magnitude;
+                if (h < -Above || h > Depth || r > Search) continue;
+                int k = (int)(Mathf.Max(h, 0f) / Bin);
+                widest[k] = Mathf.Max(widest[k], r);
+            }
+            // The candle's radius: the widest of the first centimetres below the wick (the wick itself is thinner).
+            float candle = 0f;
+            for (int k = 1; k <= 6 && k < widest.Length; k++) candle = Mathf.Max(candle, widest[k]);
+            if (candle <= 0.002f) return;
+            float bottom = 0f;
+            for (int k = 0; k < widest.Length; k++)
+            {
+                if (widest[k] < 0f) continue;
+                if (widest[k] > candle * Widening) break;
+                bottom = (k + 1) * Bin;
+            }
+            for (int i = 0; i < world.Length; i++)
+            {
+                var p = world[i];
+                float h = wick.y - p.y, r = new Vector2(p.x - wick.x, p.z - wick.z).magnitude;
+                if (h >= -Above && h <= bottom && r <= candle * Widening) wax[i] = true;
+            }
+        }
+
+        /// <summary>
+        /// A fire particle system: the radius of its flame (the source of soft shadows), its brightness in candles
+        /// (a torch about 10, a stove's fire 20, an oil flame 3) and the height of the flame's body above the system
+        /// (ps_torch_fire: particles of 15-20 cm rising from the bottom of the cup, its rim 4 cm above the base).
+        /// </summary>
+        static bool Flame(string file, out float radius, out float candles, out float lift)
         {
             string f = (file ?? "").ToLowerInvariant();
-            (radius, candles) = f.Contains("candle") ? (0.012f, 1f) : f.Contains("torch") ? (0.06f, 10f)
-                : f.Contains("stove") || f.Contains("bonfire") ? (0.15f, 20f) : (0.03f, 3f);
+            (radius, candles, lift) = f.Contains("candle") ? (0.012f, 1f, 0.015f) : f.Contains("torch") ? (0.06f, 10f, 0.15f)
+                : f.Contains("stove") || f.Contains("bonfire") ? (0.15f, 20f, 0.15f) : (0.03f, 3f, 0.05f);
             return f.Contains("fire") || f.Contains("flame") || f.Contains("candle");
         }
 
@@ -262,6 +404,8 @@ namespace RTXMnesia.World
                 localPosition = light.transform.localPosition, localRotation = light.transform.localRotation,
                 shadows = unityLight != null ? unityLight.shadows : LightShadows.None,
                 updateMode = hd != null ? hd.shadowUpdateMode : ShadowUpdateMode.EveryFrame,
+                normalBias = hd != null ? hd.normalBias : 0.75f, slopeBias = hd != null ? hd.slopeBias : 0.5f,
+                nearPlane = hd != null ? hd.shadowNearPlane : 0.1f,
             };
             s_changed.Add(record);
             return record;
@@ -290,7 +434,18 @@ namespace RTXMnesia.World
             }
             light.castShadows = true;
             light.noTracedShadows = false;
-            if (light.TryGetComponent(out HDAdditionalLightData hd)) hd.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+            if (light.TryGetComponent(out HDAdditionalLightData hd))
+            {
+                hd.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+                // HPL2's walls are two relief halves back to back: the mortar of both sides lies in one plane, the
+                // wall is zero thick at the seams. A torch behind the wall lit the next room along the seams
+                // (torch_static01_4 of 01_old_archives). The normal bias moves the receiver into its own room, the
+                // slope bias would move the far side's depth through the wall at grazing angles.
+                hd.normalBias = ShadowNormalBias;
+                hd.slopeBias = ShadowSlopeBias;
+                // A lamp hangs a few cm from its wall and its own holder: HDRP's 10 cm near plane cut them out.
+                hd.shadowNearPlane = ShadowNearPlane;
+            }
             if (lowResolution) light.baseShadowLevel = 0;
             HplGraphics.ApplyShadows(light);
         }
@@ -409,11 +564,28 @@ namespace RTXMnesia.World
                 light.castShadows = r.castShadows;
                 light.baseShadowLevel = r.baseShadowLevel;
                 if (light.TryGetComponent(out Light unityLight)) unityLight.shadows = r.shadows;
-                if (light.TryGetComponent(out HDAdditionalLightData hd)) hd.shadowUpdateMode = r.updateMode;
+                if (light.TryGetComponent(out HDAdditionalLightData hd))
+                {
+                    hd.shadowUpdateMode = r.updateMode;
+                    hd.normalBias = r.normalBias;
+                    hd.slopeBias = r.slopeBias;
+                    hd.shadowNearPlane = r.nearPlane;
+                }
                 HplGraphics.ApplyShadows(light);
                 light.Apply(light.CurrentColor, light.CurrentRadius);
             }
             s_changed.Clear();
+            foreach (var (filter, original, renderer, split, wax) in s_wax)
+            {
+                if (filter != null) filter.sharedMesh = original;
+                if (renderer != null && renderer.sharedMaterials.Length > 1) renderer.sharedMaterials = new[] { renderer.sharedMaterials[0] };
+                UnityEngine.Object.Destroy(split);
+                UnityEngine.Object.Destroy(wax);
+            }
+            s_wax.Clear();
+            foreach (var (r, mode) in s_casters)
+                if (r != null) r.shadowCastingMode = mode;
+            s_casters.Clear();
             if (s_addedRoot != null)
             {
                 foreach (var light in s_addedRoot.GetComponentsInChildren<AmnesiaLight>(true)) HplRayTracing.Release(light);
