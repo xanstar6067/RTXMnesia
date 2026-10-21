@@ -328,6 +328,8 @@ namespace RTXMnesia.ScriptApi
                     if (!IsTemplate(r.transform)) renderers.Add(r);
                 WaterReflection = HplWaterReflection.Create(renderers, transform);
             }
+            // The enhanced lighting's overlay of this map (graphics tab), over the classic lights.
+            if (Application.isPlaying && !menuBackground) HplEnhancedLighting.Attach(this);
             _devRoom?.Initialize(this);
         }
 

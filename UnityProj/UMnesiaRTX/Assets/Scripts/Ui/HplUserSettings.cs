@@ -28,6 +28,8 @@ namespace RTXMnesia.Ui
         public int fpsLimit;
         /// <summary>Lighting: 0 — classic, 1 — ray tracing (DXR). Textures: 0 — classic, 1 — enhanced with classic fallback.</summary>
         public int lighting, textures;
+        /// <summary>The lighting set (graphics tab): 0 — classic (the map's lights), 1 — enhanced (the map's overlay, <see cref="World.HplEnhancedLighting"/>).</summary>
+        public int lightingSet;
         /// <summary><see cref="HplDlssMode"/> (RTX tab); DLSS replaces <see cref="antialiasing"/> while it is on.</summary>
         public int dlssMode;
         /// <summary>The DLSS model: a NVIDIA.DLSSPreset bit, 0 — NVIDIA's default for each mode.</summary>
@@ -171,6 +173,7 @@ namespace RTXMnesia.Ui
             if (Array.IndexOf(HplGraphics.FpsLimits, fpsLimit) < 0) fpsLimit = 0;
             lighting = lighting == 1 && SystemInfo.supportsRayTracing ? 1 : 0;
             textures = Mathf.Clamp(textures, 0, 1);
+            lightingSet = Mathf.Clamp(lightingSet, 0, 1);
             dlssMode = Mathf.Clamp(dlssMode, 0, (int)HplDlssMode.UltraPerformance);
             dlssPreset = HplDlss.ValidPreset(dlssPreset);
             rtShadows = Mathf.Clamp(rtShadows, 0, HplRayTracing.ShadowLights.Length - 1);

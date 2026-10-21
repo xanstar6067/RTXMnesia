@@ -181,9 +181,10 @@ namespace RTXMnesia.Dev
             int lightingBefore = ui.DraftSettings.lighting;
             ui.Choose(MenuControl.Lighting);
             ui.ChooseComboItem(1);
-            Check(ui.OpenCombo != null && ui.DraftSettings.lighting == lightingBefore, "the enhanced lighting cannot be picked yet, the list stays open");
+            Check(ui.OpenCombo == null && ui.DraftSettings.lightingSet == 1 && ui.DraftSettings.lighting == lightingBefore, "the enhanced lighting is picked, the ray tracing switch is not touched");
+            ui.Choose(MenuControl.Lighting);
             ui.ChooseComboItem(0);
-            Check(ui.OpenCombo == null && ui.DraftSettings.lighting == lightingBefore, "classic lighting picked, the list closes and the ray tracing switch is not touched");
+            Check(ui.OpenCombo == null && ui.DraftSettings.lightingSet == 0 && ui.DraftSettings.lighting == lightingBefore, "classic lighting picked, the list closes and the ray tracing switch is not touched");
             ui.Choose(MenuControl.TextureQuality); ui.ChooseComboItem(1);
             ui.Choose(MenuControl.Anisotropy); ui.ChooseComboItem(4);
             ui.Choose(MenuControl.Shadows); ui.ChooseComboItem(0);

@@ -85,6 +85,8 @@ namespace RTXMnesia.Hpl
         static readonly List<(AmnesiaLight light, float score)> s_candidates = new();
         static readonly HashSet<AmnesiaLight> s_traced = new();
         static readonly HashSet<AmnesiaLight> s_hand = new();
+        /// <summary>Hand-held lights with a smaller HPL2 radius are glows, never traced.</summary>
+        public const float MinHandShadowRadius = 1f;
         /// <summary>HDRP's screen space shadow slots (the pipeline asset, ConfigureHDRP).</summary>
         const int MaxSlots = 16;
         static readonly Dictionary<Light, float> s_radius = new();
@@ -268,7 +270,8 @@ namespace RTXMnesia.Hpl
             foreach (var light in AmnesiaLight.All)
             {
                 if (light == null || !light.handHeld) continue;
-                bool lit = LanternShadows && light.isActiveAndEnabled && light.TryGetComponent<Light>(out var handLight) &&
+                // The lantern's second light is a 0.3 m glow of its glass: no shadows worth a slot.
+                bool lit = LanternShadows && light.radius >= MinHandShadowRadius && light.isActiveAndEnabled && light.TryGetComponent<Light>(out var handLight) &&
                            handLight.enabled && handLight.intensity > 0f && HplGraphics.Shadows != HplGraphics.ShadowsOff;
                 if (lit) { s_hand.Add(light); hand++; }
                 SetTraced(light, lit);
@@ -282,7 +285,7 @@ namespace RTXMnesia.Hpl
             foreach (var light in AmnesiaLight.All)
             {
                 if (light == null || light.box || light.handHeld || light.excludeFromLightLevel || !light.isActiveAndEnabled) continue;
-                if (!light.castShadows && !AllShadows) continue;
+                if (!light.castShadows && (!AllShadows || light.noTracedShadows)) continue;
                 if (!light.TryGetComponent<Light>(out var unityLight) || !unityLight.enabled || unityLight.intensity <= 0f) continue;
                 // Map shadows: the graphics tab's shadow setting (Off: none); the added ones only follow its Off.
                 if (light.castShadows ? unityLight.shadows == LightShadows.None : HplGraphics.Shadows == HplGraphics.ShadowsOff) continue;
@@ -327,7 +330,9 @@ namespace RTXMnesia.Hpl
             if (on)
             {
                 if (!s_radius.ContainsKey(unityLight)) s_radius[unityLight] = unityLight.shapeRadius;
-                unityLight.shapeRadius = SourceRadius;
+                // Area lights have their size; the enhanced lighting gives its lights their own source radius.
+                if (unityLight.type is LightType.Point or LightType.Spot or LightType.Pyramid or LightType.Box)
+                    unityLight.shapeRadius = light.tracedSourceRadius >= 0f ? light.tracedSourceRadius : SourceRadius;
                 hd.numRayTracingSamples = ShadowSamples[Shadows];
                 hd.filterTracedShadow = true;
                 if (!hd.useRayTracedShadows) hd.useRayTracedShadows = true;
@@ -337,6 +342,17 @@ namespace RTXMnesia.Hpl
                 if (hd.useRayTracedShadows) hd.useRayTracedShadows = false;
                 if (s_radius.TryGetValue(unityLight, out float radius)) { unityLight.shapeRadius = radius; s_radius.Remove(unityLight); }
             }
+        }
+
+        /// <summary>The traced lights are chosen again at the next render (the lights of the map changed).</summary>
+        public static void Reselect() => s_frame = -1;
+
+        /// <summary>A light stops being traced now (it is changed or removed by the enhanced lighting).</summary>
+        public static void Release(AmnesiaLight light)
+        {
+            if (light == null || !s_traced.Remove(light)) return;
+            SetTraced(light, false);
+            s_frame = -1;
         }
 
         /// <summary>Every light back to its shadow map (RT shadows or the ray tracing lighting turned off).</summary>

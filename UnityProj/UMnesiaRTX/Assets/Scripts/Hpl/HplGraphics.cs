@@ -26,7 +26,7 @@ namespace RTXMnesia.Hpl
         /// <summary>Shadow choices: off, low, medium, high (cLuxMainMenu_Options shadows + ShadowQuality).</summary>
         public const int ShadowsOff = 0, ShadowsHigh = 3;
 
-        /// <summary>The lighting set: 0 — classic (HPL2 conversion). Enhanced lighting comes later.</summary>
+        /// <summary>The lighting set: 0 — classic (HPL2 conversion), 1 — enhanced (<see cref="HplEnhancedLighting"/>).</summary>
         public static int Lighting { get; private set; }
         /// <summary>The texture set: 0 — classic, 1 — enhanced PBR, with classic fallback for missing replacements.</summary>
         public static int Textures { get; private set; }
@@ -63,8 +63,8 @@ namespace RTXMnesia.Hpl
         {
             if (s == null) return;
             s.Validate();
-            bool changed = Lighting != s.lighting || Textures != s.textures || Shadows != s.shadows;
-            Lighting = s.lighting;
+            bool changed = Lighting != s.lightingSet || Textures != s.textures || Shadows != s.shadows;
+            Lighting = s.lightingSet;
             Textures = s.textures;
             Antialiasing = (HplAntialiasing)s.antialiasing;
             Shadows = s.shadows;
@@ -97,6 +97,8 @@ namespace RTXMnesia.Hpl
             ApplyVolume();
             HplHdr.Apply(s);
             foreach (var light in AmnesiaLight.All) ApplyShadows(light);
+            // Entries of the overlay may depend on ray tracing, so it is applied again with any change.
+            HplEnhancedLighting.Refresh();
             if (changed) Changed?.Invoke();
         }
 

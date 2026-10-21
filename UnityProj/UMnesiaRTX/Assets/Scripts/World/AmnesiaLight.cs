@@ -65,11 +65,33 @@ namespace RTXMnesia.World
         /// <summary>The HDRP shadow resolution tier of the map (before the shadow setting lowers it); −1: not read yet.</summary>
         [System.NonSerialized] public int baseShadowLevel = -1;
 
+        // The enhanced lighting (HplEnhancedLighting) changes only how the light is drawn: the light level the game
+        // logic sees (darkness, sanity, enemies) stays the classic one.
+        /// <summary>Enhanced lighting: multiplier of the HDRP intensity (0 — the light is not drawn).</summary>
+        [System.NonSerialized] public float enhancedIntensity = 1f;
+        /// <summary>Enhanced lighting: the HDRP range instead of the HPL2 radius (0 — the radius).</summary>
+        [System.NonSerialized] public float enhancedRange;
+        /// <summary>Enhanced lighting: the physical intensity (cd) at the map color instead of HPL2's radius (0 — none).</summary>
+        [System.NonSerialized] public float enhancedCandela;
+        /// <summary>The source radius while the shadows are ray traced; −1: <see cref="HplRayTracing.SourceRadius"/>.</summary>
+        [System.NonSerialized] public float tracedSourceRadius = -1f;
+        /// <summary>A fill light: never ray-traced shadows, also not by "shadows from all lights".</summary>
+        [System.NonSerialized] public bool noTracedShadows;
+        /// <summary>A light the enhanced lighting added: drawn only, no light level.</summary>
+        [System.NonSerialized] public bool enhancedAdded;
+        /// <summary>The map's local pose while the enhanced lighting moves the light (the light level is measured from it; it follows a swinging parent).</summary>
+        [System.NonSerialized] public Matrix4x4? classicLocalPose;
+
+        Matrix4x4 LevelPose => classicLocalPose is { } local
+            ? (transform.parent != null ? transform.parent.localToWorldMatrix * local : local)
+            : transform.localToWorldMatrix;
+
         void OnEnable()
         {
             All.Add(this);
             HplGraphics.ApplyShadows(this);
             if (box) HplBoxLightPass.Register(this);
+            if (handHeld) HplEnhancedLighting.HandLight(this);
         }
 
         void OnDisable()
@@ -85,33 +107,34 @@ namespace RTXMnesia.World
         /// </summary>
         public float LightLevelAt(Vector3 position, float radiusAdd)
         {
-            if (!Visible || !isActiveAndEnabled) return 0f;
+            if (enhancedAdded || !Visible || !isActiveAndEnabled) return 0f;
             Color c = CurrentColor;
             float max = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+            var pose = LevelPose;
+            Vector3 origin = pose.GetColumn(3);
             if (box)
             {
-                Vector3 d = position - transform.position, half = boxSize * 0.5f;
+                Vector3 d = position - origin, half = boxSize * 0.5f;
                 if (Mathf.Abs(d.x) > half.x || Mathf.Abs(d.y) > half.y || Mathf.Abs(d.z) > half.z) return 0f;
                 return max;
             }
             float r = CurrentRadius;
-            float dist = Vector3.Distance(transform.position, position);
+            float dist = Vector3.Distance(origin, position);
             if (TryGetComponent(out Light light) && light.type != LightType.Point)
             {
-                if (!InSpotFrustum(position, light, r)) return 0f;
-                if (castShadows && !ScriptApi.HplCollision.CheckLineOfSight(transform.position, position)) return 0f;
+                if (!InSpotFrustum(pose.inverse.MultiplyPoint3x4(position), light, r)) return 0f;
+                if (castShadows && !ScriptApi.HplCollision.CheckLineOfSight(origin, position)) return 0f;
             }
             else if (dist > r) return 0f;
             float t = 1f - dist / (r + radiusAdd);
             return t > 0f ? max * t : 0f;
         }
 
-        /// <summary>cFrustum::CollidePoint of the spot (perspective along the light's forward, far plane = radius).</summary>
-        bool InSpotFrustum(Vector3 position, Light light, float far)
+        /// <summary>cFrustum::CollidePoint of the spot (perspective along the light's forward, far plane = radius) for a point in the light's space.</summary>
+        bool InSpotFrustum(Vector3 p, Light light, float far)
         {
             float fov = spotFov > 0f ? spotFov : light.spotAngle * Mathf.Deg2Rad;
             float aspect = spotFov > 0f ? spotAspect : 1f;
-            Vector3 p = transform.InverseTransformPoint(position);
             if (p.z < spotNearClip || p.z > far) return false;
             float h = p.z * Mathf.Tan(fov * 0.5f);
             return Mathf.Abs(p.y) <= h && Mathf.Abs(p.x) <= h * aspect;
@@ -132,8 +155,15 @@ namespace RTXMnesia.World
             // Light.color is sRGB and kept ≤ 1; the brightest channel goes into the intensity.
             target.color = new Color(color.r / max, color.g / max, color.b / max);
             target.lightUnit = LightUnit.Candela;
-            target.intensity = HplLighting.Candela(lightRadius) * Mathf.GammaToLinearSpace(max);
-            target.range = lightRadius;
+            float level = Mathf.GammaToLinearSpace(max);
+            if (enhancedCandela > 0f)
+            {
+                // Physical brightness at the map color; fades and flicker scale it, the HPL2 radius does not.
+                float baseLevel = Mathf.GammaToLinearSpace(Mathf.Max(diffuseColor.r, diffuseColor.g, diffuseColor.b));
+                target.intensity = enhancedCandela * (baseLevel > 0f ? level / baseLevel : 1f) * enhancedIntensity;
+            }
+            else target.intensity = HplLighting.Candela(lightRadius) * level * enhancedIntensity;
+            target.range = enhancedRange > 0f ? enhancedRange : lightRadius;
             onApplied?.Invoke(target);
         }
 

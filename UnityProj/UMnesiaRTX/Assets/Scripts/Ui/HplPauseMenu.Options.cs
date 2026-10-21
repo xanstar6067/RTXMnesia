@@ -338,7 +338,7 @@ namespace RTXMnesia.Ui
         {
             Section("Освещение");
             ScrollCombo(MenuControl.Lighting, settings);
-            Note("«Улучшенное» освещение появится позже. Трассировка лучей включается на вкладке «Трассировка» и работает поверх любого освещения.");
+            Note("«Улучшенное» освещение переставляет источники света карт (пока готовы не все карты). Трассировка лучей включается на вкладке «Трассировка» и работает поверх любого освещения.");
             Section("Текстуры");
             ScrollCombo(MenuControl.Textures, settings);
             ScrollCombo(MenuControl.TextureQuality, settings);

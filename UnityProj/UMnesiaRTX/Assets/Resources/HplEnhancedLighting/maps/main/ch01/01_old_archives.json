@@ -1,0 +1,24 @@
+{
+  "lights": [
+    { "name": "PointLight_35", "when": "gi", "intensity": "0.4", "shadows": "off",
+      "note": "Room with the stove (x 24.5-36.5, z 11-27): fill light 2 m above the middle of the floor, no source. With shadows it threw the crates' shadows outwards from the middle. A soft ambient rest without shadows, the bounce of the window light comes from RTGI." },
+    { "name": "PointLight_35", "when": "nogi", "intensity": "0.7", "shadows": "off" },
+    { "name": "PointLight_36", "when": "gi", "intensity": "0.4", "shadows": "off", "note": "Same, south half of the room." },
+    { "name": "PointLight_36", "when": "nogi", "intensity": "0.7", "shadows": "off" },
+    { "name": "PointLight_33", "intensity": "0.3", "shadows": "off", "note": "Fill inside the window niche (z 17): weaker, the window's area light lights the niche." },
+    { "name": "PointLight_34", "intensity": "0.3", "shadows": "off", "note": "Fill inside the window niche (z 21)." },
+    { "name": "SpotLight_19", "position": "37.25 1.0 17", "target": "33.0 -2 17", "intensity": "2.5", "range": "10", "shadows": "on", "sourceRadius": "0.35",
+      "note": "Moonlight through the window (z 17): from the glass instead of 0.7 m inside the room, so the shadows fall into the room." },
+    { "name": "SpotLight_20", "position": "37.25 1.0 21", "target": "33.0 -2 21", "intensity": "2.5", "range": "10", "shadows": "on", "sourceRadius": "0.35",
+      "note": "Moonlight through the window (z 21)." },
+    { "name": "SpotLight_2", "range": "7", "sourceRadius": "0.15", "note": "Stove fire shining out of the stove door (the lamps themselves — the stove's fire, candles — follow the general lamp rule)." }
+  ],
+  "add": [
+    { "name": "Window_sky_17", "type": "rect", "position": "37.40 0.675 17", "target": "30 0.675 17", "size": "1.1 1.47",
+      "color": "0.55 0.65 0.78", "intensity": "90", "range": "12", "shadows": "on",
+      "note": "Night sky seen through the window glass (z 17): soft light from the whole opening." },
+    { "name": "Window_sky_21", "type": "rect", "position": "37.40 0.675 21", "target": "30 0.675 21", "size": "1.1 1.47",
+      "color": "0.55 0.65 0.78", "intensity": "90", "range": "12", "shadows": "on",
+      "note": "Night sky through the window glass (z 21)." }
+  ]
+}

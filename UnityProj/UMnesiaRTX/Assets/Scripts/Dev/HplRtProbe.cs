@@ -313,7 +313,9 @@ namespace RTXMnesia.Dev
                 HplGraphics.Apply(s);
                 double ms = Capture(camera, rt, $"{mapName}_lantern1", out var with);
                 AmnesiaLight hand = null;
-                foreach (var light in AmnesiaLight.All) if (light != null && light.handHeld && light.isActiveAndEnabled) hand = light;
+                // The lantern's main light (its 0.3 m glass glow is never traced).
+                foreach (var light in AmnesiaLight.All)
+                    if (light != null && light.handHeld && light.isActiveAndEnabled && (hand == null || light.radius > hand.radius)) hand = light;
                 bool traced = hand != null && hand.GetComponent<HDAdditionalLightData>().useRayTracedShadows && hand.GetComponent<Light>().shadows != LightShadows.None;
                 _report.AppendLine($"Lantern: lit {player.lanternActive}, hand light {(hand != null ? hand.name : "none")}, traced {traced}, {HplRayTracing.TracedLights} map lights traced, {ms:0.00} ms/frame, mean difference {Difference(without, with):0.0000}");
                 Check(player.lanternActive && traced && HplRayTracing.TracedHandLights >= 1, $"lantern shadows: the lit lantern's lights are traced ({HplRayTracing.TracedHandLights})");

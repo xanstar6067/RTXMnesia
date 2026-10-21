@@ -38,10 +38,10 @@ namespace RTXMnesia.Ui
             switch (control)
             {
                 case MenuControl.Lighting:
-                    // The enhanced lighting is still to come; ray tracing is a separate switch (ray tracing tab).
+                    // The lighting set; ray tracing is a separate switch (ray tracing tab).
                     items.Add(new HplComboItem("Классическое"));
-                    items.Add(new HplComboItem("Улучшенное (скоро)", false));
-                    current = 0;
+                    items.Add(new HplComboItem("Улучшенное"));
+                    current = s.lightingSet;
                     break;
                 case MenuControl.Textures:
                     items.Add(new HplComboItem("Классические"));
@@ -213,8 +213,8 @@ namespace RTXMnesia.Ui
             if (index < 0 || index >= items.Count || !items[index].enabled) return;
             switch (control)
             {
-                // Not stored: the lighting list has only the classic lighting for now (s.lighting is the ray tracing switch).
-                case MenuControl.Lighting: break;
+                // s.lighting is the ray tracing switch, the list is the lighting set.
+                case MenuControl.Lighting: s.lightingSet = index; break;
                 case MenuControl.Textures: s.textures = index; break;
                 case MenuControl.Resolution:
                 {
