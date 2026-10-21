@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.HighDefinition;
 
 namespace RTXMnesia.Hpl
 {
@@ -13,6 +15,7 @@ namespace RTXMnesia.Hpl
             public Texture albedo;
             public Vector2 scale, offset;
             public bool displaced;
+            public string normalResource, maskResource, specularResource;
         }
         [Serializable] public sealed class Entry
         {
@@ -61,7 +64,7 @@ namespace RTXMnesia.Hpl
         static bool s_initialized;
         static readonly Dictionary<Mesh, List<HplReliefSet.Entry>> s_entries = new();
         static readonly Dictionary<MeshFilter, State> s_states = new();
-        static readonly Dictionary<Material, Material> s_copies = new();
+        static readonly Dictionary<(Material, string), Material> s_copies = new();
         static readonly Dictionary<Material, Material> s_sources = new();
         static HplReliefLod s_driver;
         public static int ActiveMeshCount => s_states.Count;
@@ -133,12 +136,31 @@ namespace RTXMnesia.Hpl
                 if (!state.entry.slots[i].displaced) continue;
                 var source = SurfaceMaterial(materials[i]);
                 if (source == null || source.shader.name != "HDRP/Lit") continue;
-                if (!s_copies.TryGetValue(source, out var copy))
+                var slot = state.entry.slots[i];
+                var materialKey = (source, slot.normalResource + "|" + slot.maskResource + "|" + slot.specularResource);
+                if (!s_copies.TryGetValue(materialKey, out var copy))
                 {
                     copy = new Material(source) { name = source.name + " (mesh relief)", hideFlags = HideFlags.HideAndDontSave };
                     copy.SetFloat("_DisplacementMode", 0);
+                    void Map(string property, string resource)
+                    {
+                        if (string.IsNullOrEmpty(resource)) return;
+                        var texture = Resources.Load<Texture2D>(resource);
+                        if (texture == null) throw new InvalidOperationException("Missing relief texture: " + resource);
+                        copy.SetTexture(property, texture);
+                    }
+                    Map("_NormalMap", slot.normalResource);
+                    Map("_MaskMap", slot.maskResource);
+                    Map("_SpecularColorMap", slot.specularResource);
+                    if (!string.IsNullOrEmpty(slot.specularResource))
+                    {
+                        // Standard Lit ignores specular coverage. Preserve its dielectric F0 when enabling it.
+                        if (copy.GetFloat("_MaterialID") == (float)MaterialId.LitStandard)
+                            copy.SetColor("_SpecularColor", new Color(.04f, .04f, .04f, 1));
+                        copy.SetFloat("_MaterialID", (float)MaterialId.LitSpecular);
+                    }
                     UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(copy);
-                    s_copies[source] = copy;
+                    s_copies[materialKey] = copy;
                     s_sources[copy] = source;
                     HplEnhancedTextures.TrackDerivedMaterial(copy, HplEnhancedTextures.ClassicMaterial(source));
                 }

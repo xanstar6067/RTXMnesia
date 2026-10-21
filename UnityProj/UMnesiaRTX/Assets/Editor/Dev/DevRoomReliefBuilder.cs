@@ -23,6 +23,28 @@ namespace RTXMnesia.EditorDev
         public const int OilBottles = 24;
         const string Folder = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief";
 
+        // Upgrade saved stand materials without rebuilding geometry or changing the game atlas signatures.
+        public static void RefreshStandReflectanceBatch()
+        {
+            foreach (string stem in new[] { "castlebase_wall", "castlebase_floor", "cellarbase_wood_floor" })
+            {
+                var solid = AssetDatabase.LoadAssetAtPath<Material>(Folder + "/" + stem + "_solid.mat");
+                if (solid != null && solid.GetTexture("_SpecularColorMap") != null)
+                { EnableSpecularCoverage(solid); HDMaterial.ValidateMaterial(solid); EditorUtility.SetDirty(solid); }
+                var sides = AssetDatabase.LoadAssetAtPath<Material>(Folder + "/" + stem + "_sides.mat");
+                if (sides != null)
+                { EnableSpecularCoverage(sides); sides.SetColor("_SpecularColor", Color.black); HDMaterial.ValidateMaterial(sides); EditorUtility.SetDirty(sides); }
+            }
+            AssetDatabase.SaveAssets();
+        }
+
+        static void EnableSpecularCoverage(Material material)
+        {
+            if (material.GetFloat("_MaterialID") == (float)MaterialId.LitStandard)
+                material.SetColor("_SpecularColor", new Color(.04f, .04f, .04f, 1));
+            material.SetFloat("_MaterialID", (float)MaterialId.LitSpecular);
+        }
+
         public static void InstallAndCheckBatch()
         {
             InstallBatch();
@@ -138,6 +160,7 @@ namespace RTXMnesia.EditorDev
                         solidMaterial.SetTexture("_NormalMap", MicroNormal(prepared, result, stem, hi.x - lo.x));
                         solidMaterial.SetTexture("_MaskMap", CavityMask(prepared, result, stem, solid, lo, hi, out var cavitySpecular));
                         solidMaterial.SetTexture("_SpecularColorMap", cavitySpecular);
+                        EnableSpecularCoverage(solidMaterial);
                     }
                     solidMaterial.SetFloat("_NormalScale", 1);
                     HDMaterial.ValidateMaterial(solidMaterial);
@@ -145,6 +168,7 @@ namespace RTXMnesia.EditorDev
                     solidSides = new Material(material) { name = stem + " stone sides" };
                     solidSides.SetTexture("_NormalMap", null); solidSides.SetFloat("_NormalScale", 0);
                     solidSides.SetFloat("_SmoothnessRemapMin", 0); solidSides.SetFloat("_SmoothnessRemapMax", 0);
+                    EnableSpecularCoverage(solidSides);
                     solidSides.SetColor("_SpecularColor", Color.black);
                     solidSides.SetTexture("_SpecularColorMap", null);
                     HDMaterial.ValidateMaterial(solidSides);
@@ -391,7 +415,8 @@ namespace RTXMnesia.EditorDev
                 Check(material.GetTexture("_MaskMap") != enhanced.GetTexture("_MaskMap") && material.GetFloat("_SmoothnessRemapMax") == enhanced.GetFloat("_SmoothnessRemapMax"),
                     "private cavity mask; stone-face gloss remap unchanged: sample " + i);
                 Check(material.GetTexture("_SpecularColorMap") != null && material.IsKeywordEnabled("_SPECULARCOLORMAP")
-                    && material.GetColor("_SpecularColor") == enhanced.GetColor("_SpecularColor"),
+                    && material.IsKeywordEnabled("_MATERIAL_FEATURE_SPECULAR_COLOR")
+                    && material.GetColor("_SpecularColor") == new Color(.04f, .04f, .04f, 1),
                     "private specular coverage removes recess glints and preserves face F0: sample " + i);
                 Check(sample.GetComponent<Renderer>().sharedMaterials[1].GetFloat("_SmoothnessRemapMax") == 0,
                     "sample outer cut has no glossy highlight: sample " + i);

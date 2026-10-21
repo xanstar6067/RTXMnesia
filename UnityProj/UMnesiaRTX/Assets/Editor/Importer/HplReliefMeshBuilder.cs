@@ -44,6 +44,8 @@ namespace RTXMnesia.Importer
         public sealed class Surface
         {
             public HeightField height;
+            public Func<Vector2, float> heightMetres;
+            public bool geometryNormals, boards;
             public Vector2 uvScale = Vector2.one, uvOffset;
             public float amplitude = 0.04f, reference = 0.7f;
         }
@@ -112,6 +114,12 @@ namespace RTXMnesia.Importer
                 var surface = surfaces[sub];
                 if (surface != null)
                 {
+                    if (surface.boards)
+                    {
+                        BuildBoards(ref local, ref triangles, surface, scale, triangleBudget - totalTriangles);
+                    }
+                    else
+                    {
                     var borders = Borders(local, triangles, scale);
                     for (int iteration = 0; iteration < 20; iteration++)
                     {
@@ -161,12 +169,27 @@ namespace RTXMnesia.Importer
                             distance = Mathf.Min(distance, (point - border.a - edge * along).magnitude);
                         }
                         float fade = Mathf.SmoothStep(0, 1, distance / 0.025f);
-                        float height = (surface.height.Sample(Vector2.Scale((Vector2)vertex.uv0, surface.uvScale) + surface.uvOffset) - surface.reference) * surface.amplitude * fade;
+                        var textureUv = Vector2.Scale((Vector2)vertex.uv0, surface.uvScale) + surface.uvOffset;
+                        float height = (surface.heightMetres != null ? surface.heightMetres(textureUv) :
+                            (surface.height.Sample(textureUv) - surface.reference) * surface.amplitude) * fade;
                         var direction = new Vector3(vertex.n.x / scale.x, vertex.n.y / scale.y, vertex.n.z / scale.z).normalized;
                         vertex.p += new Vector3(direction.x / scale.x, direction.y / scale.y, direction.z / scale.z) * height;
                         // Keep the original tangent frame. The enhanced normal map already contains the large
                         // height slopes; recalculating this frame would apply those slopes a second time.
                         local[i] = vertex;
+                    }
+                    if (surface.geometryNormals)
+                    {
+                        var accumulated = new Vector3[local.Count];
+                        for (int t = 0; t < triangles.Count; t += 3)
+                        {
+                            int a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
+                            var normal = Vector3.Cross(local[b].p - local[a].p, local[c].p - local[a].p);
+                            accumulated[a] += normal; accumulated[b] += normal; accumulated[c] += normal;
+                        }
+                        for (int i = 0; i < local.Count; i++)
+                        { var vertex = local[i]; if (accumulated[i].sqrMagnitude > 1e-16f) vertex.n = accumulated[i].normalized; local[i] = vertex; }
+                    }
                     }
                 }
                 int offset = vertices.Count;
@@ -189,7 +212,84 @@ namespace RTXMnesia.Importer
             mesh.subMeshCount = surfaces.Length;
             for (int i = 0; i < indices.Length; i++) mesh.SetTriangles(indices[i], i, false);
             mesh.RecalculateBounds();
+            if (Array.Exists(surfaces, s => s != null && (s.geometryNormals || s.boards))) mesh.RecalculateTangents();
             return mesh;
+        }
+
+        static void BuildBoards(ref List<Vertex> local, ref List<int> triangles, Surface surface, Vector3 scale, int budget)
+        {
+            float[] rows = { 0, .130f, .255f, .382f, .505f, .632f, .757f, .882f, 1 };
+            float[] ends = { .151f, .976f, .475f, .980f, .305f, .882f, .624f, .125f };
+            const float gap = .002f / 2.2f, bottom = -.006f;
+            var output = new List<Vertex>(); var indices = new List<int>();
+            Vector2 Uv(Vertex v) => Vector2.Scale((Vector2)v.uv0, surface.uvScale) + surface.uvOffset;
+            Vertex Blend(Vertex a, Vertex b, float t) => new Vertex {
+                p = Vector3.LerpUnclamped(a.p, b.p, t), n = Vector3.LerpUnclamped(a.n, b.n, t).normalized,
+                tangent = Vector4.LerpUnclamped(a.tangent, b.tangent, t), color = Color.LerpUnclamped(a.color, b.color, t),
+                uv0 = Vector4.LerpUnclamped(a.uv0, b.uv0, t), uv1 = Vector4.LerpUnclamped(a.uv1, b.uv1, t),
+                uv2 = Vector4.LerpUnclamped(a.uv2, b.uv2, t), uv3 = Vector4.LerpUnclamped(a.uv3, b.uv3, t) };
+            Vertex Lift(Vertex v, float height)
+            {
+                var direction = new Vector3(v.n.x / scale.x, v.n.y / scale.y, v.n.z / scale.z).normalized;
+                v.p += new Vector3(direction.x / scale.x, direction.y / scale.y, direction.z / scale.z) * height;
+                return v;
+            }
+            List<Vertex> Clip(List<Vertex> polygon, int axis, float boundary, bool greater)
+            {
+                var result = new List<Vertex>();
+                if (polygon.Count == 0) return result;
+                var previous = polygon[^1]; float before = Uv(previous)[axis] - boundary;
+                bool insideBefore = greater ? before >= 0 : before <= 0;
+                foreach (var current in polygon)
+                {
+                    float after = Uv(current)[axis] - boundary; bool insideAfter = greater ? after >= 0 : after <= 0;
+                    if (insideAfter != insideBefore) result.Add(Blend(previous, current, before / (before - after)));
+                    if (insideAfter) result.Add(current);
+                    previous = current; before = after; insideBefore = insideAfter;
+                }
+                return result;
+            }
+            void Face(List<Vertex> polygon, float h)
+            {
+                int first = output.Count;
+                foreach (var vertex in polygon) output.Add(Lift(vertex, h));
+                for (int j = 1; j < polygon.Count - 1; j++) indices.AddRange(new[] { first, first + j, first + j + 1 });
+            }
+            for (int t = 0; t < triangles.Count; t += 3)
+            {
+                var original = new List<Vertex> { local[triangles[t]], local[triangles[t + 1]], local[triangles[t + 2]] };
+                Face(original, bottom);
+                var a = Uv(original[0]); var b = Uv(original[1]); var c = Uv(original[2]);
+                int minX = Mathf.FloorToInt(Mathf.Min(a.x, Mathf.Min(b.x, c.x))), maxX = Mathf.FloorToInt(Mathf.Max(a.x, Mathf.Max(b.x, c.x)) - .000001f);
+                int minY = Mathf.FloorToInt(Mathf.Min(a.y, Mathf.Min(b.y, c.y))), maxY = Mathf.FloorToInt(Mathf.Max(a.y, Mathf.Max(b.y, c.y)) - .000001f);
+                if ((long)(maxX - minX + 1) * (maxY - minY + 1) > 1024) throw new InvalidOperationException("Board UV span exceeds safe budget.");
+                for (int ty = minY; ty <= maxY; ty++) for (int tx = minX; tx <= maxX; tx++)
+                for (int row = 0; row < 8; row++) for (int piece = 0; piece < 2; piece++)
+                {
+                    float x0 = tx + (piece == 0 ? 0 : ends[row] + gap), x1 = tx + (piece == 0 ? ends[row] - gap : 1);
+                    float y0 = ty + 1 - rows[row + 1] + gap, y1 = ty + 1 - rows[row] - gap;
+                    var polygon = Clip(Clip(Clip(Clip(original, 0, x0, true), 0, x1, false), 1, y0, true), 1, y1, false);
+                    if (polygon.Count < 3) continue;
+                    float height = .009f + Mathf.Sin(row * 3.7f + piece) * .0015f;
+                    Face(polygon, height);
+                    for (int j = 0; j < polygon.Count; j++)
+                    {
+                        var v = polygon[j]; var w = polygon[(j + 1) % polygon.Count]; var uv = Uv(v); var uw = Uv(w);
+                        bool On(int axis, float line) => Mathf.Abs(uv[axis] - line) < .00001f && Mathf.Abs(uw[axis] - line) < .00001f;
+                        // Source triangle edges inside a plank must not create internal side walls.
+                        if (!(On(0, x0) && x0 > tx || On(0, x1) && x1 < tx + 1 || On(1, y0) || On(1, y1))) continue;
+                        int first = output.Count;
+                        var side = new[] { Lift(v, height), Lift(v, bottom), Lift(w, bottom), Lift(w, height) };
+                        var normal = Vector3.Cross(side[1].p - side[0].p, side[2].p - side[0].p).normalized;
+                        for (int k = 0; k < side.Length; k++) { var vertex = side[k]; vertex.n = normal;
+                            if (k == 1 || k == 2) vertex.uv0 += new Vector4(.00002f, .00002f, 0, 0);
+                            output.Add(vertex); }
+                        indices.AddRange(new[] { first, first + 1, first + 2, first, first + 2, first + 3 });
+                    }
+                    if (indices.Count / 3 > budget) throw new InvalidOperationException("Relief triangle budget: boards");
+                }
+            }
+            local = output; triangles = indices;
         }
 
         static List<Border> Borders(List<Vertex> vertices, List<int> triangles, Vector3 scale)

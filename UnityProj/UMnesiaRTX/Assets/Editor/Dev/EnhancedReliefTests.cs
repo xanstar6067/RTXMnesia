@@ -66,6 +66,10 @@ namespace RTXMnesia.EditorDev
                     Check(detail != null && coarse != null && detail != entry.original && coarse != entry.original &&
                         detail.subMeshCount == entry.original.subMeshCount && coarse.subMeshCount == entry.original.subMeshCount,
                         "separate valid LOD meshes: " + entry.original.name);
+                    foreach (var slot in entry.slots.Where(s => !string.IsNullOrEmpty(s.normalResource)))
+                        Check(Resources.Load<Texture2D>(slot.normalResource) != null && Resources.Load<Texture2D>(slot.maskResource) != null &&
+                            Resources.Load<Texture2D>(slot.specularResource) != null, "approved surface maps available lazily");
+                    Resources.UnloadAsset(detail); Resources.UnloadAsset(coarse);
                 }
                 foreach (string map in new[] { "00_rainy_hall", "01_old_archives", "05_wine_cellar", "10_daniels_room" })
                 {
@@ -89,7 +93,12 @@ namespace RTXMnesia.EditorDev
                             var renderer = pair.Key.GetComponent<Renderer>();
                             var current = renderer.sharedMaterials;
                             var entry = HplEnhancedRelief.Find(renderer, pair.Value, current);
-                            return entry != null && current.Where((m, i) => entry.slots[i].displaced).All(m => m != null && !m.IsKeywordEnabled("_PIXEL_DISPLACEMENT"));
+                            return entry != null && current.Where((m, i) => entry.slots[i].displaced).All(m => m != null && !m.IsKeywordEnabled("_PIXEL_DISPLACEMENT")) &&
+                                current.Select((m, i) => (m, slot: entry.slots[i])).Where(p => !string.IsNullOrEmpty(p.slot.normalResource)).All(p =>
+                                    p.m.GetTexture("_NormalMap") == Resources.Load<Texture2D>(p.slot.normalResource) &&
+                                    p.m.GetTexture("_MaskMap") == Resources.Load<Texture2D>(p.slot.maskResource) &&
+                                    p.m.GetTexture("_SpecularColorMap") == Resources.Load<Texture2D>(p.slot.specularResource) &&
+                                    p.m.IsKeywordEnabled("_MATERIAL_FEATURE_SPECULAR_COLOR"));
                         }), map + ": no POM on displaced material slots");
                         Check(colliders.All(p => p.Key.sharedMesh == p.Value), map + ": collider meshes untouched");
                         var applied = meshes.Keys.ToDictionary(f => f, f => f.sharedMesh);
@@ -160,6 +169,16 @@ namespace RTXMnesia.EditorDev
                     return (a.x == 0 && b.x == 0) || (a.x == 1 && b.x == 1) || (a.y == 0 && b.y == 0) || (a.y == 1 && b.y == 1);
                 }) && counts.All(e => e.Value <= 2), "conforming subdivision has no internal T junctions or nonmanifold edges");
                 Check(original.vertexCount == 4 && original.vertices.All(v => v.z == 0), "builder never modifies original mesh");
+                var boards = HplReliefMeshBuilder.Build(original, new[] { new HplReliefMeshBuilder.Surface { boards = true,
+                    uvScale = new Vector2(-2, 1.5f), uvOffset = new Vector2(-.3f, .2f) } }, new Vector3(2, 1, 3), .02f);
+                try
+                {
+                    Check(boards.vertexCount > 100 && boards.vertexCount < 20000, "UV-clipped planks support mirrored, offset and repeated UVs without dense tessellation");
+                    Check(boards.normals.Any(n => Mathf.Abs(n.z) < .1f) && boards.normals.Any(n => n.z > .99f), "planks have real hard vertical sides and flat faces");
+                    Check(boards.vertices.All(v => float.IsFinite(v.x) && float.IsFinite(v.y) && v.z * 3 > -.0061f && v.z * 3 < .0106f), "plank thickness stays in metres under nonuniform scale");
+                    Check(boards.tangents.All(t => float.IsFinite(t.x) && float.IsFinite(t.y) && float.IsFinite(t.z)), "plank face and side tangent frames remain finite");
+                }
+                finally { Object.DestroyImmediate(boards); }
             }
             finally { Object.DestroyImmediate(result); Object.DestroyImmediate(original); Object.DestroyImmediate(height); }
         }
@@ -173,7 +192,8 @@ namespace RTXMnesia.EditorDev
             try
             {
                 var catalog = AssetDatabase.LoadAssetAtPath<HplReliefSet>(EnhancedReliefConverter.CatalogPath);
-                foreach (string name in new[] { "castlebase_wall", "castlebase_floor", "cellarbase_wood_floor" })
+                // The castle atlas is shared by pillars: test its actual wall module in the level below.
+                foreach (string name in new[] { "castlebase_floor", "cellarbase_wood_floor" })
                 {
                     var entry = catalog.entries.Where(e => e.original.subMeshCount == 1 && e.slots[0].albedo != null && e.slots[0].albedo.name == name + "__albedo")
                         .OrderBy(e => Mathf.Abs(Vector3.Scale(e.original.bounds.size, e.objectScale).magnitude - 4)).First();
@@ -202,7 +222,7 @@ namespace RTXMnesia.EditorDev
                     hd.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color; hd.backgroundColorHDR = new Color(0.015f, 0.015f, 0.015f);
                     var volume = new GameObject("Exposure").AddComponent<Volume>(); volume.isGlobal = true; volume.priority = 10000;
                     var profile = ScriptableObject.CreateInstance<VolumeProfile>(); volume.sharedProfile = profile;
-                    var exposure = profile.Add<Exposure>(true); exposure.mode.Override(ExposureMode.Fixed); exposure.fixedExposure.Override(3);
+                    var exposure = profile.Add<Exposure>(true); exposure.mode.Override(ExposureMode.Fixed); exposure.fixedExposure.Override(1);
                     profile.Add<VisualEnvironment>(true).skyType.Override(0);
                     profile.Add<Tonemapping>(true).mode.Override(TonemappingMode.ACES);
                     var light = new GameObject("Raking point light").AddComponent<Light>(); light.type = LightType.Point;
@@ -210,7 +230,7 @@ namespace RTXMnesia.EditorDev
                     light.gameObject.AddComponent<HDAdditionalLightData>(); light.lightUnit = LightUnit.Candela; light.intensity = 60;
                     var fill = new GameObject("Soft frontal fill").AddComponent<Light>(); fill.type = LightType.Directional;
                     fill.transform.rotation = Quaternion.LookRotation(Vector3.forward);
-                    fill.gameObject.AddComponent<HDAdditionalLightData>(); fill.lightUnit = LightUnit.Lux; fill.intensity = 8;
+                    fill.gameObject.AddComponent<HDAdditionalLightData>(); fill.lightUnit = LightUnit.Lux; fill.intensity = 40;
                     HplEnhancedTextures.Apply(renderer, true);
                     var detailed = filter.sharedMesh;
                     Check(detailed != entry.original, name + ": render uses real relief");
@@ -227,7 +247,8 @@ namespace RTXMnesia.EditorDev
                     HplEnhancedTextures.Shutdown();
                     volume.sharedProfile = null; Object.DestroyImmediate(profile);
                 }
-                File.WriteAllText(Path.Combine(Folder, "Render.txt"), "GPU PASS: wall, stone floor, wood floor; flat/relief pairs\n");
+                ApprovedLevelReliefTests.RunBatch();
+                File.WriteAllText(Path.Combine(Folder, "Render.txt"), "GPU PASS: actual Old Archives wall module and level, stone floor, wood floor; flat/relief pairs\n");
                 Debug.Log("[EnhancedReliefCheck] GPU PASS");
             }
             finally

@@ -46,6 +46,7 @@ namespace RTXMnesia.Importer
             public HplReliefMeshBuilder.HeightField height;
             public float amplitude;
             public string hash;
+            public ApprovedReliefProfiles.Data approved;
         }
         public static string Hash(byte[] bytes)
         {
@@ -69,16 +70,19 @@ namespace RTXMnesia.Importer
         [MenuItem("Tools/RTXMnesia/Import/Enhanced relief: first wall floor boards samples")]
         public static void ConvertSamplesBatch() => Start(true);
 
-        static void Start(bool samplesOnly)
+        [MenuItem("Tools/RTXMnesia/Import/Enhanced relief: approved game walls and boards")]
+        public static void ConvertApprovedBatch() => Start(false, true);
+
+        static void Start(bool samplesOnly, bool approvedOnly = false)
         {
             if (Application.isBatchMode)
             {
-                using var work = Generate(samplesOnly);
+                using var work = Generate(samplesOnly, approvedOnly);
                 while (work.MoveNext()) { }
                 return;
             }
             if (s_work != null) throw new InvalidOperationException("Relief generation is already running.");
-            s_work = Generate(samplesOnly);
+            s_work = Generate(samplesOnly, approvedOnly);
             s_progress = 0; s_description = "Preparing height maps";
             s_progressId = Progress.Start("RTXMnesia: рельеф улучшенных поверхностей", s_description);
             Progress.RegisterCancelCallback(s_progressId, () => { Cancel(); return true; });
@@ -111,7 +115,7 @@ namespace RTXMnesia.Importer
             finally { if (s_progressId >= 0) Progress.Finish(s_progressId, status); s_progressId = -1; }
         }
 
-        static IEnumerator<object> Generate(bool samplesOnly)
+        static IEnumerator<object> Generate(bool samplesOnly, bool approvedOnly)
         {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Generate relief outside Play mode.");
             for (int i = 0; i < SceneManager.sceneCount; i++)
@@ -120,7 +124,7 @@ namespace RTXMnesia.Importer
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Root));
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(CacheRoot));
             AssetDatabase.Refresh();
-            var profiles = LoadProfiles();
+            var profiles = LoadProfiles(approvedOnly);
             var entries = new Dictionary<string, HplReliefSet.Entry>();
             var sampleTextures = new HashSet<Texture>();
             var report = new List<string>();
@@ -178,6 +182,15 @@ namespace RTXMnesia.Importer
                                 material.GetFloat("_SurfaceType") != 0 || material.GetFloat("_AlphaCutoffEnable") != 0 || material.GetFloat("_UVBase") != 0) continue;
                             surfaces[i] = new HplReliefMeshBuilder.Surface { height = profile.height, amplitude = profile.amplitude,
                                 uvScale = slots[i].scale, uvOffset = slots[i].offset };
+                            if (profile.approved != null)
+                            {
+                                surfaces[i].heightMetres = profile.approved.height;
+                                surfaces[i].boards = profile.approved.boards;
+                                surfaces[i].geometryNormals = !profile.approved.boards;
+                                slots[i].normalResource = profile.approved.normal;
+                                slots[i].maskResource = profile.approved.mask;
+                                slots[i].specularResource = profile.approved.specular;
+                            }
                             signature.Append("|" + profile.hash + ":" + F(profile.amplitude));
                             slots[i].displaced = true;
                             any = true;
@@ -203,7 +216,7 @@ namespace RTXMnesia.Importer
                                 if (!File.Exists(stampPath) || File.ReadAllText(stampPath) != stamp ||
                                     AssetDatabase.LoadAssetAtPath<Mesh>(detailPath) == null || AssetDatabase.LoadAssetAtPath<Mesh>(coarsePath) == null)
                                 {
-                                    Mesh detailed = BuildWithinBudget(mesh, surfaces, scale, 0.03f, 120000);
+                                    Mesh detailed = BuildWithinBudget(mesh, surfaces, scale, surfaces.Any(s => s?.heightMetres != null || s?.boards == true) ? .01f : 0.03f, 120000);
                                     Mesh coarse = BuildWithinBudget(mesh, surfaces, scale, 0.09f, 24000);
                                     Save(detailed, detailPath); Save(coarse, coarsePath);
                                     File.WriteAllText(stampPath, stamp);
@@ -288,7 +301,7 @@ namespace RTXMnesia.Importer
             for (int i = 0; ; i++)
             {
                 try { return HplReliefMeshBuilder.Build(mesh, surfaces, scale, spacing, budget); }
-                catch (InvalidOperationException e) when (e.Message.StartsWith("Relief triangle budget:", StringComparison.Ordinal) && i < 4) { spacing *= 1.5f; }
+                catch (InvalidOperationException e) when (e.Message.StartsWith("Relief triangle budget:", StringComparison.Ordinal) && i < 8) { spacing *= 1.5f; }
             }
         }
         static void Save(Mesh mesh, string path)
@@ -302,10 +315,22 @@ namespace RTXMnesia.Importer
                 previous = AssetDatabase.LoadAssetAtPath<Mesh>(path);
             }
             if (previous == null) AssetDatabase.CreateAsset(mesh, path);
-            else { EditorUtility.CopySerialized(mesh, previous); EditorUtility.SetDirty(previous); Object.DestroyImmediate(mesh); }
+            else
+            {
+                // Mesh setters invalidate the live GPU buffers as well as the serialized data.
+                previous.Clear(); previous.name = mesh.name; previous.indexFormat = mesh.indexFormat;
+                previous.vertices = mesh.vertices; previous.normals = mesh.normals; previous.tangents = mesh.tangents;
+                previous.colors = mesh.colors;
+                var uv = new List<Vector4>();
+                for (int channel = 0; channel < 8; channel++) { mesh.GetUVs(channel, uv); previous.SetUVs(channel, uv); }
+                previous.subMeshCount = mesh.subMeshCount;
+                for (int sub = 0; sub < mesh.subMeshCount; sub++) previous.SetIndices(mesh.GetIndices(sub), mesh.GetTopology(sub), sub);
+                previous.bounds = mesh.bounds;
+                EditorUtility.SetDirty(previous); Object.DestroyImmediate(mesh);
+            }
         }
 
-        static Dictionary<Texture, Profile> LoadProfiles()
+        static Dictionary<Texture, Profile> LoadProfiles(bool approvedOnly)
         {
             var result = new Dictionary<Texture, Profile>();
             var catalog = AssetDatabase.LoadAssetAtPath<HplTextureSet>(EnhancedMaterialConverter.CatalogPath);
@@ -316,8 +341,18 @@ namespace RTXMnesia.Importer
                 .Select(p => (path: p, data: JsonUtility.FromJson<EnhancedMaterialConverter.BatchResult>(File.ReadAllText(p)))).ToArray();
             foreach (var pair in Profiles)
             {
+                if (approvedOnly && pair.Key != ApprovedReliefProfiles.Wall && pair.Key != ApprovedReliefProfiles.Boards) continue;
                 var material = AssetDatabase.LoadAssetAtPath<Material>(AmnesiaPaths.MaterialsRoot + "/" + pair.Key);
                 if (material == null || !catalog.entries.Any(e => e.classic == material)) continue;
+                bool approved = pair.Key == ApprovedReliefProfiles.Wall || pair.Key == ApprovedReliefProfiles.Boards;
+                string stand = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief/" + Path.GetFileNameWithoutExtension(pair.Key) + "_solid.asset";
+                if (approved && (approvedOnly || File.Exists(AmnesiaPaths.ToAbsolute(stand))))
+                {
+                    var approvedProfile = ApprovedReliefProfiles.Prepare(pair.Key);
+                    var albedo = material.GetTexture("_BaseColorMap");
+                    result[albedo] = new Profile { albedo = albedo, approved = approvedProfile, hash = approvedProfile.signature, amplitude = pair.Value };
+                    continue;
+                }
                 var source = completed.FirstOrDefault(r => r.data.materials.Contains(pair.Key));
                 if (source.data?.files?.height == null) continue;
                 string file = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source.path), source.data.files.height.file));
@@ -334,7 +369,7 @@ namespace RTXMnesia.Importer
                 }
                 finally { Object.DestroyImmediate(texture); }
             }
-            if (result.Count < 3) throw new InvalidOperationException("Missing wall/floor/wood height sources.");
+            if (result.Count < (approvedOnly ? 2 : 3)) throw new InvalidOperationException("Missing wall/floor/wood height sources.");
             return result;
         }
     }
