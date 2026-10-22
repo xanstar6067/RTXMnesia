@@ -38,6 +38,14 @@ namespace RTXMnesia.World
         /// <summary>How deep under the wick the glow light sits (inside the wax).</summary>
         public const float WaxGlowDepth = 0.015f;
         /// <summary>
+        /// Resources folder of the generated wax materials (Assets/AmnesiaImported/Resources, made by the editor:
+        /// EnsureCandleWaxProfile). HDRP/Lit compiles transmission as shader_feature: a player has the variant only when
+        /// a material in the build uses it, so a wax material made at runtime drew without its glow in a build.
+        /// </summary>
+        public const string WaxMaterialFolder = "HplCandleWax/";
+        /// <summary>The generated wax material of a lamp's classic material (enhanced: made from its enhanced texture set).</summary>
+        public static string WaxMaterialName(Material classic, bool enhanced) => classic.name + (enhanced ? " enhanced" : "");
+        /// <summary>
         /// One candle flame, cd: the classic candlestick at its map color (Candela(1.7) × 0.85 → 15), so a room lit by
         /// candles keeps its brightness near them; the other fires are counted in candles from it.
         /// </summary>
@@ -100,7 +108,9 @@ namespace RTXMnesia.World
         static readonly List<Changed> s_changed = new();
         static readonly List<(Renderer renderer, ShadowCastingMode mode)> s_casters = new();
         static GameObject s_addedRoot;
-        static readonly List<(MeshFilter filter, Mesh original, Mesh split, GameObject wax, Mesh waxMesh, Material waxMaterial)> s_wax = new();
+        static readonly List<(MeshFilter filter, Mesh original, Mesh split, GameObject wax, Mesh waxMesh, Material ownMaterial)> s_wax = new();
+        static readonly HashSet<Renderer> s_waxRenderers = new();
+        static readonly HashSet<string> s_missingWax = new();
         static readonly List<(Light flame, Light glow, float share)> s_glows = new();
         static bool s_glowsHooked;
         static DiffusionProfileSettings s_waxProfile;
@@ -148,6 +158,8 @@ namespace RTXMnesia.World
         public static int AddedLights => s_addedRoot != null ? s_addedRoot.transform.childCount : 0;
         /// <summary>Candle meshes whose wax was given the translucent material (checks).</summary>
         public static int WaxCandles => s_wax.Count;
+        /// <summary>Wax drawn with a material made at runtime, without a generated one (no glow in a build; checks).</summary>
+        public static int WaxWithoutGenerated => s_wax.FindAll(w => w.ownMaterial != null).Count;
 
         /// <summary>The map is built (HplMap.Build, Play only): its overlay is read and applied if the enhanced lighting is chosen.</summary>
         public static void Attach(HplMap map)
@@ -273,7 +285,7 @@ namespace RTXMnesia.World
                     if (f.radius <= 0.02f) wicks.Add(f.position);
                 if (wicks.Count > 0 && lights.Count > 0 && lights[0].TryGetComponent(out Light flame))
                     foreach (var r in entity.GetComponentsInChildren<MeshRenderer>(true))
-                        SplitWax(r, wicks, flame, WaxGlowShare * lights.Count / flames.Count);
+                        SplitWax(r, wicks, flame, WaxGlowShare * lights.Count / flames.Count, ClassicMaterial(r));
                 foreach (var light in lights)
                 {
                     var record = Record(light);
@@ -304,13 +316,13 @@ namespace RTXMnesia.World
         /// the wax rendering layer (HplLighting.WaxRenderingLayer), lit from inside by a light without shadows that follows
         /// the lamp's light (<paramref name="share"/> of its intensity per wick).
         /// </summary>
-        static void SplitWax(MeshRenderer renderer, List<Vector3> wicks, Light flame, float share)
+        static void SplitWax(MeshRenderer renderer, List<Vector3> wicks, Light flame, float share, Material classic)
         {
             var filter = renderer.GetComponent<MeshFilter>();
             var mesh = filter != null ? filter.sharedMesh : null;
             var material = renderer.sharedMaterial;
             if (mesh == null || !mesh.isReadable || mesh.subMeshCount != 1 || renderer.sharedMaterials.Length != 1 ||
-                material == null || material.shader.name != "HDRP/Lit" || WaxProfile == null || WaxProfileHash == 0) return;
+                material == null || classic == null || material.shader.name != "HDRP/Lit" || WaxProfile == null || WaxProfileHash == 0) return;
             var vertices = mesh.vertices;
             var world = new Vector3[vertices.Length];
             for (int i = 0; i < vertices.Length; i++) world[i] = renderer.transform.TransformPoint(vertices[i]);
@@ -336,22 +348,19 @@ namespace RTXMnesia.World
             waxMesh.name = mesh.name + " (wax)";
             waxMesh.hideFlags = HideFlags.DontSave;
             waxMesh.SetTriangles(waxTriangles, 0);
-            var waxMaterial = new Material(material) { name = material.name + " (wax)", hideFlags = HideFlags.DontSave };
-            waxMaterial.SetFloat("_MaterialID", (float)MaterialId.LitTranslucent);
-            waxMaterial.SetFloat("_TransmissionEnable", 1f);
-            waxMaterial.SetFloat("_Thickness", WaxThickness);
-            waxMaterial.SetTexture("_ThicknessMap", null);
-            // The glow is the light let through: no emission. The copy is of the asset material, whose HPL2 illumination
-            // HplEmission switches off only on the lamp's own renderer, and ValidateMaterial rebuilds _EmissiveColor
-            // from _EmissiveColorLDR × _EmissiveIntensity — an unlit chandelier's wax glowed at full.
-            waxMaterial.SetTexture("_EmissiveColorMap", null);
-            waxMaterial.SetColor("_EmissiveColorLDR", Color.black);
-            waxMaterial.SetColor("_EmissiveColor", Color.black);
-            // The shader finds the profile by its hash. HDMaterial.SetDiffusionProfile also records the asset in the
-            // material's external references, which fails on a runtime copy in the editor.
-            waxMaterial.SetFloat("_DiffusionProfileHash", System.BitConverter.Int32BitsToSingle((int)WaxProfileHash));
-            HDMaterial.ValidateMaterial(waxMaterial);
-            waxMaterial.SetColor("_EmissiveColor", Color.black);
+            // The generated material of the current texture set (an enhanced one may be missing: the classic wax then).
+            bool enhanced = HplGraphics.Textures == 1;
+            var waxMaterial = Resources.Load<Material>(WaxMaterialFolder + WaxMaterialName(classic, enhanced));
+            if (waxMaterial == null && enhanced) waxMaterial = Resources.Load<Material>(WaxMaterialFolder + WaxMaterialName(classic, false));
+            Material ownMaterial = null;
+            if (waxMaterial == null)
+            {
+                // Only the editor has every shader variant: a build would draw this copy without transmission.
+                if (!Application.isEditor && s_missingWax.Add(classic.name))
+                    HplLog.PortError("Enhanced lighting: no generated wax material Resources/" + WaxMaterialFolder + classic.name);
+                waxMaterial = ownMaterial = MakeWaxMaterial(material);
+                ownMaterial.hideFlags = HideFlags.DontSave;
+            }
             var go = new GameObject("Wax") { hideFlags = HideFlags.DontSave };
             go.transform.SetParent(renderer.transform, false);
             go.AddComponent<MeshFilter>().sharedMesh = waxMesh;
@@ -373,7 +382,8 @@ namespace RTXMnesia.World
                 HplLighting.SetLightLayers(light, HplLighting.WaxLayerMask);
                 s_glows.Add((flame, light, share));
             }
-            s_wax.Add((filter, mesh, split, go, waxMesh, waxMaterial));
+            s_wax.Add((filter, mesh, split, go, waxMesh, ownMaterial));
+            s_waxRenderers.Add(waxRenderer);
             filter.sharedMesh = split;
             if (!s_glowsHooked)
             {
@@ -382,6 +392,38 @@ namespace RTXMnesia.World
             }
             SyncGlows(default, null);
         }
+
+        /// <summary>
+        /// The wax material of a lamp's material: translucent (thin object, the wax profile), without HPL2's illumination.
+        /// The source's emission is that of the asset, which HplEmission switches off only on the lamp's own renderer,
+        /// and ValidateMaterial rebuilds _EmissiveColor from _EmissiveColorLDR × _EmissiveIntensity (an unlit
+        /// chandelier's wax glowed at full). The shader finds the profile by its hash: HDMaterial.SetDiffusionProfile also
+        /// records the asset in the material's external references, which fails on a runtime copy in the editor.
+        /// </summary>
+        public static Material MakeWaxMaterial(Material source)
+        {
+            var wax = new Material(source) { name = source.name + " (wax)" };
+            wax.SetFloat("_MaterialID", (float)MaterialId.LitTranslucent);
+            wax.SetFloat("_TransmissionEnable", 1f);
+            wax.SetFloat("_Thickness", WaxThickness);
+            wax.SetTexture("_ThicknessMap", null);
+            wax.SetTexture("_EmissiveColorMap", null);
+            wax.SetColor("_EmissiveColorLDR", Color.black);
+            wax.SetColor("_EmissiveColor", Color.black);
+            wax.SetFloat("_DiffusionProfileHash", System.BitConverter.Int32BitsToSingle((int)WaxProfileHash));
+            HDMaterial.ValidateMaterial(wax);
+            wax.SetColor("_EmissiveColor", Color.black);
+            return wax;
+        }
+
+        /// <summary>The classic material of a lamp's renderer (behind HplEmission's copies and the enhanced texture set).</summary>
+        static Material ClassicMaterial(Renderer renderer) =>
+            renderer.TryGetComponent(out HplEmission emission) && emission.ClassicSource(0) != null
+                ? emission.ClassicSource(0)
+                : HplEnhancedTextures.ClassicMaterial(renderer.sharedMaterial);
+
+        /// <summary>A renderer of candle wax: the texture sets leave it alone (its material is the wax one of the set).</summary>
+        public static bool IsWax(Renderer renderer) => s_waxRenderers.Contains(renderer);
 
         /// <summary>The wax glows with its flame: lit, dimmed, flickering or out (before each frame).</summary>
         static void SyncGlows(ScriptableRenderContext context, List<Camera> cameras)
@@ -648,7 +690,7 @@ namespace RTXMnesia.World
                 light.Apply(light.CurrentColor, light.CurrentRadius);
             }
             s_changed.Clear();
-            foreach (var (filter, original, split, wax, waxMesh, waxMaterial) in s_wax)
+            foreach (var (filter, original, split, wax, waxMesh, ownMaterial) in s_wax)
             {
                 if (filter != null) filter.sharedMesh = original;
                 // Destroy waits for the end of the frame; inactive and out of the lamp, the wax and its glow are gone
@@ -661,9 +703,10 @@ namespace RTXMnesia.World
                 }
                 UnityEngine.Object.Destroy(split);
                 UnityEngine.Object.Destroy(waxMesh);
-                UnityEngine.Object.Destroy(waxMaterial);
+                if (ownMaterial != null) UnityEngine.Object.Destroy(ownMaterial);
             }
             s_wax.Clear();
+            s_waxRenderers.Clear();
             s_glows.Clear();
             foreach (var (r, mode) in s_casters)
                 if (r != null) r.shadowCastingMode = mode;

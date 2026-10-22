@@ -132,7 +132,7 @@ namespace RTXMnesia.Hpl
         /// <summary>Also available to systems that instantiate renderers after sceneLoaded.</summary>
         public static void Apply(Renderer renderer, bool enhanced)
         {
-            if (renderer == null) return;
+            if (renderer == null || HplEnhancedLighting.IsWax(renderer)) return;
             if (renderer.TryGetComponent<HplEmission>(out var emission))
             {
                 emission.ApplyTextureSet(enhanced);

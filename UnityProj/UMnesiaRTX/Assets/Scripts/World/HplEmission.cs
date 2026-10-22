@@ -17,6 +17,8 @@ namespace RTXMnesia.World
         Renderer _renderer;
         Material[] _sources;
         public float Amount { get; private set; } = 1f;
+        /// <summary>The renderer's classic material in a slot (its slots hold this component's emission copies).</summary>
+        public Material ClassicSource(int slot) => _sources != null && slot < _sources.Length ? _sources[slot] : null;
 
         public void Initialize(Renderer renderer)
         {
