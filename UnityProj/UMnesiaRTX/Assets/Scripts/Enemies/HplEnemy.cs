@@ -598,7 +598,7 @@ namespace RTXMnesia.Enemies
         /// <summary>iLuxEnemy::OnUpdate: helpers, senses, state machine, type update, body speeds, animation, sounds...</summary>
         protected override void OnUpdate(float timeStep)
         {
-            if (Disabled) return;
+            if (Disabled || Dev.HplDebugSession.EnemiesPaused) return;
             // Quick updates (saving, ...) are skipped.
             if (timeStep < Time.fixedDeltaTime * 0.8f) return;
 
@@ -634,7 +634,7 @@ namespace RTXMnesia.Enemies
         /// <summary>The world update after the logic: the character body moves (iPhysicsWorld::Update).</summary>
         internal void StepBody(float timeStep)
         {
-            if (!Active || Body == null) return;
+            if (!Active || Body == null || Dev.HplDebugSession.EnemiesPaused) return;
             Body.Step(timeStep);
             UpdateEntity();
         }
@@ -708,6 +708,7 @@ namespace RTXMnesia.Enemies
 
         public void AlertOfPlayerPresence()
         {
+            if (Dev.HplDebugSession.EnemiesPaused) return;
             if (TriggersDisabled()) return;
             ShowPlayerPosition();
             if (CurrentState == EnemyState.Idle || CurrentState == EnemyState.Patrol) ChangeState(EnemyState.Search);
@@ -723,7 +724,7 @@ namespace RTXMnesia.Enemies
         /// <summary>iLuxEnemy::SendMessage: with disabled triggers only the path end and range messages get through.</summary>
         public void SendMessage(EnemyMessage type, float time = 0f, bool localScope = false, Vector3 vector = default, float x = 0f, int ix = 0)
         {
-            if (Disabled) return;
+            if (Disabled || Dev.HplDebugSession.EnemiesPaused) return;
             if (TriggersDisabled() && type > EnemyMessage.EndOfPath && type != EnemyMessage.PlayerInRange && type != EnemyMessage.PlayerOutOfRange)
                 return;
             _messages.Add(new EnemyStateMessage

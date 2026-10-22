@@ -331,6 +331,7 @@ namespace RTXMnesia.ScriptApi
             // The enhanced lighting's overlay of this map (graphics tab), over the classic lights.
             if (Application.isPlaying && !menuBackground) HplEnhancedLighting.Attach(this);
             _devRoom?.Initialize(this);
+            if (!menuBackground) Dev.HplDebugSession.Prepare(this);
         }
 
         /// <summary>The water world reflection of this map (null: no such water or not in Play mode).</summary>
@@ -381,6 +382,7 @@ namespace RTXMnesia.ScriptApi
             Script.Run(Script.OnStart, "OnStart");
             CalculateTotalCompletionAmount();
             Script.Run(Script.OnEnter, "OnEnter");
+            Dev.HplDebugSession.CompleteEntry(this);
         }
 
         /// <summary>

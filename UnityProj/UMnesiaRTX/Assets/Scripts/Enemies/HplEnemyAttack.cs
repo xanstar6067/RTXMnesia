@@ -33,6 +33,7 @@ namespace RTXMnesia.Enemies
                                        float sphereRadius = 0f, bool lethalForPlayer = true)
         {
             hitPlayer = false;
+            if (attacker != null && Dev.HplDebugSession.EnemiesPaused) return false;
             var player = map.player;
             int mask = Physics.DefaultRaycastLayers | (1 << HplPhysics.CharacterLayer);
             // A sphere shape (critters) or a box (enemies).

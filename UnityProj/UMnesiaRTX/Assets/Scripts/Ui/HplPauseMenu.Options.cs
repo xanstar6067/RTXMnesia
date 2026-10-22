@@ -294,6 +294,7 @@ namespace RTXMnesia.Ui
             ScrollToggle(T("OptionsMenu", "ShowSubtitles", "Субтитры"), settings.subtitles, MenuControl.Subtitles);
             ScrollToggle(T("OptionsMenu", "ShowHints", "Подсказки"), settings.hints, MenuControl.Hints);
             ScrollToggle(T("OptionsMenu", "ShowCrosshair", "Прицел"), settings.crosshair, MenuControl.Crosshair);
+            ScrollToggle("включить панель отладки", settings.debugPanel, MenuControl.DebugPanel);
             // menu.cfg Options ShowCommentary shows the developer commentary option.
             if (_map.menuConfig == null || _map.menuConfig.GetString("Options", "ShowCommentary", "false") == "true")
                 ScrollToggle(T("OptionsMenu", "Commentary", "Комментарии"), settings.commentary, MenuControl.Commentary);

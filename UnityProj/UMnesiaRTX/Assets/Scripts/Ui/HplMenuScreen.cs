@@ -548,7 +548,7 @@ namespace RTXMnesia.Ui
                 Refresh();
             }
             else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
-                     control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary ||
+                     control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary || control == MenuControl.DebugPanel ||
                      control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur or MenuControl.RtEnabled ||
                      control >= MenuControl.HdrPeakLess && control <= MenuControl.HdrDefaults) Activate(_selected, direction);
         }
@@ -768,6 +768,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.Hints: DraftSettings.hints = !DraftSettings.hints; break;
                 case MenuControl.Crosshair: DraftSettings.crosshair = !DraftSettings.crosshair; break;
                 case MenuControl.Commentary: DraftSettings.commentary = !DraftSettings.commentary; break;
+                case MenuControl.DebugPanel: DraftSettings.debugPanel = !DraftSettings.debugPanel; break;
                 case MenuControl.Fullscreen: DraftSettings.fullscreen = !DraftSettings.fullscreen; break;
                 case MenuControl.VSync: DraftSettings.vSync = !DraftSettings.vSync; break;
                 case MenuControl.InvertMouse: DraftSettings.invertMouse = !DraftSettings.invertMouse; break;

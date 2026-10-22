@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 
 namespace RTXMnesia.Ui
 {
-    public enum UiScreen { Menu, Inventory, Journal }
+    public enum UiScreen { Menu, Inventory, Journal, Debug }
 
     /// <summary>
     /// Runtime UI owner (cLuxInputHandler's container switching): the shared pause of the world, the screen fade and
@@ -28,6 +28,8 @@ namespace RTXMnesia.Ui
         public bool InventoryFromJournal { get; internal set; }
         public bool JournalOpen { get; internal set; }
         public bool ReadingUiOpen => InventoryOpen || JournalOpen;
+        public bool DebugOpen { get; private set; }
+        public Dev.HplDebugPanel DebugPanel { get; private set; }
         public HplUserSettings Settings { get; internal set; }
         /// <summary>Real render time excluding menu pauses, including pauses with no rendered frames.</summary>
         public double RenderTime => (IsPaused ? _pauseStartedAt : Time.realtimeSinceStartupAsDouble) - _pausedDuration;
@@ -66,6 +68,7 @@ namespace RTXMnesia.Ui
             Menu = new HplPauseMenu(map, transform, titleScreen);
             _menuScreen = new HplMenuScreen(this, Menu);
             _transition = new HplSceneTransition(this);
+            DebugPanel = new Dev.HplDebugPanel(this, map);
             if (!titleScreen) _reading = new HplReadingScreens(this);
             else
             {
@@ -82,6 +85,18 @@ namespace RTXMnesia.Ui
             if (_map == null || Menu == null || IsTransitioning || HplLoadScreen.Active || HplCredits.Active) return;
             if (!IsTitleScreen && (_map.player == null || !_map.player.readDevices)) return;
             var keyboard = Keyboard.current;
+            if (DebugOpen)
+            {
+                if (!Settings.debugPanel || (keyboard != null &&
+                    (keyboard.backquoteKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame))) Resume();
+                return;
+            }
+            if ((!IsPaused || IsTitleScreen) && Settings.debugPanel && keyboard != null && keyboard.backquoteKey.wasPressedThisFrame &&
+                !_menuScreen.CapturingInput)
+            {
+                OpenDebugPanel();
+                return;
+            }
             // An external input panel (dev_room's clip search) owns typing while gameplay keeps running.
             if (!IsPaused && _map.player != null && _map.player.UiInputBlocked &&
                 (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame)) return;
@@ -178,6 +193,24 @@ namespace RTXMnesia.Ui
 
         internal void BeginClose() => IsClosing = true;
         internal bool BeginSceneLoad(string path, bool newGame) => _transition.Begin(path, newGame);
+        public bool BeginDebugLoad(Dev.HplDebugProgression.Stage stage)
+        {
+            if (stage == null || !DebugOpen || !Settings.debugPanel || IsTransitioning || _map.IsChangingMap) return false;
+            return _transition.Begin(stage.ScenePath, false, stage);
+        }
+        public bool OpenDebugPanel()
+        {
+            if (!Settings.debugPanel || IsTransitioning || _map.IsChangingMap || (!IsTitleScreen && IsPaused)) return false;
+            if (IsTitleScreen)
+            {
+                DebugOpen = true;
+                Menu.SetVisible(false);
+                Cursor.visible = true;
+            }
+            else EnterScreen(UiScreen.Debug);
+            return true;
+        }
+        void OnGUI() { if (DebugOpen) DebugPanel?.Draw(); }
 
         /// <summary>The menu windows (tests): profiles, start game, messages.</summary>
         public HplMenuScreen MenuScreen => _menuScreen;
@@ -224,12 +257,13 @@ namespace RTXMnesia.Ui
             IsPaused = true;
             InventoryOpen = screen == UiScreen.Inventory;
             JournalOpen = screen == UiScreen.Journal;
+            DebugOpen = screen == UiScreen.Debug;
             InventoryFromJournal = false;
             PauseGeneration++;
             MenuOpacity = 0.01f;
             IsClosing = false;
             _map.player?.SetUiInputBlocked(true);
-            if (screen == UiScreen.Menu) _map.sound?.SetMenuPaused(true);
+            if (screen == UiScreen.Menu || DebugOpen) _map.sound?.SetMenuPaused(true);
             else
             {
                 _map.PhysicsWorld?.FadeOutLoopSounds(1f);
@@ -242,7 +276,7 @@ namespace RTXMnesia.Ui
             Time.timeScale = 0f;
             if (_map.hud != null && _map.hud.Canvas != null) _map.hud.Canvas.enabled = false;
             Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = screen == UiScreen.Menu ? !Menu.HasCursor : !_reading.HasCursor(screen);
+            Cursor.visible = DebugOpen || (screen == UiScreen.Menu ? !Menu.HasCursor : !_reading.HasCursor(screen));
             if (screen == UiScreen.Menu) _menuScreen.Show();
         }
 
@@ -264,6 +298,13 @@ namespace RTXMnesia.Ui
         public void Resume()
         {
             if (!IsPaused) return;
+            if (IsTitleScreen && DebugOpen)
+            {
+                DebugOpen = false;
+                Cursor.visible = !Menu.HasCursor;
+                _menuScreen.Show();
+                return;
+            }
             if (IsTitleScreen) { IsPaused = false; Menu?.SetVisible(false); return; }
             if (ReadingUiOpen)
             {
@@ -273,7 +314,7 @@ namespace RTXMnesia.Ui
             }
             _pausedDuration += Time.realtimeSinceStartupAsDouble - _pauseStartedAt;
             IsPaused = false;
-            InventoryOpen = JournalOpen = InventoryFromJournal = false;
+            InventoryOpen = JournalOpen = InventoryFromJournal = DebugOpen = false;
             _menuScreen.Reset();
             MenuOpacity = 0f;
             IsClosing = false;

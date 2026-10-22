@@ -651,7 +651,7 @@ namespace RTXMnesia.Player
         /// <summary>cLuxPlayer::UpdateTerror: the terror and its looping GUI sound at volume = terror.</summary>
         void UpdateTerror(float dt)
         {
-            if (_terrorEnemies.Count == 0 || IsDead) Terror = Mathf.Max(0f, Terror - _terrorDecSpeed * dt);
+            if (_terrorEnemies.Count == 0 || IsDead || Dev.HplDebugSession.EnemiesPaused) Terror = Mathf.Max(0f, Terror - _terrorDecSpeed * dt);
             else Terror = Mathf.Min(1f, Terror + _terrorIncSpeed * dt);
 
             if (sound == null) return;

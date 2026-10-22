@@ -122,6 +122,7 @@ namespace RTXMnesia.Save
         /// <summary>cLuxSaveHandler::SaveGameToFile.</summary>
         public static bool SaveGameToFile(HplMap map, string path)
         {
+            if (Dev.HplDebugSession.Active) return false;
             Debug.Log($"[RTXMnesia] -------- BEGIN SAVE TO: {path} ---------");
             try
             {

@@ -216,6 +216,7 @@ namespace RTXMnesia.ScriptApi
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         public static void Reset()
         {
+            Dev.HplDebugSession.Reset();
             EnemyActivateSoundCount = 0f;
             // cLuxInsanityHandler::Reset (its disabled sets and used events stay, as in HPL2).
             Effects.HplInsanity.Reset();

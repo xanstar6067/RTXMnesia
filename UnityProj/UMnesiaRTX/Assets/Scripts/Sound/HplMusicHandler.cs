@@ -136,6 +136,13 @@ namespace RTXMnesia.Sound
         /// </summary>
         void UpdateDangerMusic(float timeStep)
         {
+            if (Dev.HplDebugSession.EnemiesPaused)
+            {
+                if (_enemyClosePlaying) Stop(1f, 5);
+                _enemyClosePlaying = false;
+                _enemyCloseCount = _enemyGoneCount = 0;
+                return;
+            }
             // HARDMODE: no danger music.
             if (ScriptApi.HplDifficulty.HardMode) return;
             for (int i = 0; i < EnemyMusicTypes; i++) if (_enemyPlaying[i]) return;
@@ -197,7 +204,8 @@ namespace RTXMnesia.Sound
             for (int i = type + 1; i < EnemyMusicTypes; i++) if (_enemyPlaying[i]) return;
 
             var set = _enemies[type];
-            if (!_enemyPlaying[type] && set.Count > 0)
+            int count = Dev.HplDebugSession.EnemiesPaused ? 0 : set.Count;
+            if (!_enemyPlaying[type] && count > 0)
             {
                 _enemyStopCount[type] = 0f;
                 _enemyPlayCount[type] += timeStep;
@@ -232,7 +240,7 @@ namespace RTXMnesia.Sound
                     }
                 }
             }
-            else if (_enemyPlaying[type] && set.Count == 0)
+            else if (_enemyPlaying[type] && count == 0)
             {
                 _enemyPlayCount[type] = 0f;
                 _enemyStopCount[type] += timeStep;

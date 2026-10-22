@@ -24,7 +24,7 @@ namespace RTXMnesia.Ui
         }
 
         /// <summary>False (with an error in the log) when the scene is not in the build: a setup error, not a game state.</summary>
-        public bool Begin(string path, bool newGame)
+        public bool Begin(string path, bool newGame, Dev.HplDebugProgression.Stage debugStage = null)
         {
             if (IsTransitioning) return false;
             if (!Application.CanStreamedLevelBeLoaded(path))
@@ -33,11 +33,12 @@ namespace RTXMnesia.Ui
                 return false;
             }
             IsTransitioning = true;
-            _ui.StartCoroutine(Load(path, newGame));
+            if (debugStage != null) _ui.Menu.SetVisible(true);
+            _ui.StartCoroutine(Load(path, newGame, debugStage, Dev.HplDebugSession.DisableEnemyAI));
             return true;
         }
 
-        IEnumerator Load(string path, bool newGame)
+        IEnumerator Load(string path, bool newGame, Dev.HplDebugProgression.Stage debugStage, bool disableEnemyAI)
         {
             var config = _map.menuConfig;
             float fadeTime = config != null ? config.GetFloat("Main", newGame ? "MainFadeOutTimeSlow" : "MainFadeOutTimeFast", newGame ? 3 : 0.3f) : newGame ? 3 : 0.3f;
@@ -76,6 +77,7 @@ namespace RTXMnesia.Ui
             operation.allowSceneActivation = false;
             while (operation.progress < 0.9f) yield return null;
             HplGame.Reset();
+            if (debugStage != null) Dev.HplDebugSession.Start(debugStage, disableEnemyAI);
             _ui.PreviousTimeScale = 1;
             Time.timeScale = 1;
             operation.allowSceneActivation = true;

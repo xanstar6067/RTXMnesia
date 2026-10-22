@@ -69,6 +69,8 @@ namespace RTXMnesia.Ui
         public float hdrShadows = HplHdr.DefaultShadows;
         /// <summary>Game option "Commentary" (user config Game ShowCommentary, off by default): developer commentary icons.</summary>
         public bool commentary;
+        /// <summary>Technical map testing panel on the physical grave/Ё key. Global, outside profiles.</summary>
+        public bool debugPanel;
 
         /// <summary>The applied commentary option (cLuxMapHandler::mbShowCommentary).</summary>
         public static bool ShowCommentary { get; set; }

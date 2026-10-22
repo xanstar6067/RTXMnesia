@@ -196,7 +196,7 @@ namespace RTXMnesia.Player
                 foreach (var enemy in map.Enemies)
                 {
                     enemy.IsSeenByPlayer = false;
-                    if (!enemy.Active || !enemy.CausesSanityDecrease) continue;
+                    if (!enemy.Active || !enemy.CausesSanityDecrease || Dev.HplDebugSession.EnemiesPaused) continue;
                     var body = enemy.Body;
                     if ((body.Position - head).sqrMagnitude > maxRangeSqr) continue;
                     if (!GeometryUtility.TestPlanesAABB(planes, new Bounds(body.Position, body.Size))) continue;

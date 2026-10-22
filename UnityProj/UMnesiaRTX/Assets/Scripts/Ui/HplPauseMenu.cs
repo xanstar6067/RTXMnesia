@@ -28,7 +28,7 @@ namespace RTXMnesia.Ui
         HdrPeakLess, HdrPeakMore, HdrPeakSlider, HdrWhiteLess, HdrWhiteMore, HdrWhiteSlider,
         HdrBlackLess, HdrBlackMore, HdrBlackSlider, HdrShadowsLess, HdrShadowsMore, HdrShadowsSlider, HdrPreview, HdrDetect, HdrDefaults,
         // Ray tracing switch, the scroll bar arrows of the options, the HDR calibration window.
-        RtEnabled, ScrollUp, ScrollDown, HdrCalibrate, HdrCalibrationClose,
+        RtEnabled, ScrollUp, ScrollDown, HdrCalibrate, HdrCalibrationClose, DebugPanel,
     }
 
     /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>
