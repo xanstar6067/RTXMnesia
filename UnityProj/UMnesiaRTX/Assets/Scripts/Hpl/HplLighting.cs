@@ -32,6 +32,9 @@ namespace RTXMnesia.Hpl
         /// </summary>
         public const int HandsRenderingLayer = 7;
         public const uint HandsLayerMask = 1u << HandsRenderingLayer;
+        /// <summary>Rendering layer of lit candle wax in the enhanced lighting: the light inside the candle lights only it.</summary>
+        public const int WaxRenderingLayer = 6;
+        public const uint WaxLayerMask = 1u << WaxRenderingLayer;
         /// <summary>The rendering layers HDRP uses for light layers (the low 8; the others are shadow / decal layers).</summary>
         public const uint LightLayersMask = 0xFFu;
 

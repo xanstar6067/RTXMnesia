@@ -29,8 +29,14 @@ namespace RTXMnesia.World
         public const string CandleWaxProfile = ResourceFolder + "CandleWax";
         /// <summary>Thickness of candle wax for the thin-object transmission (0..1 of the profile's 0-5 mm).</summary>
         public const float WaxThickness = 0.35f;
-        /// <summary>Translucent candle wax (unfinished, off).</summary>
-        public const bool WaxEnabled = false;
+        /// <summary>
+        /// Brightness of the light inside a lit candle (the glow of its wax), as a share of the candle's flame. HDRP's
+        /// ray-traced shadows count a surface facing away from the light as shadowed, so with them the flame itself
+        /// lets no light through the wax; the glow light has no shadows and lights only the wax.
+        /// </summary>
+        public const float WaxGlowShare = 0.02f;
+        /// <summary>How deep under the wick the glow light sits (inside the wax).</summary>
+        public const float WaxGlowDepth = 0.015f;
         /// <summary>
         /// One candle flame, cd: the classic candlestick at its map color (Candela(1.7) × 0.85 → 15), so a room lit by
         /// candles keeps its brightness near them; the other fires are counted in candles from it.
@@ -94,7 +100,9 @@ namespace RTXMnesia.World
         static readonly List<Changed> s_changed = new();
         static readonly List<(Renderer renderer, ShadowCastingMode mode)> s_casters = new();
         static GameObject s_addedRoot;
-        static readonly List<(MeshFilter filter, Mesh original, Renderer renderer, Mesh split, Material wax)> s_wax = new();
+        static readonly List<(MeshFilter filter, Mesh original, Mesh split, GameObject wax, Mesh waxMesh, Material waxMaterial)> s_wax = new();
+        static readonly List<(Light flame, Light glow, float share)> s_glows = new();
+        static bool s_glowsHooked;
         static DiffusionProfileSettings s_waxProfile;
         static bool s_waxProfileLoaded;
 
@@ -109,6 +117,18 @@ namespace RTXMnesia.World
                     if (s_waxProfile == null) HplLog.PortError("Enhanced lighting: no diffusion profile Resources/" + CandleWaxProfile);
                 }
                 return s_waxProfile;
+            }
+        }
+
+        /// <summary>The profile's hash (saved in the asset by the editor; the field is internal to HDRP).</summary>
+        static uint WaxProfileHash
+        {
+            get
+            {
+                const System.Reflection.BindingFlags Flags = System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+                var profile = typeof(DiffusionProfileSettings).GetField("profile", Flags)?.GetValue(WaxProfile);
+                return profile?.GetType().GetField("hash", Flags)?.GetValue(profile) is uint hash ? hash : 0u;
             }
         }
 
@@ -251,10 +271,9 @@ namespace RTXMnesia.World
                 var wicks = new List<Vector3>();
                 foreach (var f in flames)
                     if (f.radius <= 0.02f) wicks.Add(f.position);
-                // Unfinished (2026-10-21): HDMaterial.SetDiffusionProfile throws on a runtime copy in the editor
-                // ("Adding asset to object ... failed"); the profile has to be set by its hash properties instead.
-                if (WaxEnabled && wicks.Count > 0)
-                    foreach (var r in entity.GetComponentsInChildren<MeshRenderer>(true)) SplitWax(r, wicks);
+                if (wicks.Count > 0 && lights.Count > 0 && lights[0].TryGetComponent(out Light flame))
+                    foreach (var r in entity.GetComponentsInChildren<MeshRenderer>(true))
+                        SplitWax(r, wicks, flame, WaxGlowShare * lights.Count / flames.Count);
                 foreach (var light in lights)
                 {
                     var record = Record(light);
@@ -281,20 +300,24 @@ namespace RTXMnesia.World
         /// Lit wax glows: the flame's light goes through the thin walls of the candle, warm and strongest near the flame
         /// (falling off with 1/d^2 down the candle), and goes out with the lamp. HPL2's candle is one mesh with its
         /// holder, so the wax is found by its shape: from each wick down, a narrow column of vertices until the mesh
-        /// widens into the holder's pan. Its triangles become a second submesh with a translucent copy of the material.
+        /// widens into the holder's pan. Its triangles become a child renderer with a translucent copy of the material on
+        /// the wax rendering layer (HplLighting.WaxRenderingLayer), lit from inside by a light without shadows that follows
+        /// the lamp's light (<paramref name="share"/> of its intensity per wick).
         /// </summary>
-        static void SplitWax(MeshRenderer renderer, List<Vector3> wicks)
+        static void SplitWax(MeshRenderer renderer, List<Vector3> wicks, Light flame, float share)
         {
             var filter = renderer.GetComponent<MeshFilter>();
             var mesh = filter != null ? filter.sharedMesh : null;
             var material = renderer.sharedMaterial;
             if (mesh == null || !mesh.isReadable || mesh.subMeshCount != 1 || renderer.sharedMaterials.Length != 1 ||
-                material == null || material.shader.name != "HDRP/Lit" || WaxProfile == null) return;
+                material == null || material.shader.name != "HDRP/Lit" || WaxProfile == null || WaxProfileHash == 0) return;
             var vertices = mesh.vertices;
             var world = new Vector3[vertices.Length];
             for (int i = 0; i < vertices.Length; i++) world[i] = renderer.transform.TransformPoint(vertices[i]);
             var wax = new bool[vertices.Length];
-            foreach (var wick in wicks) MarkWax(world, wick, wax);
+            var glows = new List<Vector3>();
+            foreach (var wick in wicks)
+                if (MarkWax(world, wick, wax, out float bottom)) glows.Add(wick + Vector3.down * Mathf.Min(WaxGlowDepth, bottom * 0.5f));
             var triangles = mesh.triangles;
             var rest = new List<int>(triangles.Length);
             var waxTriangles = new List<int>();
@@ -306,11 +329,13 @@ namespace RTXMnesia.World
             }
             if (waxTriangles.Count == 0 || rest.Count == 0) return;
             var split = UnityEngine.Object.Instantiate(mesh);
-            split.name = mesh.name + " (wax)";
+            split.name = mesh.name + " (no wax)";
             split.hideFlags = HideFlags.DontSave;
-            split.subMeshCount = 2;
             split.SetTriangles(rest, 0);
-            split.SetTriangles(waxTriangles, 1);
+            var waxMesh = UnityEngine.Object.Instantiate(mesh);
+            waxMesh.name = mesh.name + " (wax)";
+            waxMesh.hideFlags = HideFlags.DontSave;
+            waxMesh.SetTriangles(waxTriangles, 0);
             var waxMaterial = new Material(material) { name = material.name + " (wax)", hideFlags = HideFlags.DontSave };
             waxMaterial.SetFloat("_MaterialID", (float)MaterialId.LitTranslucent);
             waxMaterial.SetFloat("_TransmissionEnable", 1f);
@@ -318,16 +343,59 @@ namespace RTXMnesia.World
             waxMaterial.SetTexture("_ThicknessMap", null);
             // The glow is the light let through; HPL2's emission of the candle stays on the holder's submesh.
             if (waxMaterial.HasProperty("_EmissiveColor")) waxMaterial.SetColor("_EmissiveColor", Color.black);
-            HDMaterial.SetDiffusionProfile(waxMaterial, WaxProfile);
+            // The shader finds the profile by its hash. HDMaterial.SetDiffusionProfile also records the asset in the
+            // material's external references, which fails on a runtime copy in the editor.
+            waxMaterial.SetFloat("_DiffusionProfileHash", System.BitConverter.Int32BitsToSingle((int)WaxProfileHash));
             HDMaterial.ValidateMaterial(waxMaterial);
-            s_wax.Add((filter, mesh, renderer, split, waxMaterial));
+            var go = new GameObject("Wax") { hideFlags = HideFlags.DontSave };
+            go.transform.SetParent(renderer.transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = waxMesh;
+            var waxRenderer = go.AddComponent<MeshRenderer>();
+            waxRenderer.sharedMaterial = waxMaterial;
+            waxRenderer.renderingLayerMask = renderer.renderingLayerMask | HplLighting.WaxLayerMask;
+            waxRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            waxRenderer.rayTracingMode = renderer.rayTracingMode;
+            foreach (var position in glows)
+            {
+                var light = new GameObject("Wax glow").AddComponent<Light>();
+                light.transform.SetParent(go.transform, false);
+                light.transform.position = position;
+                light.type = LightType.Point;
+                light.shadows = LightShadows.None;
+                light.lightUnit = flame.lightUnit;
+                light.range = 0.3f;
+                light.gameObject.AddComponent<HDAdditionalLightData>().affectSpecular = false;
+                HplLighting.SetLightLayers(light, HplLighting.WaxLayerMask);
+                s_glows.Add((flame, light, share));
+            }
+            s_wax.Add((filter, mesh, split, go, waxMesh, waxMaterial));
             filter.sharedMesh = split;
-            renderer.sharedMaterials = new[] { material, waxMaterial };
+            if (!s_glowsHooked)
+            {
+                s_glowsHooked = true;
+                RenderPipelineManager.beginContextRendering += SyncGlows;
+            }
+            SyncGlows(default, null);
+        }
+
+        /// <summary>The wax glows with its flame: lit, dimmed, flickering or out (before each frame).</summary>
+        static void SyncGlows(ScriptableRenderContext context, List<Camera> cameras)
+        {
+            foreach (var (flame, glow, share) in s_glows)
+            {
+                if (glow == null) continue;
+                bool on = flame != null && flame.isActiveAndEnabled && flame.intensity > 0f;
+                glow.enabled = on;
+                if (!on) continue;
+                glow.color = flame.color;
+                glow.intensity = flame.intensity * share;
+            }
         }
 
         /// <summary>Marks the wax below a wick: 5 mm bins of the widest vertex around the axis, down to the holder's pan.</summary>
-        static void MarkWax(Vector3[] world, Vector3 wick, bool[] wax)
+        static bool MarkWax(Vector3[] world, Vector3 wick, bool[] wax, out float bottom)
         {
+            bottom = 0f;
             const float Bin = 0.005f, Depth = 0.4f, Above = 0.02f, Search = 0.08f, Widening = 1.4f;
             var widest = new float[(int)(Depth / Bin) + 1];
             for (int i = 0; i < widest.Length; i++) widest[i] = -1f;
@@ -341,8 +409,7 @@ namespace RTXMnesia.World
             // The candle's radius: the widest of the first centimetres below the wick (the wick itself is thinner).
             float candle = 0f;
             for (int k = 1; k <= 6 && k < widest.Length; k++) candle = Mathf.Max(candle, widest[k]);
-            if (candle <= 0.002f) return;
-            float bottom = 0f;
+            if (candle <= 0.002f) return false;
             for (int k = 0; k < widest.Length; k++)
             {
                 if (widest[k] < 0f) continue;
@@ -355,6 +422,7 @@ namespace RTXMnesia.World
                 float h = wick.y - p.y, r = new Vector2(p.x - wick.x, p.z - wick.z).magnitude;
                 if (h >= -Above && h <= bottom && r <= candle * Widening) wax[i] = true;
             }
+            return bottom > 0f;
         }
 
         /// <summary>
@@ -575,14 +643,23 @@ namespace RTXMnesia.World
                 light.Apply(light.CurrentColor, light.CurrentRadius);
             }
             s_changed.Clear();
-            foreach (var (filter, original, renderer, split, wax) in s_wax)
+            foreach (var (filter, original, split, wax, waxMesh, waxMaterial) in s_wax)
             {
                 if (filter != null) filter.sharedMesh = original;
-                if (renderer != null && renderer.sharedMaterials.Length > 1) renderer.sharedMaterials = new[] { renderer.sharedMaterials[0] };
+                // Destroy waits for the end of the frame; inactive and out of the lamp, the wax and its glow are gone
+                // now (a refresh in the same frame would split the old wax again).
+                if (wax != null)
+                {
+                    wax.SetActive(false);
+                    wax.transform.SetParent(null, false);
+                    UnityEngine.Object.Destroy(wax);
+                }
                 UnityEngine.Object.Destroy(split);
-                UnityEngine.Object.Destroy(wax);
+                UnityEngine.Object.Destroy(waxMesh);
+                UnityEngine.Object.Destroy(waxMaterial);
             }
             s_wax.Clear();
+            s_glows.Clear();
             foreach (var (r, mode) in s_casters)
                 if (r != null) r.shadowCastingMode = mode;
             s_casters.Clear();

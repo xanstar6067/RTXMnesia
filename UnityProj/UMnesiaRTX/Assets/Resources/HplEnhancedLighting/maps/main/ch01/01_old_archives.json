@@ -20,7 +20,28 @@
       "note": "Moonlight through the window (z 17): from the glass instead of 0.7 m inside the room, so the shadows fall into the room." },
     { "name": "SpotLight_20", "position": "37.25 1.0 21", "target": "33.0 -2 21", "intensity": "2.5", "range": "10", "shadows": "on", "sourceRadius": "0.35",
       "note": "Moonlight through the window (z 21)." },
-    { "name": "SpotLight_2", "range": "7", "sourceRadius": "0.15", "note": "Stove fire shining out of the stove door (the lamps themselves — the stove's fire, candles — follow the general lamp rule)." }
+    { "name": "SpotLight_2", "range": "7", "sourceRadius": "0.15", "note": "Stove fire shining out of the stove door (the lamps themselves — the stove's fire, candles — follow the general lamp rule)." },
+
+    { "name": "SpotLight_14", "position": "8.5 0.6 8.6", "target": "8.5 -2 12", "intensity": "2.5", "range": "10", "shadows": "on", "sourceRadius": "0.35",
+      "note": "Corridor (x 8.5, z 9-31), south bay window (three panes): moonlight from the glass instead of 1.5 m inside the corridor." },
+    { "name": "SpotLight_15", "position": "8.5 0.675 31.55", "target": "8.5 -2 27.5", "intensity": "2.5", "range": "10", "shadows": "on", "sourceRadius": "0.35",
+      "note": "Corridor, north window: moonlight from the glass instead of 1.8 m inside." },
+    { "name": "PointLight_19", "intensity": "0.3", "shadows": "off", "note": "Corridor: blue fill in the south window's niche, weaker: the window's area light shines along the niche's walls, not on them." },
+    { "name": "PointLight_23", "when": "gi", "intensity": "0", "note": "Corridor fill (z 12)." },
+    { "name": "PointLight_23", "when": "nogi", "intensity": "0.6" },
+    { "name": "PointLight_32", "when": "gi", "intensity": "0", "note": "Corridor fill (z 20)." },
+    { "name": "PointLight_32", "when": "nogi", "intensity": "0.6" },
+    { "name": "PointLight_27", "when": "gi", "intensity": "0", "note": "Corridor fill (z 27.75)." },
+    { "name": "PointLight_27", "when": "nogi", "intensity": "0.6" },
+    { "name": "PointLight_24", "intensity": "0.3", "shadows": "off", "note": "Corridor: fill in the north window's niche, weaker." },
+    { "name": "PointLight_26", "intensity": "0.3", "shadows": "off", "note": "North room (x 12-20, z 24-31): fill in the boarded window's niche, weaker; the window's area light shines between the planks." },
+    { "name": "PointLight_37", "intensity": "0.3", "shadows": "off", "note": "North room: second fill in the niche." },
+    { "name": "PointLight_28", "when": "gi", "intensity": "0", "note": "North room: fill in the middle of the room." },
+    { "name": "PointLight_28", "when": "nogi", "intensity": "0.6" },
+    { "name": "PointLight_30", "when": "gi", "intensity": "0", "note": "Collapsed room (x -12..-6, z 17-24): fill over the whole room (radius 10). The light falls through the planks over the hole in the ceiling." },
+    { "name": "PointLight_30", "when": "nogi", "intensity": "0.6" },
+    { "name": "PointLight_31", "when": "gi", "intensity": "0", "note": "Collapsed room: fill just under the hole." },
+    { "name": "PointLight_31", "when": "nogi", "intensity": "0.6" }
   ],
   "add": [
     { "name": "Window_sky_17", "type": "rect", "position": "37.40 0.675 17", "target": "30 0.675 17", "size": "1.1 1.47",
@@ -28,6 +49,18 @@
       "note": "Night sky seen through the window glass (z 17): soft light from the whole opening." },
     { "name": "Window_sky_21", "type": "rect", "position": "37.40 0.675 21", "target": "30 0.675 21", "size": "1.1 1.47",
       "color": "0.55 0.65 0.78", "intensity": "90", "range": "12", "shadows": "on",
-      "note": "Night sky through the window glass (z 21)." }
+      "note": "Night sky through the window glass (z 21)." },
+    { "name": "Window_sky_corridor_south", "type": "rect", "position": "8.5 0.625 8.8", "target": "8.5 0.625 20", "size": "2.9 1.43",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "14", "shadows": "on",
+      "note": "Night sky through the corridor's south bay window: the mouth of the bay (its three panes are 0-0.75 m further out)." },
+    { "name": "Window_sky_corridor_north", "type": "rect", "position": "8.5 0.675 31.65", "target": "8.5 0.675 20", "size": "1.1 1.47",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "14", "shadows": "on",
+      "note": "Night sky through the corridor's north window glass." },
+    { "name": "Window_sky_north_room", "type": "rect", "position": "16.5 0.675 31.65", "target": "16.5 0.675 24", "size": "1.1 1.47",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "12", "shadows": "on",
+      "note": "Night sky behind the boarded window of the north room: the planks shadow it." },
+    { "name": "Hole_light_collapsed_room", "type": "rect", "position": "-9.3 3.4 20.75", "target": "-9.3 -2 20.75", "size": "2.2 3.2",
+      "color": "0.55 0.65 0.78", "intensity": "80", "range": "10", "shadows": "on",
+      "note": "Collapsed room: the moonlit hall above, seen through the hole in the ceiling (rocks at 2.75 m, planks at 3.1 m shadow it)." }
   ]
 }
