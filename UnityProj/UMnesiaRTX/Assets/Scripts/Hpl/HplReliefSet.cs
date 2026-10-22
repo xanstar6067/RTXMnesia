@@ -67,6 +67,14 @@ namespace RTXMnesia.Hpl
         static readonly Dictionary<(Material, string), Material> s_copies = new();
         static readonly Dictionary<Material, Material> s_sources = new();
         static HplReliefLod s_driver;
+        // Renderers moved off a shared wall plane (SeparateSharedWalls) and where they were.
+        static readonly List<(Transform transform, Vector3 position)> s_lifts = new();
+        /// <summary>Gap left between a lifted wall's deepest joint and the shared plane (RT ray bias, shadow-map bias).</summary>
+        public const float SharedWallMargin = 0.004f;
+        /// <summary>Debug: off leaves shared walls in their plane (HplEnhancedLightingProbe mode "nolift").</summary>
+        public static bool SeparateWalls = true;
+        public static int SeparatedWallCount { get; private set; }
+        public static int LiftedDecalCount { get; private set; }
         public static int ActiveMeshCount => s_states.Count;
         public static Material SurfaceMaterial(Material material) => material != null && s_sources.TryGetValue(material, out var source) ? source : material;
 
@@ -203,8 +211,110 @@ namespace RTXMnesia.Hpl
                 UnityEngine.Rendering.HighDefinition.HDRenderPipeline hdrp) hdrp.ResetPathTracing();
         }
 
+        /// <summary>
+        /// HPL2 builds a wall between two rooms of two modules back to back in one plane, without thickness. The relief
+        /// recesses the joints up to 2 cm below the plane, so each side's joints came out through the other side's stone
+        /// faces into the next room: there its torch lit them (orange cracks in a dark room, plainly with RT). Each wall
+        /// of such a pair moves into its own room by its joint depth, and the map decals lying on it with it. Collision is
+        /// unchanged. Call after the renderers of the loaded scenes were applied.
+        /// </summary>
+        public static void SeparateSharedWalls()
+        {
+            RestoreLifts();
+            SeparatedWallCount = LiftedDecalCount = 0;
+            if (!SeparateWalls) return;
+            var planes = new List<(State state, Vector3 normal, float plane, float depth, Bounds bounds)>();
+            foreach (var state in s_states.Values)
+                if (state.renderer != null && state.filter != null && BackPlane(state, out var normal, out float plane, out float depth))
+                    planes.Add((state, normal, plane, depth, state.renderer.bounds));
+            var lifts = new Dictionary<Transform, (Vector3 normal, float plane, float lift, Bounds bounds)>();
+            for (int i = 0; i < planes.Count; i++)
+                for (int j = i + 1; j < planes.Count; j++)
+                {
+                    var a = planes[i]; var b = planes[j];
+                    // Opposite faces of one plane (n_b = -n_a, so d_b = -d_a) that overlap.
+                    if (Vector3.Dot(a.normal, b.normal) > -0.995f || Mathf.Abs(a.plane + b.plane) > 0.002f || !a.bounds.Intersects(b.bounds)) continue;
+                    foreach (var (state, normal, plane, depth, bounds) in new[] { a, b })
+                        lifts[state.renderer.transform] = (normal, plane, depth + SharedWallMargin, bounds);
+                }
+            if (lifts.Count == 0) return;
+            foreach (var (transform, lift) in lifts)
+            {
+                s_lifts.Add((transform, transform.position));
+                transform.position += lift.normal * lift.lift;
+            }
+            SeparatedWallCount = lifts.Count;
+            // Decals of the map lie up to a centimetre in front of the wall plane: the lifted stones would cover them.
+            var walls = new List<(Vector3 normal, float plane, float lift, Bounds bounds)>(lifts.Values);
+            foreach (var renderer in UnityEngine.Object.FindObjectsByType<MeshRenderer>(FindObjectsInactive.Include))
+            {
+                if (!IsDecal(renderer) || renderer.isPartOfStaticBatch) continue;
+                var bounds = renderer.bounds;
+                foreach (var wall in walls)
+                {
+                    var n = wall.normal;
+                    float thickness = Vector3.Dot(bounds.extents, new Vector3(Mathf.Abs(n.x), Mathf.Abs(n.y), Mathf.Abs(n.z)));
+                    float offset = Vector3.Dot(n, bounds.center) - wall.plane;
+                    if (thickness > 0.02f || offset < -0.002f || offset > 0.02f) continue;
+                    var near = wall.bounds;
+                    near.Expand(0.04f);
+                    if (!near.Intersects(bounds)) continue;
+                    s_lifts.Add((renderer.transform, renderer.transform.position));
+                    renderer.transform.position += n * wall.lift;
+                    LiftedDecalCount++;
+                    break;
+                }
+            }
+        }
+
+        /// <summary>A flat decal of a map (HDRP mesh decal or HPL multiply decal).</summary>
+        public static bool IsDecal(Renderer renderer)
+        {
+            var material = renderer.sharedMaterial;
+            return material != null && material.shader != null &&
+                   (material.FindPass("DBufferMesh") >= 0 || material.shader.name == "RTXMnesia/HplMultiply");
+        }
+
+        /// <summary>
+        /// The original plane of a relief wall, facing its room, and how deep the relief goes behind it. The relief grows
+        /// the module's bounds backwards by the joints and forwards only by the stone faces' few millimetres.
+        /// </summary>
+        static bool BackPlane(State state, out Vector3 normal, out float plane, out float depth)
+        {
+            normal = default;
+            plane = depth = 0;
+            Bounds original = state.entry.original.bounds, relief = state.coarse.bounds;
+            if (state.detailed != null) relief.Encapsulate(state.detailed.bounds);
+            int axis = -1;
+            float sign = 0, behind = 0.005f;
+            for (int k = 0; k < 3; k++)
+            {
+                float below = original.min[k] - relief.min[k], above = relief.max[k] - original.max[k];
+                if (below > behind) { behind = below; axis = k; sign = 1; }
+                if (above > behind) { behind = above; axis = k; sign = -1; }
+            }
+            if (axis < 0) return false;
+            var local = Vector3.zero;
+            local[axis] = sign;
+            var transform = state.renderer.transform;
+            normal = transform.worldToLocalMatrix.transpose.MultiplyVector(local).normalized;
+            var point = original.center;
+            point[axis] = sign > 0 ? original.min[axis] : original.max[axis];
+            plane = Vector3.Dot(normal, transform.TransformPoint(point));
+            depth = transform.localToWorldMatrix.MultiplyVector(local).magnitude * behind;
+            return true;
+        }
+
+        static void RestoreLifts()
+        {
+            foreach (var (transform, position) in s_lifts)
+                if (transform != null) transform.position = position;
+            s_lifts.Clear();
+        }
+
         public static void Release()
         {
+            RestoreLifts();
             foreach (var state in s_states.Values)
                 if (state.filter != null && (state.filter.sharedMesh == state.detailed || state.filter.sharedMesh == state.coarse))
                     state.filter.sharedMesh = state.entry.original;

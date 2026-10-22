@@ -117,6 +117,7 @@ namespace RTXMnesia.Hpl
         {
             // Includes runtime hands and other DontDestroyOnLoad renderers.
             foreach (var renderer in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include)) Apply(renderer, enhanced);
+            HplEnhancedRelief.SeparateSharedWalls();
             // A stationary path-tracing camera must not keep accumulating the previous material set.
             if (UnityEngine.Rendering.RenderPipelineManager.currentPipeline is
                 UnityEngine.Rendering.HighDefinition.HDRenderPipeline hdrp) hdrp.ResetPathTracing();
@@ -127,6 +128,7 @@ namespace RTXMnesia.Hpl
             if (!scene.IsValid() || !scene.isLoaded) return;
             foreach (var root in scene.GetRootGameObjects())
                 foreach (var renderer in root.GetComponentsInChildren<Renderer>(true)) Apply(renderer, enhanced);
+            HplEnhancedRelief.SeparateSharedWalls();
         }
 
         /// <summary>Also available to systems that instantiate renderers after sceneLoaded.</summary>

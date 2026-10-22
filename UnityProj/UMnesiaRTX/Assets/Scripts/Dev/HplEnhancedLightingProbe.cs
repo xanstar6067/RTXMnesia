@@ -93,7 +93,9 @@ namespace RTXMnesia.Dev
                     s.rtPathTracing = 0;
                     s.rtLanternShadows = !mode.Contains("noshadow");
                     if (mode.Contains("tex")) s.textures = 1;
+                    HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
                     HplGraphics.Apply(s);
+                    HplEnhancedRelief.SeparateSharedWalls();
                     yield return SetLantern(map, mode.Contains("lantern"));
                     var hidden = mode.Contains("only") ? HideOthers(map) : new List<Light>();
                     if (mode.Contains("nofill")) HideFills(hidden);
@@ -153,6 +155,18 @@ namespace RTXMnesia.Dev
                                 string key = $"{classic.name} enhancedNow={m != classic} hasEnhanced={has} shader={m.shader.name} smooth={(m.HasProperty("_Smoothness") ? m.GetFloat("_Smoothness") : -1):0.00} height={m.IsKeywordEnabled("_HEIGHTMAP")}";
                                 if (seen.Add(key)) report.AppendLine($"    mat {r.transform.parent?.name}: {key}");
                             }
+                        }
+                    }
+                    if (mode.Contains("walls"))
+                    {
+                        // The castle wall modules near the target: where each side's surface lies (enhanced relief vs flat).
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                        {
+                            if (r.bounds.SqrDistance(target) > 3f * 3f) continue;
+                            var m = r.sharedMaterial != null ? HplEnhancedTextures.ClassicMaterial(HplEnhancedRelief.SurfaceMaterial(r.sharedMaterial)) : null;
+                            if (m == null || !m.name.StartsWith("castlebase_wall", StringComparison.Ordinal)) continue;
+                            Vector3 a = HplSpace.Position(r.bounds.min), b = HplSpace.Position(r.bounds.max);
+                            report.AppendLine($"    wall {r.transform.parent?.name}/{r.name} mesh={r.GetComponent<MeshFilter>()?.sharedMesh?.name} hpl {Vector3.Min(a, b)}..{Vector3.Max(a, b)}");
                         }
                     }
                     if (name == "P")
@@ -215,7 +229,7 @@ namespace RTXMnesia.Dev
                     }
                     string line = $"{name} {mode}: mean {mean:0.0}, {ms:0.0} ms, enhanced applied={HplEnhancedLighting.Applied} " +
                                   $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} wax={HplEnhancedLighting.WaxCandles} (not generated {HplEnhancedLighting.WaxWithoutGenerated}), " +
-                                  $"RT={HplRayTracing.Active} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}";
+                                  $"RT={HplRayTracing.Active} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}";
                     report.AppendLine(line);
                     Debug.Log("[EnhancedLighting] " + line);
                     // The lights near the view as this mode draws them.
@@ -229,6 +243,7 @@ namespace RTXMnesia.Dev
                     }
                 }
             }
+            HplEnhancedRelief.SeparateWalls = true;
             yield return SetLantern(map, false);
             HplGraphics.Apply(user);
             File.WriteAllText(Path.Combine(folder, mapName + "_report.txt"), report.ToString());

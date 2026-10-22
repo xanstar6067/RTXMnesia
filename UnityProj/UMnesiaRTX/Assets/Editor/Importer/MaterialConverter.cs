@@ -318,7 +318,13 @@ namespace RTXMnesia.Importer
                 m.SetFloat("_Smoothness", NoSpecularSmoothness);
             }
 
-            var height = tex(TextureRole.Height);
+            // Amnesia alpha testing: an Alpha texture unit (or UseAlpha) rejects pixels by the diffuse alpha.
+            bool alphaTested = tex(TextureRole.Albedo) != null && (src.Texture("Alpha") != null || (src.UseAlpha && src.Type == AmnesiaMaterial.Kind.Solid));
+
+            // A cutout gets no pixel displacement: its outline is the alpha of the displaced texel, so a flat cutout (the
+            // pebbles01-04 decal, HeightMapScale 0.1) slid and shrank by up to its whole depth as the view turned. Its
+            // normal map still gives the relief.
+            var height = alphaTested ? null : tex(TextureRole.Height);
             if (height != null)
             {
                 float amplitudeCm = src.Float("HeightMapScale", 0.05f) * HeightScaleToPomCm;
@@ -339,8 +345,7 @@ namespace RTXMnesia.Importer
                 HDMaterial.SetEmissiveIntensity(m, EmissiveNits, EmissiveIntensityUnit.Nits);
             }
 
-            // Amnesia alpha testing: an Alpha texture unit (or UseAlpha) rejects pixels by the diffuse alpha.
-            if (tex(TextureRole.Albedo) != null && (src.Texture("Alpha") != null || (src.UseAlpha && src.Type == AmnesiaMaterial.Kind.Solid)))
+            if (alphaTested)
             {
                 HDMaterial.SetAlphaCutoff(m, AlphaCutoff);
                 HDMaterial.SetAlphaClipping(m, true);

@@ -382,7 +382,10 @@ namespace RTXMnesia.Importer
         }
     }
 
-    /// <summary>Build-time copies of scenes must retain individual MeshFilters for runtime mesh replacement.</summary>
+    /// <summary>
+    /// Build-time copies of scenes (also on entering Play) must retain individual MeshFilters for runtime mesh replacement,
+    /// and the decals near those walls their own transforms (HplEnhancedRelief.SeparateSharedWalls moves them).
+    /// </summary>
     public sealed class EnhancedReliefBuildProcessor : IProcessSceneWithReport
     {
         public int callbackOrder => 0;
@@ -391,9 +394,20 @@ namespace RTXMnesia.Importer
             var catalog = AssetDatabase.LoadAssetAtPath<HplReliefSet>(EnhancedReliefConverter.CatalogPath);
             if (catalog == null) return;
             var meshes = catalog.entries.Where(e => e.original != null).GroupBy(e => e.original).ToDictionary(g => g.Key, g => g.ToArray());
-            foreach (var renderer in scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<MeshRenderer>(true)))
+            var walls = new List<Bounds>();
+            var renderers = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<MeshRenderer>(true)).ToList();
+            var decals = renderers.Where(HplEnhancedRelief.IsDecal).ToList();
+            foreach (var renderer in renderers)
                 if (renderer.TryGetComponent<MeshFilter>(out var filter) && filter.sharedMesh != null && meshes.TryGetValue(filter.sharedMesh, out var entries) &&
                     entries.Any(e => e.Matches(renderer, renderer.sharedMaterials)))
+                {
+                    GameObjectUtility.SetStaticEditorFlags(renderer.gameObject, GameObjectUtility.GetStaticEditorFlags(renderer.gameObject) & ~StaticEditorFlags.BatchingStatic);
+                    var near = renderer.bounds;
+                    near.Expand(0.04f);
+                    walls.Add(near);
+                }
+            foreach (var renderer in decals)
+                if (walls.Any(w => w.Intersects(renderer.bounds)))
                     GameObjectUtility.SetStaticEditorFlags(renderer.gameObject, GameObjectUtility.GetStaticEditorFlags(renderer.gameObject) & ~StaticEditorFlags.BatchingStatic);
         }
     }
