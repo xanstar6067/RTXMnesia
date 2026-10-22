@@ -67,6 +67,13 @@ namespace RTXMnesia.EditorDev
                 string Arg(string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
                 string map = Arg("-amnesiaMap") ?? "maps/main/ch01/01_old_archives.map";
                 EditorSceneManager.OpenScene(LevelConverter.ScenePathFor(Path.Combine(AmnesiaPaths.SourceRoot, map)), OpenSceneMode.Single);
+                // Preview only: keep the introduction, fades and sanity effects from changing the comparison.
+                // The scene is never saved; normal Play still runs its script.
+                var previewMap = UnityEngine.Object.FindAnyObjectByType<ScriptApi.HplMap>();
+                previewMap.runScript = false;
+                previewMap.disableAutoSaves = true;
+                previewMap.disableInsanity = true;
+                previewMap.disableEnemyAI = true;
                 SessionState.SetString(ViewsKey, Arg("-lightViews") ?? "");
                 SessionState.SetString(ModesKey, Arg("-lightModes") ?? "");
                 SessionState.SetString(LitKey, Arg("-lightLit") ?? "");

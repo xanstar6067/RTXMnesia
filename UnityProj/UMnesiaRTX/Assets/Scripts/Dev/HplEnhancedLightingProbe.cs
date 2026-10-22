@@ -70,6 +70,7 @@ namespace RTXMnesia.Dev
                 if (map.GetEntityByName(lamp.Trim()) is Props.PropLamp p) p.SetLit(true, false);
                 else Debug.LogWarning("[EnhancedLighting] no lamp " + lamp);
             }
+            VerifySwitching(user, report);
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -91,6 +92,7 @@ namespace RTXMnesia.Dev
                     s.dlssMode = 0;
                     s.antialiasing = (int)HplAntialiasing.Taa;
                     s.rtPathTracing = 0;
+                    s.rtGi = mode.Contains("nogi") ? 0 : 2;
                     s.rtLanternShadows = !mode.Contains("noshadow");
                     if (mode.Contains("tex")) s.textures = 1;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
@@ -245,8 +247,111 @@ namespace RTXMnesia.Dev
             }
             HplEnhancedRelief.SeparateWalls = true;
             yield return SetLantern(map, false);
+            yield return VerifyThunder(map, user, report);
             HplGraphics.Apply(user);
             File.WriteAllText(Path.Combine(folder, mapName + "_report.txt"), report.ToString());
+        }
+
+        /// <summary>Original light state must survive repeated enhanced/classic changes, without a scene reload.</summary>
+        static void VerifySwitching(HplUserSettings user, StringBuilder report)
+        {
+            string overlay = HplEnhancedLighting.ResourceFolder + Path.ChangeExtension(HplMap.Current.mapFile.Replace('\\', '/'), null);
+            if (Resources.Load<TextAsset>(overlay) == null) return;
+            var classic = user.Copy();
+            classic.lightingSet = 0;
+            HplGraphics.Apply(classic);
+            var originals = new List<(AmnesiaLight data, Vector3 position, Quaternion rotation,
+                float intensity, float range, Color color, bool shadows)>();
+            foreach (var data in AmnesiaLight.All)
+                if (data != null && !data.handHeld && !data.enhancedAdded && data.TryGetComponent<Light>(out var light))
+                    originals.Add((data, data.transform.localPosition, data.transform.localRotation,
+                        light.intensity, light.range, data.CurrentColor, data.castShadows));
+
+            void Require(bool condition, string message)
+            {
+                if (!condition) throw new InvalidOperationException("Lighting switch: " + message);
+            }
+            // No frames elapse inside this check: moving lamps and flicker cannot mask a failed restoration.
+            for (int cycle = 0; cycle < 3; cycle++)
+            {
+                var enhanced = classic.Copy();
+                enhanced.lightingSet = 1;
+                enhanced.lighting = cycle == 1 ? 0 : 1;
+                enhanced.rtGi = cycle == 2 ? 0 : 2;
+                HplGraphics.Apply(enhanced);
+                Require(HplEnhancedLighting.Applied, "overlay not applied");
+                int added = HplEnhancedLighting.AddedLights;
+                HplEnhancedLighting.Refresh();
+                Require(HplEnhancedLighting.AddedLights == added, "added lights accumulate on refresh");
+                HplGraphics.Apply(classic);
+                Require(!HplEnhancedLighting.Applied && HplEnhancedLighting.AddedLights == 0 &&
+                    HplEnhancedLighting.ChangedLights == 0 && HplEnhancedLighting.WaxCandles == 0,
+                    "enhanced objects remain in classic mode");
+                foreach (var o in originals)
+                {
+                    var light = o.data.GetComponent<Light>();
+                    Require(Vector3.Distance(o.data.transform.localPosition, o.position) < 1e-5f &&
+                        Quaternion.Angle(o.data.transform.localRotation, o.rotation) < 0.01f &&
+                        Mathf.Abs(light.intensity - o.intensity) < 1e-4f * Mathf.Max(1f, o.intensity) &&
+                        Mathf.Abs(light.range - o.range) < 1e-5f && o.data.CurrentColor == o.color &&
+                        o.data.castShadows == o.shadows && !o.data.classicLocalPose.HasValue &&
+                        o.data.enhancedIntensity == 1f && o.data.enhancedRange == 0f && o.data.enhancedCandela == 0f,
+                        "classic state not restored: " + o.data.name);
+                }
+            }
+            string line = $"Switch verification PASS: {originals.Count} original lights restored over 3 cycles (RTGI, raster, RT without GI); refresh does not accumulate lights.";
+            report.AppendLine(line);
+            Debug.Log("[EnhancedLighting] " + line);
+        }
+
+        static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/00_rainy_hall.map", StringComparison.Ordinal)) yield break;
+            var source = map.GetLight("spotthunder_1");
+            var fill = map.GetLight("PointLight_25");
+            Color original = source.CurrentColor, originalFill = fill.CurrentColor;
+            var settings = user.Copy();
+            settings.lightingSet = 1;
+            settings.lighting = 1;
+            settings.rtGi = 2;
+            HplGraphics.Apply(settings);
+            yield return null;
+            // Added objects use DontSave and are excluded from FindObjectsByType; use the runtime light registry.
+            var added = AmnesiaLight.All.Find(l => l != null && l.enhancedAdded &&
+                l.TryGetComponent<HplEnhancedLightFollow>(out var f) && f.source == source);
+            var follow = added != null ? added.GetComponent<HplEnhancedLightFollow>() : null;
+            if (follow == null) throw new InvalidOperationException("No window follows spotthunder_1");
+            var window = follow.GetComponent<Light>();
+            float initial = window.intensity;
+            source.FadeTo(Color.white, source.CurrentRadius, 0.1f);
+            yield return new WaitForSecondsRealtime(0.3f);
+            if (window.intensity <= initial) throw new InvalidOperationException("Window does not brighten during thunder fade");
+            source.FadeTo(Color.black, source.CurrentRadius, 0.1f);
+            fill.FadeTo(Color.black, fill.CurrentRadius, 0.1f);
+            yield return new WaitForSecondsRealtime(0.3f);
+            if (window.enabled || window.intensity > 0.001f || fill.GetComponent<Light>().intensity > 0.001f)
+                throw new InvalidOperationException("Window or suppressed fill ignores fade to black");
+            settings.lightingSet = 0;
+            HplGraphics.Apply(settings);
+            if (source.CurrentColor != Color.black || fill.CurrentColor != Color.black || source.GetComponent<Light>().intensity > 0.001f)
+                throw new InvalidOperationException("Switching to classic loses script fade state");
+            settings.lightingSet = 1;
+            HplGraphics.Apply(settings);
+            yield return null;
+            source.SetColor(original);
+            yield return null;
+            source.SetVisible(false);
+            yield return null;
+            foreach (var data in AmnesiaLight.All)
+                if (data != null && data.enhancedAdded && data.TryGetComponent<HplEnhancedLightFollow>(out var f) &&
+                    f.source == source && f.GetComponent<Light>().enabled)
+                    throw new InvalidOperationException("Window ignores source visibility");
+            source.SetVisible(true);
+            source.SetColor(original);
+            fill.SetColor(originalFill);
+            string line = "Thunder verification PASS: window follows bright/black fades and visibility; classic/enhanced switching preserves faded script lights.";
+            report.AppendLine(line);
+            Debug.Log("[EnhancedLighting] " + line);
         }
 
         /// <summary>Mode "only": every light off except the lit lamps (-lightLit) and the hand — one candle in a dark room.</summary>
