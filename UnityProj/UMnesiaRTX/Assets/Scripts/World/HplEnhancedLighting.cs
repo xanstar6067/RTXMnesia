@@ -34,7 +34,7 @@ namespace RTXMnesia.World
         /// ray-traced shadows count a surface facing away from the light as shadowed, so with them the flame itself
         /// lets no light through the wax; the glow light has no shadows and lights only the wax.
         /// </summary>
-        public const float WaxGlowShare = 0.02f;
+        public const float WaxGlowShare = 0.05f;
         /// <summary>How deep under the wick the glow light sits (inside the wax).</summary>
         public const float WaxGlowDepth = 0.015f;
         /// <summary>
@@ -341,12 +341,17 @@ namespace RTXMnesia.World
             waxMaterial.SetFloat("_TransmissionEnable", 1f);
             waxMaterial.SetFloat("_Thickness", WaxThickness);
             waxMaterial.SetTexture("_ThicknessMap", null);
-            // The glow is the light let through; HPL2's emission of the candle stays on the holder's submesh.
-            if (waxMaterial.HasProperty("_EmissiveColor")) waxMaterial.SetColor("_EmissiveColor", Color.black);
+            // The glow is the light let through: no emission. The copy is of the asset material, whose HPL2 illumination
+            // HplEmission switches off only on the lamp's own renderer, and ValidateMaterial rebuilds _EmissiveColor
+            // from _EmissiveColorLDR × _EmissiveIntensity — an unlit chandelier's wax glowed at full.
+            waxMaterial.SetTexture("_EmissiveColorMap", null);
+            waxMaterial.SetColor("_EmissiveColorLDR", Color.black);
+            waxMaterial.SetColor("_EmissiveColor", Color.black);
             // The shader finds the profile by its hash. HDMaterial.SetDiffusionProfile also records the asset in the
             // material's external references, which fails on a runtime copy in the editor.
             waxMaterial.SetFloat("_DiffusionProfileHash", System.BitConverter.Int32BitsToSingle((int)WaxProfileHash));
             HDMaterial.ValidateMaterial(waxMaterial);
+            waxMaterial.SetColor("_EmissiveColor", Color.black);
             var go = new GameObject("Wax") { hideFlags = HideFlags.DontSave };
             go.transform.SetParent(renderer.transform, false);
             go.AddComponent<MeshFilter>().sharedMesh = waxMesh;
