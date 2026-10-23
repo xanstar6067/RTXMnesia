@@ -71,6 +71,7 @@ namespace RTXMnesia.Dev
                 else Debug.LogWarning("[EnhancedLighting] no lamp " + lamp);
             }
             VerifySwitching(user, report);
+            VerifyEntranceHallEvents(map, user, report);
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -302,6 +303,55 @@ namespace RTXMnesia.Dev
             string line = $"Switch verification PASS: {originals.Count} original lights restored over 3 cycles (RTGI, raster, RT without GI); refresh does not accumulate lights.";
             report.AppendLine(line);
             Debug.Log("[EnhancedLighting] " + line);
+        }
+
+        static void VerifyEntranceHallEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/02_entrance_hall.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (var light in AmnesiaLight.All)
+                if (light != null && (light.name.StartsWith("PointLightx", StringComparison.Ordinal) ||
+                    light.name is "PointLightAcid" or "PointLight_2" or "PointLight_15" or "BoxLight_2"))
+                    states.Add((light, light.Save()));
+            if (states.Count != 19) throw new InvalidOperationException("Entrance hall: expected 19 event lights including the box");
+            try
+            {
+                // Endpoints of the script's radius/colour fades, including lights initially black or radius zero.
+                foreach (var (light, saved) in states)
+                {
+                    light.SetColor(light.box ? new Color(0.15f, 0.03f, 0.06f, 0f) :
+                        light.name == "PointLight_15" ? new Color(0.2f, 0f, 0.05f, 1f) :
+                        light.name == "PointLight_2" ? new Color(0.6f, 0.3f, 0.6f, 0.5f) : saved.color);
+                    light.SetRadius(light.box ? saved.radius : 3f);
+                }
+                var classic = user.Copy();
+                classic.lightingSet = 0;
+                HplGraphics.Apply(classic);
+                var expected = new List<(AmnesiaLight light, Color color, float intensity, float level)>();
+                foreach (var (light, _) in states)
+                    expected.Add((light, light.CurrentColor, light.box ? 0f : light.GetComponent<Light>().intensity,
+                        light.LightLevelAt(light.transform.position + Vector3.up * 0.2f, 0f)));
+                foreach (int lighting in new[] { 1, 0, 1 })
+                {
+                    var settings = classic.Copy();
+                    settings.lightingSet = lighting;
+                    HplGraphics.Apply(settings);
+                    foreach (var e in expected)
+                        if (e.light.CurrentColor != e.color || (!e.light.box &&
+                            (e.light.CurrentRadius != 3f || e.light.GetComponent<Light>().range != 3f ||
+                             Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity) > 1e-4f)) ||
+                            Mathf.Abs(e.light.LightLevelAt(e.light.transform.position + Vector3.up * 0.2f, 0f) - e.level) > 1e-5f)
+                            throw new InvalidOperationException("Entrance hall event light changed by overlay: " + e.light.name);
+                }
+                string line = "Entrance hall events PASS: 19 guardian/slime/acid/trail/box lights retain scripted colour/radius endpoints, rendered intensity and gameplay light level through switching.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                HplGraphics.Apply(user);
+            }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
