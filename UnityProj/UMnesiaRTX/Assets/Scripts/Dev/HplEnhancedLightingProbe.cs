@@ -82,6 +82,7 @@ namespace RTXMnesia.Dev
             VerifyDanielsRoomLamps(map, user, report);
             var studyCheck = VerifyStudyEvents(map, user, report);
             while (studyCheck.MoveNext()) yield return studyCheck.Current;
+            VerifyStorageEvents(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -960,6 +961,102 @@ namespace RTXMnesia.Dev
             {
                 foreach (var (light, saved) in states) light.Restore(saved);
                 foreach (var (entity, active) in windows) entity.SetActive(active);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void VerifyStorageEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/12_storage.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "DangerLight", "BoomLight" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Storage: missing explosion light " + name);
+                states.Add((light, light.Save()));
+            }
+            var altar = map.GetEntityByName("altar_lamp_1") as Props.PropLamp;
+            if (altar == null) throw new InvalidOperationException("Storage: missing altar lamp");
+            bool altarLit = altar.Lit, disabled = map.player.lanternDisabled;
+            var classic = user.Copy(); classic.lightingSet = 0;
+            try
+            {
+                // Initial state, red explosive warning, white flash with the altar lit, and extinguished explosion.
+                for (int stage = 0; stage < 4; stage++)
+                {
+                    HplGraphics.Apply(classic);
+                    foreach (var (light, saved) in states)
+                    {
+                        bool warning = light.name == "DangerLight" && stage == 1;
+                        bool flash = light.name == "BoomLight" && stage == 2;
+                        light.SetColor(stage == 0 ? saved.color : warning ? Color.red : flash ? Color.white : new Color(0f, 0f, 0f, 0f));
+                        light.SetRadius(stage == 0 ? saved.radius : warning ? 4f : flash ? 8f : 0f);
+                    }
+                    altar.SetLit(stage >= 2, false); altar.UpdateLogic(0f);
+                    map.player.lanternDisabled = stage == 1;
+                    var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float eventIntensity)>();
+                    foreach (var light in AmnesiaLight.All)
+                    {
+                        if (light == null || light.handHeld || light.enhancedAdded) continue;
+                        Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                        bool explosion = light.name is "BoomLight" or "DangerLight";
+                        sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f), explosion ? light.GetComponent<Light>().intensity : -1f));
+                    }
+                    for (int mode = 0; mode < 4; mode++)
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        HplGraphics.Apply(settings);
+                        foreach (var e in sources)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                                (e.eventIntensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.eventIntensity) > 1e-4f * Mathf.Max(1f, e.eventIntensity)))
+                                throw new InvalidOperationException("Storage: explosion/gameplay light changed " + e.light.name);
+                        if (altar.Lit != (stage >= 2) || map.player.lanternDisabled != (stage == 1))
+                            throw new InvalidOperationException("Storage: switching changed altar/lantern lock state");
+                        float ownIntensity = 0f;
+                        foreach (var own in altar.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) ownIntensity += rendered.intensity;
+                        if (stage >= 2 ? ownIntensity <= 0f : ownIntensity > 0.001f)
+                            throw new InvalidOperationException("Storage: altar lamp ignition/extinction lost");
+                        foreach (var light in AmnesiaLight.All)
+                            if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                                throw new InvalidOperationException("Storage: window affects gameplay darkness");
+                    }
+                }
+                foreach (var pair in new[] { ("torch_static01_5", "PointLight_12"), ("candle_floor_14", "PointLight_11") })
+                {
+                    var lamp = map.GetEntityByName(pair.Item1) as Props.PropLamp;
+                    var fill = map.GetLight(pair.Item2);
+                    if (lamp == null || fill == null) throw new InvalidOperationException("Storage: missing lamp connection " + pair);
+                    bool wasLit = lamp.Lit;
+                    try
+                    {
+                        foreach (bool burning in new[] { false, true })
+                        {
+                            HplGraphics.Apply(classic); lamp.SetLit(burning, false); lamp.UpdateLogic(0f);
+                            Color color = fill.CurrentColor; float original = fill.GetComponent<Light>().intensity;
+                            if (!burning && color != fill.diffuseColor) throw new InvalidOperationException("Storage: extinguished lamp leaves connected colour");
+                            foreach (int gi in new[] { 2, 0 })
+                            {
+                                var settings = classic.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                                HplGraphics.Apply(settings);
+                                if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - (gi > 0 ? 0f : original * 0.6f)) > 1e-4f * Mathf.Max(1f, original))
+                                    throw new InvalidOperationException("Storage: connected lamp loses GI fallback " + pair);
+                            }
+                        }
+                    }
+                    finally { lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f); }
+                }
+                string line = "Storage events PASS: red warning/white flash/black radius-zero explosion endpoints, altar ignition and lantern lock survive RTGI, no-GI, raster and classic; original sampled gameplay light is preserved; torch/candle connections keep colour and GI fallback; added windows do not affect darkness.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                altar.SetLit(altarLit, false); altar.UpdateLogic(0f);
+                map.player.lanternDisabled = disabled;
                 HplGraphics.Apply(user);
             }
         }
