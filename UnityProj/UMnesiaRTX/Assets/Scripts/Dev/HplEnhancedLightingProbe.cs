@@ -73,6 +73,7 @@ namespace RTXMnesia.Dev
             VerifySwitching(user, report);
             VerifyEntranceHallEvents(map, user, report);
             VerifyArchivesEvents(map, user, report);
+            VerifyLabEvents(map, user, report);
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -422,6 +423,59 @@ namespace RTXMnesia.Dev
                 }
                 finally { lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f); }
                 string line = "Archives events PASS: orb radius 0/20, corridor/passage fade endpoints, pink box and a connected lamp survive switching; lamp fill is suppressed with GI and returns without GI.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void VerifyLabEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/04_wine_cellar_lab.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "Valve_1_Light", "Valve_2_Light", "Valve_3_Light", "Valve_4_Light",
+                "LightChemical_1", "LightChemical_2", "LightChemical_3", "LightChemical_4", "LightBurn", "LightAcid", "LightBurn_1" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Lab: missing machine light " + name);
+                states.Add((light, light.Save()));
+            }
+            try
+            {
+                foreach (bool running in new[] { true, false })
+                {
+                    foreach (var (light, saved) in states)
+                    {
+                        light.SetColor(light.name == "LightBurn" ? new Color(saved.color.r, running ? 1f : 0.3f, saved.color.b, saved.color.a) :
+                            light.name == "LightBurn_1" ? new Color(0.45f, 0.425f, 0.4f, saved.color.a) : saved.color);
+                        light.SetRadius(light.name == "LightBurn_1" ? saved.radius : !running ? 0f :
+                            light.name.StartsWith("Valve_", StringComparison.Ordinal) ? 0.4f :
+                            light.name.StartsWith("LightChemical_", StringComparison.Ordinal) ? 0.5f :
+                            light.name == "LightBurn" ? 3f : 0.3f);
+                    }
+                    var classic = user.Copy(); classic.lightingSet = 0;
+                    HplGraphics.Apply(classic);
+                    var expected = new List<(AmnesiaLight light, Color color, float radius, float intensity)>();
+                    foreach (var (light, _) in states)
+                        expected.Add((light, light.CurrentColor, light.CurrentRadius, light.GetComponent<Light>().intensity));
+                    foreach (int mode in new[] { 1, 0, 1 })
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode;
+                        HplGraphics.Apply(settings);
+                        foreach (var e in expected)
+                        {
+                            float factor = mode == 1 && e.light.name == "LightBurn_1" ? 0.6f : 1f;
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity))
+                                throw new InvalidOperationException("Lab machine state changed by overlay: " + e.light.name);
+                        }
+                    }
+                }
+                string line = "Lab events PASS: 11 valve/chemical/burner/acid/ambience lights retain running and extinguished endpoints through switching; scripted ambience keeps its enhanced 0.6 multiplier.";
                 report.AppendLine(line);
                 Debug.Log("[EnhancedLighting] " + line);
             }

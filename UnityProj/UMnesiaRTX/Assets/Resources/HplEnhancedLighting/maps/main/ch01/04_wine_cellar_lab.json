@@ -1,0 +1,32 @@
+{
+  "lights": [
+    {"name": "SpotLight_3", "intensity": "0", "note": "Local moonlight cone three metres inside the stair room is replaced by the tilted area source at the actual light-well glass. Original name, cookie, pose and gameplay frustum remain."},
+    {"name": "PointLight_21", "intensity": "0.3", "shadows": "off", "note": "Weak blue light-well niche fill, reduced now that the glass emits light."},
+    {"name": "PointLight_22", "when": "gi", "intensity": "0", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. RTGI replaces fill."},
+    {"name": "PointLight_22", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. Reduced fallback without RTGI."},
+    {"name": "PointLight_23", "when": "gi", "intensity": "0", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. RTGI replaces fill."},
+    {"name": "PointLight_23", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. Reduced fallback without RTGI."},
+    {"name": "LightBurn_2", "when": "gi", "intensity": "0", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. RTGI replaces fill."},
+    {"name": "LightBurn_2", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. Reduced fallback without RTGI."},
+    {"name": "LightBurn_3", "when": "gi", "intensity": "0", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. RTGI replaces fill."},
+    {"name": "LightBurn_3", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. Reduced fallback without RTGI."},
+    {"name": "LightBurn_4", "when": "gi", "intensity": "0", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. RTGI replaces fill."},
+    {"name": "LightBurn_4", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Stair/door/lab room fill, including connected lamp contributions: keep names, colours and connections. Reduced fallback without RTGI."},
+    {"name": "LightBurn_1", "intensity": "0.6", "shadows": "off", "note": "Script-controlled lab ambience: EntityCallLamp increases its colour when lamps are lit. Keep that visible progression in both modes, with a weaker fill and no invented shadows. No window in the underground lab."},
+    {"name": "LightBurn", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "LightAcid", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "Valve_1_Light", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "Valve_2_Light", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "Valve_3_Light", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "Valve_4_Light", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "LightChemical_1", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "LightChemical_2", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "LightChemical_3", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "LightChemical_4", "note": "Acid machine light: preserve script colour/radius changes (initially zero), position and intensity. This is a real small flame or a coloured chemical effect, not removable room fill."},
+    {"name": "SpotLight_2", "note": "Paired green water-cookie accents at the floor hole: preserve the artistic/cave-creature effect, with their original absence of shadows."},
+    {"name": "SpotLight_4", "note": "Paired green water-cookie accents at the floor hole: preserve the artistic/cave-creature effect, with their original absence of shadows."}
+  ],
+  "add": [
+    {"name": "Window_sky_stairs", "type": "rect", "position": "9.5 -1.382 42.801", "target": "9.5 -3.118 38.111", "size": "1.87 1.15", "color": "0.55 0.6 0.8", "intensity": "110", "range": "18", "shadows": "on", "note": "Sky through the tilted cellar light-well glass (pPlane2, cellarbase_windows_alpha). Glass vertices give centre near (0,2.703,-1.042), width 1.87 m and tilt 20.3 degrees; map rotation flips Z. Source is about 25 cm toward the interior from the glass; stone throat blocks light naturally."}
+  ]
+}
