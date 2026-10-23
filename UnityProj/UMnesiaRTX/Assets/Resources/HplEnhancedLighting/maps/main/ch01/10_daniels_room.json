@@ -1,0 +1,16 @@
+{
+  "lights": [
+    {"name": "SpotLight_2", "intensity": "0", "note": "Detached warm window cone in the bedroom. The large glass now supplies area light; keep original shadow flag, pose and gameplay frustum."},
+    {"name": "SpotLight_3", "intensity": "0", "note": "Detached warm window cone above the study desk. Replace its rendering with light from the actual glass; keep original shadow flag and gameplay frustum."},
+    {"name": "PointLight_1", "when": "gi", "intensity": "0", "shadows": "off", "note": "Bedroom fill, also connected to bonfire_3. Real candles, fireplace and window supply direct light and RTGI bounce; preserve lamp colour contribution."},
+    {"name": "PointLight_1", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Weaker bedroom fill without RTGI; keep fireplace connection and original colour."},
+    {"name": "PointLight_2", "when": "gi", "intensity": "0", "shadows": "off", "note": "Study fill, also connected to bonfire_2. Real chandelier, candles, fireplace and window replace synthetic bounce when RTGI is active."},
+    {"name": "PointLight_2", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Weaker study fill without RTGI; retain the fireplace connection."},
+    {"name": "PointLight_3", "when": "gi", "intensity": "0", "shadows": "off", "note": "Windowless closet/entrance fill connected to candlestick_wall_5/6 and candlestick_tri_5/6. Real wall candle supplies direct light and RTGI; retain all original connections."},
+    {"name": "PointLight_3", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Weak closet navigation fill without RTGI, retaining the original lamp contributions and gameplay light."}
+  ],
+  "add": [
+    {"name": "Sky_StudyWindow", "type": "rect", "position": "10 2.42573 15.333804", "target": "10 2.42573 9.333804", "size": "2.15 1.92", "color": "0.55 0.65 0.78", "intensity": "110", "range": "14", "shadows": "on", "note": "window02_blue glass mansionbase_window_blueShape: local centre (0,2.42573,-0.283804), yaw180 instance (10,0,15.25). Source 20 cm inside glass, behind frame, directed into the study."},
+    {"name": "Sky_BedroomWindow", "type": "rect", "position": "20.000653 1.9608795 15.3338015", "target": "19.953932 1.9608795 9.333984", "size": "2.15 2.90", "color": "0.55 0.65 0.78", "intensity": "110", "range": "14", "shadows": "on", "note": "window_large_blue glass window_large_glass_blueShape: local centre (0,1.9369675,-0.283804) plus node y0.023912. Full map rotation (pi,-0.007787,pi) retained; source 20 cm inside glass, behind frame, directed into the bedroom."}
+  ]
+}

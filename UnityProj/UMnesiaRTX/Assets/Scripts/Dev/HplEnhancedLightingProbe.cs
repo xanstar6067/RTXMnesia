@@ -79,6 +79,7 @@ namespace RTXMnesia.Dev
             VerifyArchivesCellarState(map, user, report);
             VerifyCellarMazeState(map, user, report);
             VerifyBackHallEvents(map, user, report);
+            VerifyDanielsRoomLamps(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -781,6 +782,80 @@ namespace RTXMnesia.Dev
             finally
             {
                 foreach (var (light, saved) in states) light.Restore(saved);
+                foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void VerifyDanielsRoomLamps(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/10_daniels_room.map", StringComparison.Ordinal)) return;
+            var classic = user.Copy(); classic.lightingSet = 0;
+            HplGraphics.Apply(classic);
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 19) throw new InvalidOperationException("Daniels room: expected 19 lamps");
+            try
+            {
+                // Test the three connected fills independently; shared connections retain their original update order.
+                foreach (var pair in new[] { ("bonfire_3", "PointLight_1"), ("bonfire_2", "PointLight_2"), ("candlestick_wall_5", "PointLight_3") })
+                {
+                    var lamp = map.GetEntityByName(pair.Item1) as Props.PropLamp;
+                    var connected = map.GetLight(pair.Item2);
+                    if (lamp == null || connected == null) throw new InvalidOperationException("Daniels room: missing connection " + pair);
+                    bool wasLit = lamp.Lit;
+                    try
+                    {
+                        foreach (bool burning in new[] { false, true })
+                        {
+                            HplGraphics.Apply(classic);
+                            lamp.SetLit(burning, false); lamp.UpdateLogic(0f);
+                            Color expected = connected.CurrentColor;
+                            if (burning ? Mathf.Max(expected.r, expected.g, expected.b) <= Mathf.Max(connected.diffuseColor.r, connected.diffuseColor.g, connected.diffuseColor.b) : expected != connected.diffuseColor)
+                                throw new InvalidOperationException("Daniels room: lamp connection does not follow ignition " + lamp.Name);
+                            var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level)>();
+                            foreach (var source in AmnesiaLight.All)
+                            {
+                                if (source == null || source.handHeld || source.enhancedAdded) continue;
+                                Vector3 sample = source.transform.position + source.transform.forward * 0.3f;
+                                sources.Add((source, source.CurrentColor, source.CurrentRadius, sample, source.LightLevelAt(sample, 0f)));
+                            }
+                            for (int mode = 0; mode < 4; mode++)
+                            {
+                                var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                                settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                                HplGraphics.Apply(settings);
+                                if (lamp.Lit != burning || connected.CurrentColor != expected)
+                                    throw new InvalidOperationException("Daniels room: switching changed lamp state " + lamp.Name);
+                                float intensity = connected.GetComponent<Light>().intensity;
+                                if (mode == 0 ? intensity > 0.001f : intensity <= 0f)
+                                    throw new InvalidOperationException("Daniels room: connected fill lost GI suppression/fallback " + connected.name);
+                                foreach (var e in sources)
+                                    if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                        Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f)
+                                        throw new InvalidOperationException("Daniels room: gameplay light changed " + e.light.name);
+                                foreach (var source in AmnesiaLight.All)
+                                    if (source != null && source.enhancedAdded && source.LightLevelAt(source.transform.position, 0f) != 0f)
+                                        throw new InvalidOperationException("Daniels room: window affects gameplay light");
+                                foreach (var (other, _) in lamps)
+                                {
+                                    if (other.Lit) continue;
+                                    foreach (var own in other.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                                        if (own.TryGetComponent<Light>(out var rendered) && rendered.intensity > 0.001f)
+                                            throw new InvalidOperationException("Daniels room: extinguished lamp emits " + other.Name);
+                                }
+                            }
+                        }
+                    }
+                    finally { lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f); }
+                }
+                string line = "Daniels room lamps PASS: ignition/extinction of both fireplaces and the closet wall candle preserves connected colour, GI suppression, non-GI fallback and sampled gameplay light in RTGI, RT without GI, raster and classic; extinguished lamps stay dark; added windows do not affect gameplay.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
                 foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
                 HplGraphics.Apply(user);
             }
