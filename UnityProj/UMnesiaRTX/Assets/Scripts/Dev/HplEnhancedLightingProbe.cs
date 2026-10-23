@@ -75,6 +75,7 @@ namespace RTXMnesia.Dev
             VerifyArchivesEvents(map, user, report);
             VerifyLabEvents(map, user, report);
             VerifyWineCellarEvents(map, user, report);
+            VerifyDistilleryEvents(map, user, report);
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -526,6 +527,79 @@ namespace RTXMnesia.Dev
                     }
                 }
                 string line = "Wine cellar events PASS: 8 pickup/loft lights retain colour, radius (loft 0/7), rendered intensity and gameplay level across switching; chemical fade endpoints remain black.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void VerifyDistilleryEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/06_distillery.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "PointLight_38", "PointLight_39", "BoxLight_1" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Distillery: missing event light " + name);
+                states.Add((light, light.Save()));
+            }
+            try
+            {
+                // BreakPulleyBlocker fade endpoints and all three EnterHowlArea box colours.
+                for (int stage = 0; stage <= 3; stage++)
+                {
+                    foreach (var (light, saved) in states)
+                        light.SetColor(light.box ? new Color(stage * 0.05f, 0f, stage * 0.01f, saved.color.a) :
+                            stage == 0 ? saved.color : new Color(0f, 0f, 0f, 0f));
+                    var classic = user.Copy(); classic.lightingSet = 0;
+                    HplGraphics.Apply(classic);
+                    var expected = new List<(AmnesiaLight light, Color color, float radius, float intensity, float level)>();
+                    foreach (var (light, _) in states)
+                        expected.Add((light, light.CurrentColor, light.CurrentRadius,
+                            light.box ? 0f : light.GetComponent<Light>().intensity,
+                            light.LightLevelAt(light.transform.position + Vector3.down * 0.2f, 0f)));
+                    foreach (int mode in new[] { 1, 0, 1 })
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode;
+                        HplGraphics.Apply(settings);
+                        foreach (var e in expected)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                (!e.light.box && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity) > 1e-4f * Mathf.Max(1f, e.intensity)) ||
+                                Mathf.Abs(e.light.LightLevelAt(e.light.transform.position + Vector3.down * 0.2f, 0f) - e.level) > 1e-5f)
+                                throw new InvalidOperationException("Distillery event changed by overlay: " + e.light.name);
+                    }
+                }
+                foreach (var pair in new[] { ("torch_static01_14", "PointLight_36"), ("hanging_lantern_ceiling_1", "PointLight_35") })
+                {
+                    var lamp = map.GetEntityByName(pair.Item1) as Props.PropLamp;
+                    var connected = map.GetLight(pair.Item2);
+                    if (lamp == null || connected == null) throw new InvalidOperationException("Distillery: missing lamp connection");
+                    bool wasLit = lamp.Lit;
+                    try
+                    {
+                        lamp.SetLit(true, false); lamp.UpdateLogic(0f);
+                        Color onColor = connected.CurrentColor;
+                        if (Mathf.Max(onColor.r, onColor.g, onColor.b) <= 0f)
+                            throw new InvalidOperationException("Distillery: lamp does not feed connected fill");
+                        foreach (int gi in new[] { 2, 0 })
+                        {
+                            var settings = user.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                            HplGraphics.Apply(settings); lamp.UpdateLogic(0f);
+                            float intensity = connected.GetComponent<Light>().intensity;
+                            if (connected.CurrentColor != onColor || (gi > 0 ? intensity > 0.001f : intensity <= 0f))
+                                throw new InvalidOperationException("Distillery: connected fill lost its GI fallback");
+                        }
+                        lamp.SetLit(false, false); lamp.UpdateLogic(0f);
+                        if (connected.CurrentColor != connected.diffuseColor)
+                            throw new InvalidOperationException("Distillery: extinguished lamp leaves fill behind");
+                    }
+                    finally { lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f); }
+                }
+                string line = "Distillery events PASS: pulley accent fade endpoints and three howl box colours survive switching; torch and hanging lantern connections keep colour, GI suppression and non-GI fallback, and extinguish cleanly.";
                 report.AppendLine(line);
                 Debug.Log("[EnhancedLighting] " + line);
             }
