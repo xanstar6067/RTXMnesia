@@ -78,6 +78,7 @@ namespace RTXMnesia.Dev
             VerifyDistilleryEvents(map, user, report);
             VerifyArchivesCellarState(map, user, report);
             VerifyCellarMazeState(map, user, report);
+            VerifyBackHallEvents(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -695,6 +696,94 @@ namespace RTXMnesia.Dev
                 Debug.Log("[EnhancedLighting] " + line);
             }
             finally { HplGraphics.Apply(user); }
+        }
+
+        static void VerifyBackHallEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/09_back_hall.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "BoxLight_2", "PointLight_30" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Back hall: missing event light " + name);
+                states.Add((light, light.Save()));
+            }
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            for (int i = 0; i < 10; i++)
+            {
+                string name = i < 4 ? "chandelier_simple_" + (i + 2) : "candlestick_wall_" + (i + 1);
+                var lamp = map.GetEntityByName(name) as Props.PropLamp;
+                if (lamp == null) throw new InvalidOperationException("Back hall: missing guardian lamp " + name);
+                lamps.Add((lamp, lamp.Lit));
+            }
+            try
+            {
+                foreach (var (lamp, _) in lamps) { lamp.SetLit(false, false); lamp.UpdateLogic(0f); }
+                for (int stage = 0; stage < 3; stage++)
+                {
+                    foreach (var (light, saved) in states)
+                        light.SetColor(light.box ? stage == 0 ? saved.color : stage == 1 ?
+                            new Color(0.2f, 0f, 0.05f, 0f) : new Color(0.17f, 0.1f, 0.22f, saved.color.a) :
+                            stage == 1 ? new Color(0.8f, 0.2f, 0.4f, saved.color.a) : saved.color);
+                    var classic = user.Copy(); classic.lightingSet = 0;
+                    HplGraphics.Apply(classic);
+                    var expected = new List<(AmnesiaLight light, Color color, float radius, float intensity, float level)>();
+                    foreach (var (light, _) in states)
+                        expected.Add((light, light.CurrentColor, light.CurrentRadius,
+                            light.box ? 0f : light.GetComponent<Light>().intensity,
+                            light.LightLevelAt(light.transform.position + Vector3.down * 0.2f, 0f)));
+                    for (int mode = 0; mode < 4; mode++)
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        HplGraphics.Apply(settings);
+                        foreach (var e in expected)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                (!e.light.box && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity) > 1e-4f * Mathf.Max(1f, e.intensity)) ||
+                                Mathf.Abs(e.light.LightLevelAt(e.light.transform.position + Vector3.down * 0.2f, 0f) - e.level) > 1e-5f)
+                                throw new InvalidOperationException("Back hall: event light changed by switching: " + e.light.name);
+                        foreach (var (lamp, _) in lamps)
+                        {
+                            if (lamp.Lit) throw new InvalidOperationException("Back hall: guardian lamp reignited: " + lamp.Name);
+                            var ownLights = lamp.Component.GetComponentsInChildren<AmnesiaLight>(true);
+                            if (ownLights.Length == 0) throw new InvalidOperationException("Back hall: guardian lamp has no light: " + lamp.Name);
+                            foreach (var light in ownLights)
+                                if (light.TryGetComponent<Light>(out var rendered) && rendered.intensity > 0.001f)
+                                    throw new InvalidOperationException("Back hall: extinguished lamp still emits: " + light.name);
+                        }
+                    }
+                }
+                var connectedLamp = map.GetEntityByName("candlestick_floor_1") as Props.PropLamp;
+                var connected = map.GetLight("PointLight_13");
+                if (connectedLamp == null || connected == null) throw new InvalidOperationException("Back hall: missing floor lamp connection");
+                bool wasLit = connectedLamp.Lit;
+                try
+                {
+                    connectedLamp.SetLit(true, false); connectedLamp.UpdateLogic(0f);
+                    Color onColor = connected.CurrentColor;
+                    if (Mathf.Max(onColor.r, onColor.g, onColor.b) <= 0f) throw new InvalidOperationException("Back hall: connected fill receives no lamp colour");
+                    foreach (int gi in new[] { 2, 0 })
+                    {
+                        var settings = user.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                        HplGraphics.Apply(settings); connectedLamp.UpdateLogic(0f);
+                        float intensity = connected.GetComponent<Light>().intensity;
+                        if (connected.CurrentColor != onColor || (gi > 0 ? intensity > 0.001f : intensity <= 0f))
+                            throw new InvalidOperationException("Back hall: connected lamp lost GI fallback");
+                    }
+                    connectedLamp.SetLit(false, false); connectedLamp.UpdateLogic(0f);
+                    if (connected.CurrentColor != connected.diffuseColor) throw new InvalidOperationException("Back hall: lamp leaves connected fill after extinction");
+                }
+                finally { connectedLamp.SetLit(wasLit, false); connectedLamp.UpdateLogic(0f); }
+                string line = "Back hall events PASS: blue/guardian/blood-fountain box colours and black/pink trail endpoints survive RTGI, no-GI, raster and classic switching; 10 guardian lamps remain extinguished; floor lamp connection keeps colour, GI suppression and non-GI fallback.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                HplGraphics.Apply(user);
+            }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
