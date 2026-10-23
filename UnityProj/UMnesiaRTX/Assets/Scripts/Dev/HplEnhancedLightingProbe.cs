@@ -76,6 +76,8 @@ namespace RTXMnesia.Dev
             VerifyLabEvents(map, user, report);
             VerifyWineCellarEvents(map, user, report);
             VerifyDistilleryEvents(map, user, report);
+            VerifyArchivesCellarState(map, user, report);
+            bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -102,6 +104,7 @@ namespace RTXMnesia.Dev
                     if (mode.Contains("tex")) s.textures = 1;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
                     HplGraphics.Apply(s);
+                    map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
                     HplEnhancedRelief.SeparateSharedWalls();
                     yield return SetLantern(map, mode.Contains("lantern"));
                     var hidden = mode.Contains("only") ? HideOthers(map) : new List<Light>();
@@ -608,6 +611,50 @@ namespace RTXMnesia.Dev
                 foreach (var (light, saved) in states) light.Restore(saved);
                 HplGraphics.Apply(user);
             }
+        }
+
+        static void VerifyArchivesCellarState(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/07_archives_cellar.map", StringComparison.Ordinal)) return;
+            bool fog = map.FogActive;
+            var classic = user.Copy(); classic.lightingSet = 0;
+            HplGraphics.Apply(classic);
+            var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float causticIntensity)>();
+            foreach (var light in AmnesiaLight.All)
+            {
+                if (light == null || light.handHeld || light.enhancedAdded) continue;
+                Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                bool caustic = light.name.StartsWith("SpotLight_", StringComparison.Ordinal) &&
+                    light.name != "SpotLight_1" && light.name != "SpotLight_19";
+                sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                    caustic ? light.GetComponent<Light>().intensity : -1f));
+            }
+            try
+            {
+                foreach (bool flooded in new[] { false, true })
+                {
+                    map.SetFog(active: flooded);
+                    for (int mode = 0; mode < 4; mode++)
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        HplGraphics.Apply(settings);
+                        if (map.FogActive != flooded) throw new InvalidOperationException("Archives cellar: switching changed teleport fog state");
+                        foreach (var e in sources)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                                (e.causticIntensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.causticIntensity) > 1e-4f * Mathf.Max(1f, e.causticIntensity)))
+                                throw new InvalidOperationException("Archives cellar: gameplay/caustic state changed: " + e.light.name);
+                        foreach (var light in AmnesiaLight.All)
+                            if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                                throw new InvalidOperationException("Archives cellar: sky source affects gameplay light level");
+                    }
+                }
+                string line = $"Archives cellar state PASS: {sources.Count} original lights keep colour, radius and sampled gameplay level; 15 caustic intensities and dry/flooded fog states survive RTGI, no-GI, raster and classic switching; added sky lights do not affect gameplay.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally { map.SetFog(active: fog); HplGraphics.Apply(user); }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
