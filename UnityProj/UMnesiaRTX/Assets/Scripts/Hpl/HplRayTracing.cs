@@ -53,6 +53,12 @@ namespace RTXMnesia.Hpl
         /// halos, Mul decals, water) are not path traced.
         /// </summary>
         public static readonly int[] PathTracingSamples = { 0, 64, 256, 1024 };
+        /// <summary>
+        /// Layer of the renderers only RTGI sees (HplEnhancedEmission's copies of glowing materials): no camera draws it,
+        /// RTAO, RT reflections and path tracing leave it out of their rays.
+        /// </summary>
+        public const int GiOnlyLayer = 28;
+        const int AllButGiOnly = ~(1 << GiOnlyLayer);
 
         /// <summary>The source radius of a shadowed light while it is traced (HPL2 lights have none; candles, lamps).</summary>
         public const float SourceRadius = 0.04f;
@@ -123,6 +129,7 @@ namespace RTXMnesia.Hpl
             s_ao.active = Ao > 0;
             if (Ao > 0)
             {
+                s_ao.layerMask.Override(AllButGiOnly);
                 s_ao.rayTracing.Override(true);
                 s_ao.quality.Override(Ao - 1);
                 s_ao.intensity.Override(1f);
@@ -140,6 +147,7 @@ namespace RTXMnesia.Hpl
             s_reflection.active = Reflections > 0;
             if (Reflections == 0) return;
             s_reflection.enabled.Override(true);
+            s_reflection.layerMask.Override(AllButGiOnly);
             s_reflection.tracing.Override(RayCastingMode.RayTracing);
             s_reflection.mode.Override(RayTracingMode.Performance);
             // Custom quality: the values below instead of the asset's quality levels.
@@ -158,6 +166,7 @@ namespace RTXMnesia.Hpl
             s_pathTracing.active = PathTracing > 0;
             if (PathTracing == 0) return;
             s_pathTracing.enable.Override(true);
+            s_pathTracing.layerMask.Override(AllButGiOnly);
             s_pathTracing.maximumSamples.Override(PathTracingSamples[PathTracing]);
             s_pathTracing.maximumDepth.Override(4);
             s_pathTracing.maximumIntensity.Override(10f);
@@ -232,6 +241,7 @@ namespace RTXMnesia.Hpl
         public static void ConfigureCamera(Camera camera, HDAdditionalCameraData data, bool mirror)
         {
             bool on = Active && !mirror && Supported;
+            if ((camera.cullingMask & ~AllButGiOnly) != 0) camera.cullingMask &= AllButGiOnly;
             if (!data.customRenderingSettings) data.customRenderingSettings = true;
             Override(data, FrameSettingsField.RayTracing, on);
             Override(data, FrameSettingsField.ScreenSpaceShadows, on && Shadows > 0);

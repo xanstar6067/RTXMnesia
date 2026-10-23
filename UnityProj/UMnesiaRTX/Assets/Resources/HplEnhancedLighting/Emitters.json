@@ -1,0 +1,15 @@
+{
+  "materials": [
+    { "name": "sewer_fungi", "gain": "30",
+      "note": "Glowing fungi (20_sewer 238, 24_torture_choir_east, 26_torture_nave_redux, 29_orb_chamber): the patches light the wet walls and floor around them. 30: about 290 nits at white; a cap of a few cm lights only a soft patch a few dm around, at 10 nothing was seen." },
+    { "name": "poison_fungi_breakable", "gain": "30", "note": "Poison fungus (24, 26)." },
+    { "name": "poison_fungi_breakable_broken", "gain": "30", "note": "Its broken model." },
+    { "name": "orb", "gain": "30", "note": "Orb pieces (03, 22, 27, 29): bright blue glow." },
+    { "name": "orb_complete", "gain": "30", "note": "The whole orb (29)." },
+    { "name": "orb_room_monolith", "gain": "20", "note": "Monoliths of the orb chamber (29, 29 of them): their glowing veins." },
+    { "name": "barrier_machine", "gain": "20", "note": "Barrier machine (22, 27, Justine 03dungeon)." },
+    { "name": "coal", "gain": "30", "note": "Glowing coal pieces (coal.ent; the coal piles coal_pile01/02 of 13 and 29 have a material without illumination)." },
+    { "name": "emotion_stone", "gain": "10", "note": "Emotion stones (04, 11, 19, 21, 23): a faint glow." },
+    { "name": "choir_pillar_lantern", "gain": "20", "note": "Lanterns of the choir's pillars (24_torture_choir_east, 28 of them): an ornament, not a lamp entity." }
+  ]
+}

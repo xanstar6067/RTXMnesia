@@ -57,6 +57,7 @@ namespace RTXMnesia.Effects
             {
                 if (r.GetComponent<World.AmnesiaBillboard>() != null || r.GetComponentInParent<World.AmnesiaBillboard>() != null) continue;
                 if (!r.TryGetComponent(out MeshFilter f) || f.sharedMesh == null) continue;
+                if (r.gameObject.layer == Hpl.HplRayTracing.GiOnlyLayer) continue;
                 yield return r;
             }
         }

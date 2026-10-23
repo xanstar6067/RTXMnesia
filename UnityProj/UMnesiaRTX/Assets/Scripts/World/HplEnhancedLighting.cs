@@ -151,7 +151,7 @@ namespace RTXMnesia.World
 
         /// <summary>The enhanced lighting is chosen (graphics tab).</summary>
         public static bool Enabled => HplGraphics.Lighting == 1;
-        /// <summary>The current map has an overlay and it is applied.</summary>
+        /// <summary>The enhanced lighting is applied to the current map (its rules, and its overlay if it has one).</summary>
         public static bool Applied { get; private set; }
         /// <summary>Lights of the map changed and lights added (checks).</summary>
         public static int ChangedLights => s_changed.Count;
@@ -170,13 +170,16 @@ namespace RTXMnesia.World
             Refresh();
         }
 
-        /// <summary>The overlay of a map file, null without one.</summary>
+        /// <summary>
+        /// The overlay of a map file; a map without one gets an empty overlay (the rules for every map still apply),
+        /// null only without a map file.
+        /// </summary>
         static Overlay Load(string mapFile)
         {
             if (string.IsNullOrEmpty(mapFile)) return null;
             string path = ResourceFolder + System.IO.Path.ChangeExtension(mapFile.Replace('\\', '/'), null);
             var text = Resources.Load<TextAsset>(path);
-            if (text == null) return null;
+            if (text == null) return new Overlay();
             try
             {
                 return JsonUtility.FromJson<Overlay>(text.text);
@@ -217,6 +220,7 @@ namespace RTXMnesia.World
         {
             Applied = true;
             ApplyRules();
+            if (HplRayTracing.Active && HplRayTracing.Gi > 0) HplEnhancedEmission.Apply(s_map);
             if (s_overlay.lights != null)
                 foreach (var e in s_overlay.lights)
                 {
@@ -690,6 +694,7 @@ namespace RTXMnesia.World
                 light.Apply(light.CurrentColor, light.CurrentRadius);
             }
             s_changed.Clear();
+            HplEnhancedEmission.Revert();
             foreach (var (filter, original, split, wax, waxMesh, ownMaterial) in s_wax)
             {
                 if (filter != null) filter.sharedMesh = original;

@@ -110,6 +110,9 @@ namespace RTXMnesia.Dev
                     s.rtLanternShadows = !mode.Contains("noshadow");
                     if (mode.Contains("tex")) s.textures = 1;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
+                    // "noemit": without the GI copies of glowing materials (what their glow adds).
+                    HplEnhancedEmission.Enabled = !mode.Contains("noemit");
+                    HplEnhancedEmission.GainScale = mode.Contains("emitx") ? 30f : 1f;
                     HplGraphics.Apply(s);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
                     HplEnhancedRelief.SeparateSharedWalls();
@@ -246,7 +249,7 @@ namespace RTXMnesia.Dev
                     }
                     string line = $"{name} {mode}: mean {mean:0.0}, {ms:0.0} ms, enhanced applied={HplEnhancedLighting.Applied} " +
                                   $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} wax={HplEnhancedLighting.WaxCandles} (not generated {HplEnhancedLighting.WaxWithoutGenerated}), " +
-                                  $"RT={HplRayTracing.Active} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}";
+                                  $"RT={HplRayTracing.Active} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
                     report.AppendLine(line);
                     Debug.Log("[EnhancedLighting] " + line);
                     // The lights near the view as this mode draws them.
@@ -261,6 +264,8 @@ namespace RTXMnesia.Dev
                 }
             }
             HplEnhancedRelief.SeparateWalls = true;
+            HplEnhancedEmission.Enabled = true;
+            HplEnhancedEmission.GainScale = 1f;
             yield return SetLantern(map, false);
             yield return VerifyThunder(map, user, report);
             HplGraphics.Apply(user);
