@@ -74,6 +74,7 @@ namespace RTXMnesia.Dev
             VerifyEntranceHallEvents(map, user, report);
             VerifyArchivesEvents(map, user, report);
             VerifyLabEvents(map, user, report);
+            VerifyWineCellarEvents(map, user, report);
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -476,6 +477,55 @@ namespace RTXMnesia.Dev
                     }
                 }
                 string line = "Lab events PASS: 11 valve/chemical/burner/acid/ambience lights retain running and extinguished endpoints through switching; scripted ambience keeps its enhanced 0.6 multiplier.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void VerifyWineCellarEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/05_wine_cellar.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            for (int i = 0; i < 8; i++)
+            {
+                string name = i < 4 ? "LoftLight_" + (i + 1) : "PointLight_" + (i + 27);
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Wine cellar: missing event light " + name);
+                states.Add((light, light.Save()));
+            }
+            try
+            {
+                foreach (bool active in new[] { true, false })
+                {
+                    foreach (var (light, saved) in states)
+                    {
+                        bool loft = light.name.StartsWith("LoftLight_", StringComparison.Ordinal);
+                        light.SetColor(loft || active ? saved.color : Color.black);
+                        light.SetRadius(loft ? (active ? 7f : 0f) : saved.radius);
+                    }
+                    var classic = user.Copy(); classic.lightingSet = 0;
+                    HplGraphics.Apply(classic);
+                    var expected = new List<(AmnesiaLight light, Color color, float radius, float intensity, float level)>();
+                    foreach (var (light, _) in states)
+                        expected.Add((light, light.CurrentColor, light.CurrentRadius, light.GetComponent<Light>().intensity,
+                            light.LightLevelAt(light.transform.position + Vector3.down * 0.2f, 0f)));
+                    foreach (int mode in new[] { 1, 0, 1 })
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode;
+                        HplGraphics.Apply(settings);
+                        foreach (var e in expected)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity) > 1e-4f * Mathf.Max(1f, e.intensity) ||
+                                Mathf.Abs(e.light.LightLevelAt(e.light.transform.position + Vector3.down * 0.2f, 0f) - e.level) > 1e-5f)
+                                throw new InvalidOperationException("Wine cellar event changed by overlay: " + e.light.name);
+                    }
+                }
+                string line = "Wine cellar events PASS: 8 pickup/loft lights retain colour, radius (loft 0/7), rendered intensity and gameplay level across switching; chemical fade endpoints remain black.";
                 report.AppendLine(line);
                 Debug.Log("[EnhancedLighting] " + line);
             }
