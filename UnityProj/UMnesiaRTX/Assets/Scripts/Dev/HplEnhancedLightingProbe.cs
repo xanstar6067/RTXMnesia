@@ -72,6 +72,7 @@ namespace RTXMnesia.Dev
             }
             VerifySwitching(user, report);
             VerifyEntranceHallEvents(map, user, report);
+            VerifyArchivesEvents(map, user, report);
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -344,6 +345,83 @@ namespace RTXMnesia.Dev
                             throw new InvalidOperationException("Entrance hall event light changed by overlay: " + e.light.name);
                 }
                 string line = "Entrance hall events PASS: 19 guardian/slime/acid/trail/box lights retain scripted colour/radius endpoints, rendered intensity and gameplay light level through switching.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void VerifyArchivesEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/03_archives.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "OrbLight", "PointLight_2", "PointLight_4", "PointLight_30", "BoxLight_4" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Archives: missing event light " + name);
+                states.Add((light, light.Save()));
+            }
+            try
+            {
+                foreach (float orbRadius in new[] { 0f, 20f })
+                {
+                    foreach (var (light, saved) in states)
+                    {
+                        light.SetColor(light.name == "OrbLight" ? Color.white :
+                            light.box ? new Color(1f, 0f, 0.2f, 1f) : Color.black);
+                        light.SetRadius(light.name == "OrbLight" ? orbRadius :
+                            light.name == "PointLight_30" ? 0f : saved.radius);
+                    }
+                    foreach (int lighting in new[] { 1, 0, 1, 0 })
+                    {
+                        var settings = user.Copy();
+                        settings.lightingSet = lighting;
+                        HplGraphics.Apply(settings);
+                        foreach (var (light, saved) in states)
+                        {
+                            Color color = light.name == "OrbLight" ? Color.white :
+                                light.box ? new Color(1f, 0f, 0.2f, 1f) : Color.black;
+                            float radius = light.name == "OrbLight" ? orbRadius :
+                                light.name == "PointLight_30" ? 0f : saved.radius;
+                            if (light.CurrentColor != color || light.CurrentRadius != radius ||
+                                (!light.box && color == Color.black && light.GetComponent<Light>().intensity > 0.001f) ||
+                                (light.name == "OrbLight" && (light.enhancedIntensity != 1f || light.enhancedRange != 0f)))
+                                throw new InvalidOperationException("Archives event state changed by overlay: " + light.name);
+                        }
+                    }
+                }
+                var lamp = map.GetEntityByName("hanging_lantern_wall_1") as Props.PropLamp;
+                var connected = map.GetLight("PointLight_13");
+                if (lamp == null || connected == null) throw new InvalidOperationException("Archives: missing lamp connection");
+                bool wasLit = lamp.Lit;
+                try
+                {
+                    lamp.SetLit(true, false);
+                    lamp.UpdateLogic(0f);
+                    Color onColor = connected.CurrentColor;
+                    if (Mathf.Max(onColor.r, onColor.g, onColor.b) <= 0f)
+                        throw new InvalidOperationException("Archives: lit lamp does not feed its connected fill");
+                    foreach (int gi in new[] { 2, 0 })
+                    {
+                        var settings = user.Copy();
+                        settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                        HplGraphics.Apply(settings);
+                        lamp.UpdateLogic(0f);
+                        float intensity = connected.GetComponent<Light>().intensity;
+                        if (connected.CurrentColor != onColor || (gi > 0 ? intensity > 0.001f : intensity <= 0f))
+                            throw new InvalidOperationException("Archives: overlay breaks connected lamp contribution");
+                    }
+                    lamp.SetLit(false, false);
+                    lamp.UpdateLogic(0f);
+                    if (connected.CurrentColor != connected.diffuseColor)
+                        throw new InvalidOperationException("Archives: extinguished lamp leaves connected light behind");
+                }
+                finally { lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f); }
+                string line = "Archives events PASS: orb radius 0/20, corridor/passage fade endpoints, pink box and a connected lamp survive switching; lamp fill is suppressed with GI and returns without GI.";
                 report.AppendLine(line);
                 Debug.Log("[EnhancedLighting] " + line);
             }
