@@ -77,6 +77,7 @@ namespace RTXMnesia.Dev
             VerifyWineCellarEvents(map, user, report);
             VerifyDistilleryEvents(map, user, report);
             VerifyArchivesCellarState(map, user, report);
+            VerifyCellarMazeState(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -655,6 +656,45 @@ namespace RTXMnesia.Dev
                 Debug.Log("[EnhancedLighting] " + line);
             }
             finally { map.SetFog(active: fog); HplGraphics.Apply(user); }
+        }
+
+        static void VerifyCellarMazeState(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/08_cellar_maze.map", StringComparison.Ordinal)) return;
+            var classic = user.Copy(); classic.lightingSet = 0;
+            HplGraphics.Apply(classic);
+            var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float protectedIntensity)>();
+            foreach (var light in AmnesiaLight.All)
+            {
+                if (light == null || light.handHeld || light.enhancedAdded) continue;
+                Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                bool preserve = light.name.StartsWith("SpotLight_", StringComparison.Ordinal) &&
+                    light.name != "SpotLight_2" && light.name != "SpotLight_4" ||
+                    light.name is "PointLight_25" or "PointLight_27" or "PointLight_28";
+                sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                    preserve ? light.GetComponent<Light>().intensity : -1f));
+            }
+            try
+            {
+                for (int mode = 0; mode < 4; mode++)
+                {
+                    var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                    settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                    HplGraphics.Apply(settings);
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.protectedIntensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.protectedIntensity) > 1e-4f * Mathf.Max(1f, e.protectedIntensity)))
+                            throw new InvalidOperationException("Cellar maze: gameplay/water/organic light changed: " + e.light.name);
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Cellar maze: aperture affects gameplay light level");
+                }
+                string line = $"Cellar maze state PASS: {sources.Count} original lights keep colour, radius and sampled gameplay level; 8 caustics and 4 organic point/spot intensities survive RTGI, no-GI, raster and classic switching; added aperture lights do not affect gameplay.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally { HplGraphics.Apply(user); }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
