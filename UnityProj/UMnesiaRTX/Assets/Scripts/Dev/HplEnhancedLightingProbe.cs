@@ -80,6 +80,8 @@ namespace RTXMnesia.Dev
             VerifyCellarMazeState(map, user, report);
             VerifyBackHallEvents(map, user, report);
             VerifyDanielsRoomLamps(map, user, report);
+            var studyCheck = VerifyStudyEvents(map, user, report);
+            while (studyCheck.MoveNext()) yield return studyCheck.Current;
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -857,6 +859,107 @@ namespace RTXMnesia.Dev
             finally
             {
                 foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static IEnumerator VerifyStudyEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/11_study.map", StringComparison.Ordinal)) yield break;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "SpotLight_4", "SpotLight_8", "PointLight_34" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Study: missing event light " + name);
+                states.Add((light, light.Save()));
+            }
+            var windows = new List<(HplEntity entity, bool active)>();
+            foreach (string name in new[] { "windowb_1", "windowb_2", "mansionbase_large_window_breakable_1" })
+            {
+                var entity = map.GetEntityByName(name);
+                if (entity == null) throw new InvalidOperationException("Study: missing window " + name);
+                windows.Add((entity, entity.Active));
+            }
+            var classic = user.Copy(); classic.lightingSet = 0;
+            try
+            {
+                // Endpoint geometry states: intact, cracked with breakable glass, and open. No prop is destroyed.
+                for (int stage = 0; stage < 3; stage++)
+                {
+                    windows[0].entity.SetActive(stage == 0);
+                    windows[1].entity.SetActive(stage != 0);
+                    windows[2].entity.SetActive(stage == 1);
+                    foreach (var (light, saved) in states)
+                    {
+                        light.SetColor(light.name == "SpotLight_4" ? stage == 2 ? new Color(0.4f, 0.5f, 0.9f, saved.color.a) : saved.color :
+                            stage == 2 ? new Color(0f, 0f, 0f, light.name == "SpotLight_8" ? 0f : saved.color.a) : saved.color);
+                        light.SetRadius(light.name == "PointLight_34" && stage == 2 ? 0f : saved.radius);
+                    }
+                    HplGraphics.Apply(classic);
+                    var expected = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity)>();
+                    foreach (var (light, _) in states)
+                    {
+                        Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                        expected.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f), light.GetComponent<Light>().intensity));
+                    }
+                    for (int mode = 0; mode < 4; mode++)
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        HplGraphics.Apply(settings);
+                        yield return null;
+                        yield return null; // Follow components have started and evaluated their source colours.
+                        foreach (var e in expected)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                                Mathf.Abs(e.light.GetComponent<Light>().intensity - (mode != 3 && e.light.name != "PointLight_34" ? 0f : e.intensity)) > 1e-4f * Mathf.Max(1f, e.intensity))
+                                throw new InvalidOperationException("Study: window/fade state changed " + e.light.name);
+                        if (windows[0].entity.Active != (stage == 0) || windows[1].entity.Active != (stage != 0) || windows[2].entity.Active != (stage == 1))
+                            throw new InvalidOperationException("Study: switching changed window geometry state");
+                        int follows = 0;
+                        foreach (var light in AmnesiaLight.All)
+                        {
+                            if (light == null || !light.enhancedAdded) continue;
+                            if (light.LightLevelAt(light.transform.position, 0f) != 0f) throw new InvalidOperationException("Study: added sky affects gameplay");
+                            if (!light.TryGetComponent<HplEnhancedLightFollow>(out var follow)) continue;
+                            bool shouldEmit = follow.source.name == "SpotLight_8" ? stage != 2 : stage == 2;
+                            var rendered = light.GetComponent<Light>();
+                            if (rendered.enabled != shouldEmit || Mathf.Abs(rendered.intensity - (shouldEmit ? follow.intensity : 0f)) > 0.01f)
+                                throw new InvalidOperationException("Study: window does not follow event source " + follow.source.name);
+                            follows++;
+                        }
+                        if (follows != (mode == 3 ? 0 : 2)) throw new InvalidOperationException("Study: missing/accumulated window followers");
+                    }
+                }
+                var lamp = map.GetEntityByName("candlestick_floor_5") as Props.PropLamp;
+                var fill = map.GetLight("PointLight_11");
+                if (lamp == null || fill == null) throw new InvalidOperationException("Study: missing northern floor candle connection");
+                bool wasLit = lamp.Lit;
+                try
+                {
+                    foreach (bool burning in new[] { false, true })
+                    {
+                        lamp.SetLit(burning, false); lamp.UpdateLogic(0f);
+                        Color color = fill.CurrentColor;
+                        foreach (int gi in new[] { 2, 0 })
+                        {
+                            var settings = classic.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                            HplGraphics.Apply(settings);
+                            float value = fill.GetComponent<Light>().intensity;
+                            if (fill.CurrentColor != color || (gi > 0 || !burning ? value > 0.001f : value <= 0f))
+                                throw new InvalidOperationException("Study: connected fill loses ignition/GI state");
+                        }
+                    }
+                }
+                finally { lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f); }
+                string line = "Study events PASS: intact/cracked/open window states survive RTGI, no-GI, raster and classic; two glass areas follow SpotLight_8/4, northern PointLight_34 keeps fade-to-black/radius-zero and gameplay level; northern floor candle keeps connection/GI fallback; added sky does not affect gameplay.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                foreach (var (entity, active) in windows) entity.SetActive(active);
                 HplGraphics.Apply(user);
             }
         }
