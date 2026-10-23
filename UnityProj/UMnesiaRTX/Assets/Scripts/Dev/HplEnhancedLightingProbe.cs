@@ -104,7 +104,8 @@ namespace RTXMnesia.Dev
                     s.lighting = mode.Contains("_rt") ? 1 : 0;
                     s.dlssMode = 0;
                     s.antialiasing = (int)HplAntialiasing.Taa;
-                    s.rtPathTracing = 0;
+                    // "_pt": path tracing, 64 samples (accumulated over the frames below; it has no custom pass: no box light, no fog).
+                    s.rtPathTracing = mode.Contains("_pt") ? 1 : 0;
                     s.rtGi = mode.Contains("nogi") ? 0 : 2;
                     s.rtLanternShadows = !mode.Contains("noshadow");
                     if (mode.Contains("tex")) s.textures = 1;
@@ -133,7 +134,7 @@ namespace RTXMnesia.Dev
                     var rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
                     camera.targetTexture = rt;
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-                    const int frames = 40;
+                    int frames = s.rtPathTracing > 0 ? 160 : 40;
                     for (int i = 0; i < frames; i++)
                     {
                         yield return null;

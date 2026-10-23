@@ -41,7 +41,14 @@
     { "name": "PointLight_30", "when": "gi", "intensity": "0", "note": "Collapsed room (x -12..-6, z 17-24): fill over the whole room (radius 10). The light falls through the planks over the hole in the ceiling." },
     { "name": "PointLight_30", "when": "nogi", "intensity": "0.6" },
     { "name": "PointLight_31", "when": "gi", "intensity": "0", "note": "Collapsed room: fill just under the hole." },
-    { "name": "PointLight_31", "when": "nogi", "intensity": "0.6" }
+    { "name": "PointLight_31", "when": "nogi", "intensity": "0.6" },
+    { "name": "BoxLight_2", "when": "gi", "intensity": "0",
+      "note": "Upper tier: the tall moonlit hall over the corridor (x 1.5-16, y 6.5-20.5, z 2.6-35.6), seen from the corridor through the hole in its ceiling (x 8.5, z 19). HPL2 lit it with a flat box light: drawn by a custom pass, so missing from path tracing, reflections and GI. Its six large windows light it instead (Window_sky_hall_*), RTGI carries the bounce." },
+    { "name": "BoxLight_2", "when": "nogi", "intensity": "0.6", "note": "Without GI a weaker rest of the flat ambient: the windows light only what faces them." },
+    { "name": "PointLight_40", "when": "gi", "intensity": "0", "note": "Upper tier: fill under the ceiling (radius 5.5), no source." },
+    { "name": "PointLight_40", "when": "nogi", "intensity": "0.6" },
+    { "name": "PointLight_41", "when": "gi", "intensity": "0", "note": "Upper tier: fill just over the hole in the corridor's ceiling (radius 4)." },
+    { "name": "PointLight_41", "when": "nogi", "intensity": "0.6" }
   ],
   "add": [
     { "name": "Window_sky_17", "type": "rect", "position": "37.40 0.675 17", "target": "30 0.675 17", "size": "1.1 1.47",
@@ -61,6 +68,19 @@
       "note": "Night sky behind the boarded window of the north room: the planks shadow it." },
     { "name": "Hole_light_collapsed_room", "type": "rect", "position": "-9.3 3.4 20.75", "target": "-9.3 -2 20.75", "size": "2.2 3.2",
       "color": "0.55 0.65 0.78", "intensity": "80", "range": "10", "shadows": "on",
-      "note": "Collapsed room: the moonlit hall above, seen through the hole in the ceiling (rocks at 2.75 m, planks at 3.1 m shadow it)." }
+      "note": "Collapsed room: the moonlit hall above, seen through the hole in the ceiling (rocks at 2.75 m, planks at 3.1 m shadow it)." },
+    { "name": "Window_sky_hall_east_11.25", "type": "rect", "position": "15.99 10.85 11.25", "target": "8 10.85 11.25", "size": "2.1 2.7",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "20", "shadows": "on",
+      "note": "Upper tier: night sky through the large window (glass 2.2 x 2.9 m with an arch, 4 cm in front of it); the frame shadows it." },
+    { "name": "Window_sky_hall_east_19.25", "type": "rect", "position": "15.99 10.85 19.25", "target": "8 10.85 19.25", "size": "2.1 2.7",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "20", "shadows": "on" },
+    { "name": "Window_sky_hall_east_27.25", "type": "rect", "position": "15.99 10.85 27.25", "target": "8 10.85 27.25", "size": "2.1 2.7",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "20", "shadows": "on" },
+    { "name": "Window_sky_hall_west_11.25", "type": "rect", "position": "1.51 10.85 11.25", "target": "9.5 10.85 11.25", "size": "2.1 2.7",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "20", "shadows": "on" },
+    { "name": "Window_sky_hall_west_19.25", "type": "rect", "position": "1.51 10.85 19.25", "target": "9.5 10.85 19.25", "size": "2.1 2.7",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "20", "shadows": "on" },
+    { "name": "Window_sky_hall_west_27.25", "type": "rect", "position": "1.51 10.85 27.25", "target": "9.5 10.85 27.25", "size": "2.1 2.7",
+      "color": "0.55 0.65 0.78", "intensity": "150", "range": "20", "shadows": "on" }
   ]
 }

@@ -77,7 +77,8 @@ namespace RTXMnesia.World
             {
                 if (light == null || !light.Visible) continue;
                 // cLightBox::IsVisible: all of the color ≤ 0 hides the box.
-                Color c = light.CurrentColor;
+                // The enhanced lighting's overlay can dim it (0: windows and RTGI light the room instead).
+                Color c = light.CurrentColor * light.enhancedIntensity;
                 if (c.r <= 0f && c.g <= 0f && c.b <= 0f && c.a <= 0f) continue;
                 if (count == MaxBoxes)
                 {
