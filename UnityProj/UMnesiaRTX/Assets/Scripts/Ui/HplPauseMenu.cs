@@ -31,6 +31,8 @@ namespace RTXMnesia.Ui
         RtEnabled, ScrollUp, ScrollDown, HdrCalibrate, HdrCalibrationClose, DebugPanel,
         // Soft (PCSS) and contact shadows of the enhanced lighting.
         SoftShadows, ContactShadows, LanternShadow, ShadowCache,
+        // Darkness by the visible light (game options).
+        VisibleDarkness,
     }
 
     /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>

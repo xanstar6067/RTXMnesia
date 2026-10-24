@@ -3,6 +3,7 @@ using RTXMnesia.Dynamics;
 using RTXMnesia.Hpl;
 using Unity.Collections;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace RTXMnesia.World
 {
@@ -19,6 +20,8 @@ namespace RTXMnesia.World
     /// flickering lamps change their HDRP lights, which the next estimate reads.
     /// Measured a few times a second (the grid shifts each time, so thin things are found too) and smoothed; the rays
     /// run as one batch on the job threads. HplRayTracing gives its RT shadow slots by it.
+    /// The same light at points in the air is Daniel's own light sensor (<see cref="SensorLux"/>, the darkness by the
+    /// visible light: Player.PlayerLightLevel).
     /// </summary>
     public static class HplLightAnalysis
     {
@@ -101,7 +104,7 @@ namespace RTXMnesia.World
             if (camera == null || Time.unscaledTime < s_next) return;
             s_next = Time.unscaledTime + Interval;
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            GatherSources();
+            GatherSources(false, default);
             int count = CastGrid(camera);
             var raw = Estimate(count);
 
@@ -119,13 +122,18 @@ namespace RTXMnesia.World
             s_pass++;
         }
 
-        static void GatherSources()
+        /// <summary>
+        /// The lights that light the map now. For the <paramref name="sensor"/> only those of <paramref name="scene"/>,
+        /// without the lights in the hand (the lit lantern counts on its own) and the player's darkness light.
+        /// </summary>
+        static void GatherSources(bool sensor, Scene scene)
         {
             s_sources.Clear();
             s_boxes.Clear();
             foreach (var light in AmnesiaLight.All)
             {
                 if (light == null || !light.isActiveAndEnabled) continue;
+                if (sensor && (light.handHeld || light.excludeFromLightLevel || light.gameObject.scene != scene)) continue;
                 if (light.box)
                 {
                     if (!light.Visible) continue;
@@ -168,7 +176,7 @@ namespace RTXMnesia.World
             }
         }
 
-        static int QueryMask => Physics.DefaultRaycastLayers & ~(1 << 2) & ~(1 << HplPhysicsWorld.NoCollideLayer);
+        public static int QueryMask => Physics.DefaultRaycastLayers & ~(1 << 2) & ~(1 << HplPhysicsWorld.NoCollideLayer);
 
         /// <summary>The visible surfaces: one ray per cell of the grid, shifted inside the cell each estimate.</summary>
         static int CastGrid(Camera camera)
@@ -203,7 +211,10 @@ namespace RTXMnesia.World
             return count;
         }
 
-        /// <summary>Illuminance (lux) of a light at a point before shadows; 0 out of its range, cone or facing away.</summary>
+        /// <summary>
+        /// Illuminance (lux) of a light at a point before shadows; 0 out of its range, cone or facing away. A zero
+        /// <paramref name="normal"/>: a surface facing the light (the sensor).
+        /// </summary>
         static float Lux(Source s, Vector3 point, Vector3 normal)
         {
             Vector3 toLight = s.position - point;
@@ -211,7 +222,7 @@ namespace RTXMnesia.World
             float r2 = s.range * s.range;
             if (d2 >= r2 || d2 < 1e-6f) return 0f;
             Vector3 l = toLight / Mathf.Sqrt(d2);
-            float nl = Vector3.Dot(normal, l);
+            float nl = normal == Vector3.zero ? 1f : Vector3.Dot(normal, l);
             if (nl <= 0f) return 0f;
             // HDRP's range window.
             float f = d2 / r2;
@@ -232,6 +243,53 @@ namespace RTXMnesia.World
                 emit = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(s.cosOuter, s.cosInner, c));
             }
             return s.intensity * emit * nl * window / d2;
+        }
+
+        /// <summary>
+        /// Daniel's own light sensor: at each of the first <paramref name="count"/> points (in the air, around the body)
+        /// the illuminance (lux) of a surface facing each light of <paramref name="scene"/>, summed over the lights a ray
+        /// from the point reaches (not through walls; the light's own lamp does not stop it), plus the box lights the
+        /// point is in. So it is the light that would be seen on Daniel there, of the lights as they shine now (lit, put
+        /// out, fading, flickering), without the light that bounces (GI).
+        /// </summary>
+        public static void SensorLux(Scene scene, Vector3[] points, int count, float[] lux)
+        {
+            GatherSources(true, scene);
+            s_pairs.Clear();
+            for (int p = 0; p < count; p++)
+            {
+                float total = 0f;
+                foreach (var (bounds, box) in s_boxes)
+                    if (bounds.Contains(points[p])) total += box;
+                lux[p] = total;
+                for (int i = 0; i < s_sources.Count; i++)
+                {
+                    float l = Lux(s_sources[i], points[p], Vector3.zero);
+                    if (l >= MinLux) s_pairs.Add(new Pair { point = p, source = i, lux = l });
+                }
+            }
+            if (s_pairs.Count == 0) return;
+            var commands = new NativeArray<RaycastCommand>(s_pairs.Count, Allocator.TempJob);
+            var hits = new NativeArray<RaycastHit>(s_pairs.Count, Allocator.TempJob);
+            var query = new QueryParameters(QueryMask, false, QueryTriggerInteraction.Ignore, false);
+            for (int i = 0; i < s_pairs.Count; i++)
+            {
+                var pair = s_pairs[i];
+                Vector3 from = points[pair.point];
+                Vector3 to = s_sources[pair.source].position - from;
+                float d = to.magnitude;
+                commands[i] = new RaycastCommand(from, to / d, query, Mathf.Max(d - LightMargin, 0f));
+            }
+            RaycastCommand.ScheduleBatch(commands, hits, 32, 1).Complete();
+            for (int i = 0; i < s_pairs.Count; i++)
+            {
+                var pair = s_pairs[i];
+                var entity = s_sources[pair.source].entity;
+                var blocker = hits[i].collider;
+                if (blocker == null || entity != null && blocker.transform.IsChildOf(entity)) lux[pair.point] += pair.lux;
+            }
+            commands.Dispose();
+            hits.Dispose();
         }
 
         static Dictionary<AmnesiaLight, float> Estimate(int count)

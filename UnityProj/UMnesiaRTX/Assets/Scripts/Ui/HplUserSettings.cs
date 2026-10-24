@@ -79,6 +79,8 @@ namespace RTXMnesia.Ui
         public bool commentary;
         /// <summary>Technical map testing panel on the physical grave/Ё key. Global, outside profiles.</summary>
         public bool debugPanel;
+        /// <summary>Darkness by the visible light with the enhanced lighting (Player.PlayerLightLevel). Global, outside profiles.</summary>
+        public bool visibleDarkness = true;
 
         /// <summary>The applied commentary option (cLuxMapHandler::mbShowCommentary).</summary>
         public static bool ShowCommentary { get; set; }
@@ -237,6 +239,8 @@ namespace RTXMnesia.Ui
             ShowCommentary = commentary;
             QualitySettings.vSyncCount = vSync ? 1 : 0;
             HplGraphics.Apply(this);
+            Player.PlayerLightLevel.VisibleChosen = visibleDarkness;
+            map.player?.LightLevel?.Refresh();
         }
 
         public void Save()

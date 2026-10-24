@@ -9,6 +9,7 @@ using RTXMnesia.Hpl;
 using RTXMnesia.ScriptApi;
 using RTXMnesia.Ui;
 using RTXMnesia.World;
+using RTXMnesia.Player;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -377,6 +378,33 @@ namespace RTXMnesia.Dev
                                       $"{ranked.Count} lights seen: {shares}";
                     report.AppendLine("    " + analysis);
                     Debug.Log($"[EnhancedLighting] {name} {mode} {analysis}");
+                    // Daniel's light level here: HPL2's light radii and the visible light (the darkness by the visible light).
+                    player.LightLevel.Measure(false, out float classicNormal, out float classicExt);
+                    player.LightLevel.Measure(true, out float visibleNormal, out float visibleExt);
+                    string sensor = $"darkness sensor: classic {classicNormal:0.000}/{classicExt:0.000}, visible {visibleNormal:0.000}/{visibleExt:0.000} " +
+                                    $"(normal/extended; darkness light below 0.2, sanity drain at 0.15 and below), in use {(PlayerLightLevel.VisibleOn ? "visible" : "classic")}";
+                    report.AppendLine("    " + sensor);
+                    Debug.Log($"[EnhancedLighting] {name} {mode} {sensor}");
+                    if (!float.IsFinite(visibleNormal) || !float.IsFinite(visibleExt) || visibleNormal < 0f || visibleExt < visibleNormal)
+                        throw new InvalidOperationException($"darkness sensor: bad visible levels {visibleNormal}/{visibleExt}");
+                    if (mode.Contains("lantern") && visibleNormal < 1f)
+                        throw new InvalidOperationException($"darkness sensor: the lit lantern must give at least 1, got {visibleNormal}");
+                    // Every light off in this frame (the map turns some back on later): only the lantern is left.
+                    var turnedOff = new List<Light>();
+                    var boxesOff = new List<AmnesiaLight>();
+                    foreach (var light in AmnesiaLight.All)
+                    {
+                        if (light == null || light.handHeld) continue;
+                        if (light.box) { if (light.Visible) { light.SetVisible(false); boxesOff.Add(light); } }
+                        else if (light.TryGetComponent<Light>(out var l) && l.enabled) { l.enabled = false; turnedOff.Add(l); }
+                    }
+                    player.LightLevel.Measure(true, out float darkNormal, out float darkExt);
+                    foreach (var l in turnedOff) l.enabled = true;
+                    foreach (var light in boxesOff) light.SetVisible(true);
+                    float lanternLevel = player.Lantern != null && player.Lantern.Active ? 1f : 0f;
+                    report.AppendLine($"    darkness sensor with every light off: {darkNormal:0.000}/{darkExt:0.000} (lantern {lanternLevel})");
+                    if (Mathf.Abs(darkNormal - lanternLevel) > 0.001f || Mathf.Abs(darkExt - lanternLevel) > 0.001f)
+                        throw new InvalidOperationException($"darkness sensor: every light off, still {darkNormal}/{darkExt}");
                     // The lights near the view as this mode draws them.
                     foreach (var light in AmnesiaLight.All)
                     {
