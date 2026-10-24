@@ -116,6 +116,7 @@ namespace RTXMnesia.Dev
                 VerifyChoirEastLighting(map, user, report);
                 VerifyCellTunnelsLighting(map, user, report);
                 VerifyNaveReduxLighting(map, user, report);
+                VerifyZimmermanLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -168,6 +169,7 @@ namespace RTXMnesia.Dev
                     ApplyChoirEastLightingPreview(map, mode);
                     ApplyCellTunnelsLightingPreview(map, mode);
                     ApplyNaveReduxLightingPreview(map, mode);
+                    ApplyZimmermanLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3162,6 +3164,80 @@ namespace RTXMnesia.Dev
             {
                 foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
                 foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void ApplyZimmermanLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/26_zimmerman_vision.map", StringComparison.Ordinal)) return;
+            // Endpoints of the authored effects only; no dialogue, rain sound, timers, movement locks or map change.
+            map.effects.Sepia.FadeTo(mode.Contains("zimmervision") ? .5f : 0f, 100f);
+            map.effects.Sepia.Update(1f);
+            map.effects.RadialBlur.SetBlurStartDist(.2f);
+            map.effects.RadialBlur.FadeTo(mode.Contains("zimmervision") ? .1f : 0f, 100f);
+            map.effects.RadialBlur.Update(1f);
+        }
+
+        static void VerifyZimmermanLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/26_zimmerman_vision.map", StringComparison.Ordinal)) return;
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            var originals = new List<(AmnesiaLight light, Color color, float radius, bool visible, Vector3 position, Vector3 sample, float level, float intensity)>();
+            HplGraphics.Apply(classic);
+            int standalone = 0;
+            foreach (var light in AmnesiaLight.All)
+            {
+                if (light == null || light.handHeld || light.enhancedAdded) continue;
+                if (light.GetComponentInParent<AmnesiaEntity>() == null && !light.excludeFromLightLevel) standalone++;
+                Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                originals.Add((light, light.CurrentColor, light.CurrentRadius, light.Visible, light.transform.position, sample,
+                    light.LightLevelAt(sample, 0f), light.TryGetComponent<Light>(out var l) ? l.intensity : -1f));
+            }
+            if (standalone != 6) throw new InvalidOperationException("Zimmerman: expected six original map lights");
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp) throw new InvalidOperationException("Zimmerman: unexpected lamp");
+            float sepia = map.effects.Sepia.Amount, blur = map.effects.RadialBlur.Size, startDist = map.effects.RadialBlur.StartDist;
+            try
+            {
+                foreach (bool vision in new[] { false, true })
+                {
+                    ApplyZimmermanLightingPreview(map, vision ? "zimmervision" : "normal");
+                    for (int cycle = 0; cycle < 2; cycle++)
+                        for (int mode = 0; mode < 5; mode++)
+                        {
+                            var settings = classic.Copy(); settings.lightingSet = mode == 4 ? 0 : 1; settings.lighting = mode < 2 ? 1 : 0;
+                            settings.rtGi = mode == 0 ? 2 : 0; settings.ssgi = mode == 2 ? 2 : 0;
+                            HplGraphics.Apply(settings); HplEnhancedLighting.Refresh();
+                            foreach (var e in originals)
+                            {
+                                float factor = mode == 4 || e.light.excludeFromLightLevel ? 1f : e.light.name == "SpotLight_1" ? 0f : mode is 0 or 2 ? 0f : .6f;
+                                if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
+                                    e.light.transform.position != e.position || Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                                    (e.light.box && Mathf.Abs(e.light.enhancedIntensity - factor) > 1e-5f) ||
+                                    (e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity)))
+                                    throw new InvalidOperationException("Zimmerman: original state/fallback/legacy light changed " + e.light.name);
+                            }
+                            if (map.effects.Sepia.Amount != (vision ? .5f : 0f) || map.effects.RadialBlur.Size != (vision ? .1f : 0f) || map.effects.RadialBlur.StartDist != .2f)
+                                throw new InvalidOperationException("Zimmerman: changing graphics changed vision effects");
+                            int sky = 0;
+                            foreach (var light in AmnesiaLight.All)
+                                if (light != null && light.enhancedAdded)
+                                {
+                                    sky++;
+                                    var rendered = light.GetComponent<Light>();
+                                    if (rendered.type != LightType.Rectangle || rendered.intensity != 3f || rendered.range != 120f || rendered.shadows == LightShadows.None || light.LightLevelAt(light.transform.position, 0f) != 0f)
+                                        throw new InvalidOperationException("Zimmerman: invalid sky / legacy contribution");
+                                }
+                            if (sky != (mode == 4 ? 0 : 1)) throw new InvalidOperationException("Zimmerman: sky accumulates/disappears");
+                        }
+                }
+                string line = "Zimmerman state PASS: six static map lights, no lamps or scripted light changes; two cycles through RTGI, RT no-GI, SSGI, raster no-GI and classic with/without authored sepia .5 and radial blur .1 preserve original colours/radii/visibility/legacy light and effect endpoints. One soft sky does not accumulate or affect legacy darkness. Story lantern and sanity drain are disabled by the original script; snapshots do not run story timers or map transitions.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                map.effects.Sepia.FadeTo(sepia, 100f); map.effects.Sepia.Update(1f);
+                map.effects.RadialBlur.FadeTo(blur, 100f); map.effects.RadialBlur.Update(1f); map.effects.RadialBlur.SetBlurStartDist(startDist);
                 HplGraphics.Apply(user);
             }
         }
