@@ -177,7 +177,7 @@ namespace RTXMnesia.Dev
             ui.Choose(MenuControl.GraphicsTab);
             yield return null;
             Check(HasAll(ui, "Graphics", MenuControl.Lighting, MenuControl.Textures, MenuControl.TextureQuality, MenuControl.TextureMemoryBudget, MenuControl.Anisotropy,
-                         MenuControl.Shadows, MenuControl.Bloom, MenuControl.ImageTrail, MenuControl.RadialBlur), "the graphics tab has the lighting, textures, shadows and effects");
+                         MenuControl.Shadows, MenuControl.SoftShadows, MenuControl.ContactShadows, MenuControl.Bloom, MenuControl.ImageTrail, MenuControl.RadialBlur), "the graphics tab has the lighting, textures, shadows and effects");
             int lightingBefore = ui.DraftSettings.lighting;
             ui.Choose(MenuControl.Lighting);
             ui.ChooseComboItem(1);

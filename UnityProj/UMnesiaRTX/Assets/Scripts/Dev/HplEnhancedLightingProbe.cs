@@ -121,6 +121,9 @@ namespace RTXMnesia.Dev
                     s.rtPathTracing = mode.Contains("_pt") ? 1 : 0;
                     s.rtGi = mode.Contains("nogi") ? 0 : 2;
                     s.rtLanternShadows = !mode.Contains("noshadow");
+                    // "nopcss" / "nocontact": shadow maps without the soft / contact shadows of the enhanced lighting.
+                    s.softShadows = !mode.Contains("nopcss");
+                    s.contactShadows = !mode.Contains("nocontact");
                     if (mode.Contains("tex")) s.textures = 1;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
                     // "noemit": without the GI copies of glowing materials (what their glow adds).

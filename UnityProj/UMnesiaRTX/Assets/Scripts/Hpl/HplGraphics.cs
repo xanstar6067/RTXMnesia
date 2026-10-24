@@ -74,6 +74,8 @@ namespace RTXMnesia.Hpl
             HplDlss.Apply(s);
             if (!Application.isPlaying) return;
             HplRayTracing.Apply(s);
+            // Soft and contact shadows of the enhanced lighting (the lights get them in its refresh below).
+            HplEnhancedShadows.Apply(s);
 
             Hook();
             SaveEditorQuality();
@@ -189,6 +191,7 @@ namespace RTXMnesia.Hpl
                 bool mirror = HplWaterReflection.IsReflectionCamera(camera);
                 // Ray tracing (lighting "Ray tracing", RTX tab); the water mirrors never trace.
                 HplRayTracing.ConfigureCamera(camera, data, mirror);
+                HplEnhancedShadows.ConfigureCamera(data, mirror);
                 if (mirror) continue;
                 if (data.antialiasing != mode) data.antialiasing = mode;
                 if (mode == HDAdditionalCameraData.AntialiasingMode.SubpixelMorphologicalAntiAliasing)
@@ -227,6 +230,7 @@ namespace RTXMnesia.Hpl
             }
             s_bloom.intensity.Override(Bloom ? s_defaultBloom : 0f);
             HplRayTracing.ApplyVolume(s_profile);
+            HplEnhancedShadows.ApplyVolume(s_profile);
             World.HplEnhancedLighting.ApplyVolume(s_profile);
         }
 

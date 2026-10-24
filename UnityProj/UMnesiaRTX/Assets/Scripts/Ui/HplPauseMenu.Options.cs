@@ -347,8 +347,12 @@ namespace RTXMnesia.Ui
             ScrollCombo(MenuControl.Anisotropy, settings);
             Section("Тени и эффекты");
             ScrollCombo(MenuControl.Shadows, settings);
+            bool shadowMaps = settings.lightingSet == 1 && settings.shadows != HplGraphics.ShadowsOff;
+            ScrollToggle("Мягкие тени (PCSS)", settings.softShadows, MenuControl.SoftShadows, !shadowMaps, alignWithCombo: true);
+            ScrollToggle("Контактные тени", settings.contactShadows, MenuControl.ContactShadows, !shadowMaps);
+            if (!shadowMaps) Note("Мягкие и контактные тени: только с «Улучшенным» освещением и включёнными тенями.");
             // Own text: the game's Russian "Bloom" entry reads "Потускнение" (dimming), the opposite of the effect.
-            ScrollToggle("Свечение (Bloom)", settings.bloom, MenuControl.Bloom, alignWithCombo: true);
+            ScrollToggle("Свечение (Bloom)", settings.bloom, MenuControl.Bloom);
             ScrollToggle(T("OptionsMenu", "ImageTrail", "След при движении"), settings.imageTrail, MenuControl.ImageTrail);
             ScrollToggle(T("OptionsMenu", "RadialBlur", "Радиальное размытие"), settings.radialBlur, MenuControl.RadialBlur);
         }

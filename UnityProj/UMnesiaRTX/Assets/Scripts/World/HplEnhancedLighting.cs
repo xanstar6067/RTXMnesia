@@ -106,7 +106,8 @@ namespace RTXMnesia.World
             public int baseShadowLevel;
             public LightShadows shadows;
             public ShadowUpdateMode updateMode;
-            public float normalBias, slopeBias, nearPlane;
+            public float normalBias, slopeBias, nearPlane, shapeRadius;
+            public bool contactOverride, contactUsesOverride;
         }
 
         static HplMap s_map;
@@ -238,6 +239,7 @@ namespace RTXMnesia.World
             if (s_overlay.add != null)
                 foreach (var e in s_overlay.add)
                     if (When(e.when)) Add(e);
+            ConfigureShadowMaps();
             HplRayTracing.Reselect();
         }
 
@@ -518,6 +520,21 @@ namespace RTXMnesia.World
             light.Apply(light.CurrentColor, light.CurrentRadius);
         }
 
+        /// <summary>
+        /// Soft and contact shadows (<see cref="HplEnhancedShadows"/>) of every light with a shadow map, after the rules
+        /// and the overlay: the lights of the map are recorded (the added ones go with the map's revert).
+        /// </summary>
+        static void ConfigureShadowMaps()
+        {
+            if (!HplEnhancedShadows.Soft && !HplEnhancedShadows.Contact) return;
+            foreach (var light in s_map.GetComponentsInChildren<AmnesiaLight>(true))
+            {
+                if (light.box || light.handHeld || !light.TryGetComponent(out Light unityLight) || unityLight.shadows == LightShadows.None) continue;
+                if (!light.enhancedAdded && !s_changed.Exists(c => c.light == light)) Record(light);
+                HplEnhancedShadows.ConfigureLight(light, unityLight, light.GetComponent<HDAdditionalLightData>());
+            }
+        }
+
         static Changed Record(AmnesiaLight light)
         {
             HplRayTracing.Release(light);
@@ -532,6 +549,9 @@ namespace RTXMnesia.World
                 normalBias = hd != null ? hd.normalBias : 0.75f, slopeBias = hd != null ? hd.slopeBias : 0.5f,
                 nearPlane = hd != null ? hd.shadowNearPlane : 0.1f,
                 affectSpecular = hd == null || hd.affectSpecular,
+                shapeRadius = unityLight != null ? unityLight.shapeRadius : 0f,
+                contactUsesOverride = hd != null && hd.useContactShadow.useOverride,
+                contactOverride = hd != null && hd.useContactShadow.@override,
             };
             s_changed.Add(record);
             return record;
@@ -694,9 +714,15 @@ namespace RTXMnesia.World
                 }
                 light.castShadows = r.castShadows;
                 light.baseShadowLevel = r.baseShadowLevel;
-                if (light.TryGetComponent(out Light unityLight)) unityLight.shadows = r.shadows;
+                if (light.TryGetComponent(out Light unityLight))
+                {
+                    unityLight.shadows = r.shadows;
+                    unityLight.shapeRadius = r.shapeRadius;
+                }
                 if (light.TryGetComponent(out HDAdditionalLightData hd))
                 {
+                    hd.useContactShadow.useOverride = r.contactUsesOverride;
+                    hd.useContactShadow.@override = r.contactOverride;
                     hd.shadowUpdateMode = r.updateMode;
                     hd.normalBias = r.normalBias;
                     hd.slopeBias = r.slopeBias;
