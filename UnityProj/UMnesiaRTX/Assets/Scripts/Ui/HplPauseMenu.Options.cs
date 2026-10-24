@@ -351,7 +351,9 @@ namespace RTXMnesia.Ui
             ScrollToggle("Мягкие тени (PCSS)", settings.softShadows, MenuControl.SoftShadows, !shadowMaps, alignWithCombo: true);
             ScrollToggle("Контактные тени", settings.contactShadows, MenuControl.ContactShadows, !shadowMaps);
             ScrollToggle("Тень фонаря", settings.lanternShadow, MenuControl.LanternShadow, !shadowMaps);
-            if (!shadowMaps) Note("Мягкие и контактные тени, тень фонаря: только с «Улучшенным» освещением и включёнными тенями.");
+            ScrollToggle("Кэш теней", settings.shadowCache, MenuControl.ShadowCache, !shadowMaps);
+            Note(!shadowMaps ? "Мягкие и контактные тени, тень фонаря, кэш теней: только с «Улучшенным» освещением и включёнными тенями."
+                : "Кэш теней: тень неподвижного источника рисуется один раз и обновляется, когда рядом что-то движется.");
             bool rtgi = SystemInfo.supportsRayTracing && settings.lighting == 1 && settings.rtGi > 0;
             ScrollCombo(MenuControl.Ssgi, settings, settings.lightingSet != 1 || rtgi);
             Note(settings.lightingSet != 1 ? "Отражённый свет (SSGI): только с «Улучшенным» освещением."

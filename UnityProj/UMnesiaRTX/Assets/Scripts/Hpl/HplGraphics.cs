@@ -76,6 +76,7 @@ namespace RTXMnesia.Hpl
             HplRayTracing.Apply(s);
             // Soft and contact shadows of the enhanced lighting (the lights get them in its refresh below).
             HplEnhancedShadows.Apply(s);
+            HplShadowCache.Apply(s);
 
             Hook();
             SaveEditorQuality();
@@ -185,6 +186,13 @@ namespace RTXMnesia.Hpl
                 HplAntialiasing.Taa => HDAdditionalCameraData.AntialiasingMode.TemporalAntialiasing,
                 _ => HDAdditionalCameraData.AntialiasingMode.None,
             };
+            // The cached shadow maps of the lights near the game camera, redrawn when something moved (enhanced lighting).
+            foreach (var camera in cameras)
+                if (camera != null && camera.cameraType == CameraType.Game && !HplWaterReflection.IsReflectionCamera(camera))
+                {
+                    HplShadowCache.Update(camera.transform.position);
+                    break;
+                }
             foreach (var camera in cameras)
             {
                 if (camera == null || camera.cameraType != CameraType.Game || !camera.TryGetComponent<HDAdditionalCameraData>(out var data)) continue;

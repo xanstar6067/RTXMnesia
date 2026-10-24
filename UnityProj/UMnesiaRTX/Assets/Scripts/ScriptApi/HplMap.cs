@@ -675,6 +675,7 @@ namespace RTXMnesia.ScriptApi
                 _dissolveRoot.SetParent(transform, false);
             }
             _dissolveEntities.Add(new HplDissolveEntity(source, time, _dissolveRoot));
+            World.HplShadowCache.Track(_dissolveRoot.gameObject);
         }
 
         bool _commentaryIconsActive;
@@ -935,6 +936,7 @@ namespace RTXMnesia.ScriptApi
                     t.name = name + t.name.Substring(template.name.Length);
             go.transform.SetPositionAndRotation(position, rotation);
             go.SetActive(true);
+            World.HplShadowCache.Track(go);
 
             foreach (var light in go.GetComponentsInChildren<AmnesiaLight>(true))
             {

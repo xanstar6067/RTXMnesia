@@ -536,18 +536,21 @@ namespace RTXMnesia.World
         }
 
         /// <summary>
-        /// Soft and contact shadows (<see cref="HplEnhancedShadows"/>) of every light with a shadow map, after the rules
+        /// Soft and contact shadows (<see cref="HplEnhancedShadows"/>) and the shadow cache (<see cref="HplShadowCache"/>) of every light with a shadow map, after the rules
         /// and the overlay: the lights of the map are recorded (the added ones go with the map's revert).
         /// </summary>
         static void ConfigureShadowMaps()
         {
-            if (!HplEnhancedShadows.Soft && !HplEnhancedShadows.Contact) return;
+            if (!HplEnhancedShadows.Soft && !HplEnhancedShadows.Contact && !HplShadowCache.On) return;
             foreach (var light in s_map.GetComponentsInChildren<AmnesiaLight>(true))
             {
                 if (light.box || light.handHeld || !light.TryGetComponent(out Light unityLight) || unityLight.shadows == LightShadows.None) continue;
                 if (!light.enhancedAdded && !s_changed.Exists(c => c.light == light)) Record(light);
-                HplEnhancedShadows.ConfigureLight(light, unityLight, light.GetComponent<HDAdditionalLightData>());
+                var hd = light.GetComponent<HDAdditionalLightData>();
+                HplEnhancedShadows.ConfigureLight(light, unityLight, hd);
+                HplShadowCache.Add(light, unityLight, hd);
             }
+            HplShadowCache.TrackMap(s_map);
         }
 
         static Changed Record(AmnesiaLight light)
@@ -710,6 +713,7 @@ namespace RTXMnesia.World
         /// <summary>Back to the classic lights of the map.</summary>
         static void Revert()
         {
+            HplShadowCache.Clear();
             for (int i = s_changed.Count - 1; i >= 0; i--)
             {
                 var r = s_changed[i];

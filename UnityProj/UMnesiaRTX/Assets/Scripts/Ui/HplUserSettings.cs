@@ -62,6 +62,8 @@ namespace RTXMnesia.Ui
         public bool softShadows = true, contactShadows = true;
         /// <summary>Enhanced lighting: the lantern in the hand casts shadows (HplEnhancedShadows.Lantern).</summary>
         public bool lanternShadow = true;
+        /// <summary>Enhanced lighting: still lights render their shadow maps once (HplShadowCache).</summary>
+        public bool shadowCache = true;
         /// <summary>Enhanced lighting without RTGI: screen space GI, 0 — off, 1..3 — low, medium, high (HplRayTracing.ScreenGi).</summary>
         public int ssgi = HplRayTracing.SsgiDefault;
         /// <summary>Post effects of the original options: bloom, image trail, radial blur.</summary>

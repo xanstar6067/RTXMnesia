@@ -77,6 +77,8 @@ public static class ConfigureHDRP
         SetInt(serialized, "m_RenderPipelineSettings.lightLoopSettings.maxLightsPerClusterCell", 16);
         SetBool(serialized, "m_RenderPipelineSettings.hdShadowInitParams.supportScreenSpaceShadows", true);
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.maxScreenSpaceShadowSlots", 16);
+        // Cached shadow maps of the still lights (HplShadowCache): 4096² holds ~40 point lamps at 256 or 10 at 512.
+        SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.cachedPunctualLightShadowAtlas", 4096);
         serialized.ApplyModifiedPropertiesWithoutUndo();
 
         GraphicsSettings.defaultRenderPipeline = pipeline;

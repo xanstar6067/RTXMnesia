@@ -220,6 +220,8 @@ namespace RTXMnesia.Hpl
         /// </summary>
         public static void SeparateSharedWalls()
         {
+            // The cached shadow maps see the walls where they end up (and the materials just applied).
+            World.HplShadowCache.RedrawAll();
             RestoreLifts();
             SeparatedWallCount = LiftedDecalCount = 0;
             if (!SeparateWalls) return;

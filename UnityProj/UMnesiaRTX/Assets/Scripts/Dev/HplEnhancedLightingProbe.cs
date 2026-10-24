@@ -22,6 +22,7 @@ namespace RTXMnesia.Dev
     /// </summary>
     public sealed class HplEnhancedLightingProbe : MonoBehaviour
     {
+        static readonly Dictionary<string, Color32[]> s_pixels = new();
         public const string ExitCodeKey = "RTXMnesia.EnhancedLightingPreview.ExitCode";
         /// <summary>"name:fx fy fz tx ty tz[|mode,mode];..." — feet and target in HPL2 coordinates, optionally the view's own modes.</summary>
         public string views;
@@ -126,6 +127,8 @@ namespace RTXMnesia.Dev
                     s.contactShadows = !mode.Contains("nocontact");
                     // "nolanternshadow": the lantern without its shadow map (with "lantern" in the name, it is held).
                     s.lanternShadow = !mode.Contains("nolanternshadow");
+                    // "nocache": every shadow map every frame (no HplShadowCache).
+                    s.shadowCache = !mode.Contains("nocache");
                     // "ssgi": screen space GI, medium ("ssgi1" / "ssgi3": low / high); only without RTGI. Off otherwise.
                     s.ssgi = !mode.Contains("ssgi") ? 0 : mode.Contains("ssgi1") ? 1 : mode.Contains("ssgi3") ? 3 : 2;
                     if (mode.Contains("tex")) s.textures = 1;
@@ -162,13 +165,52 @@ namespace RTXMnesia.Dev
                     camera.targetTexture = rt;
                     var watch = System.Diagnostics.Stopwatch.StartNew();
                     int frames = s.rtPathTracing > 0 ? 160 : 40;
+                    // "moved": halfway, the shadow casting entity model nearest to the target moves 0.4 m sideways
+                    // (the cached shadow maps around it must follow; compare with "moved_nocache").
+                    Transform movedObject = null;
+                    Vector3 movedFrom = default;
+                    int redraws = 0;
+                    HplShadowCache.MoverCounts = new Dictionary<string, int>();
                     for (int i = 0; i < frames; i++)
                     {
+                        if (i == frames / 2 && mode.Contains("moved"))
+                        {
+                            float best = float.MaxValue;
+                            foreach (var entity in map.GetComponentsInChildren<AmnesiaEntity>())
+                                foreach (var r in entity.GetComponentsInChildren<MeshRenderer>())
+                                {
+                                    if (r.shadowCastingMode == ShadowCastingMode.Off || r.isPartOfStaticBatch) continue;
+                                    float d = r.bounds.SqrDistance(target);
+                                    if (d < best) { best = d; movedObject = r.transform; }
+                                }
+                            if (movedObject != null)
+                            {
+                                movedFrom = movedObject.position;
+                                movedObject.position += camera.transform.right * 0.4f;
+                                report.AppendLine($"    moved {movedObject.parent?.name}/{movedObject.name} by 0.4 m");
+                            }
+                        }
                         yield return null;
+                        redraws += HplShadowCache.Redraws;
                         camera.Render();
                         AsyncGPUReadback.Request(rt, 0, 0, 1, 0, 1, 0, 1).WaitForCompletion();
                     }
                     double ms = watch.Elapsed.TotalMilliseconds / frames;
+                    if (movedObject != null) movedObject.position = movedFrom;
+                    var movers = new List<KeyValuePair<string, int>>(HplShadowCache.MoverCounts);
+                    movers.Sort((a, b) => b.Value.CompareTo(a.Value));
+                    HplShadowCache.MoverCounts = null;
+                    if (HplShadowCache.CachedLights > 0)
+                    {
+                        report.AppendLine($"    shadow cache movers: {string.Join(", ", movers.GetRange(0, Math.Min(8, movers.Count)).ConvertAll(m => m.Key + " " + m.Value))}");
+                        report.AppendLine($"    shadow cache no room: {string.Join(", ", HplShadowCache.FallbackNames)}");
+                        var init = ((UnityEngine.Rendering.HighDefinition.HDRenderPipelineAsset)GraphicsSettings.currentRenderPipeline).currentPlatformRenderPipelineSettings.hdShadowInitParams;
+                        var cachedNames = new List<string>();
+                        foreach (var l in FindObjectsByType<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(FindObjectsSortMode.None))
+                            if (l.shadowUpdateMode == UnityEngine.Rendering.HighDefinition.ShadowUpdateMode.OnDemand)
+                                cachedNames.Add($"{l.name} {l.GetComponent<Light>().type} {(l.shadowResolution.useOverride ? "override " + l.shadowResolution.@override : "level " + l.shadowResolution.level)} placed {UnityEngine.Rendering.HighDefinition.HDCachedShadowManager.instance.LightHasBeenPlacedInAtlas(l)}");
+                        report.AppendLine($"    cached atlas {init.cachedPunctualLightShadowAtlas}, punctual tiers {init.shadowResolutionPunctual[0]}/{init.shadowResolutionPunctual[1]}/{init.shadowResolutionPunctual[2]}/{init.shadowResolutionPunctual[3]}; cached: {string.Join(", ", cachedNames)}");
+                    }
                     foreach (var l in hidden) if (l != null) l.enabled = true;
                     var previous = RenderTexture.active;
                     RenderTexture.active = rt;
@@ -177,7 +219,21 @@ namespace RTXMnesia.Dev
                     RenderTexture.active = previous;
                     camera.targetTexture = null;
                     double sum = 0;
-                    foreach (var c in image.GetPixels32()) sum += (c.r + c.g + c.b) / 3.0;
+                    var pixels = image.GetPixels32();
+                    foreach (var c in pixels) sum += (c.r + c.g + c.b) / 3.0;
+                    // "nocache" / "again": against the same mode with the shadow cache / rendered before (the noise of particles), pixel by pixel.
+                    s_pixels[name + "|" + mode] = pixels;
+                    string twin = mode.Contains("_nocache") ? mode.Replace("_nocache", "") : mode.Contains("_again") ? mode.Replace("_again", "") : null;
+                    if (twin != null && s_pixels.TryGetValue(name + "|" + twin, out var cached) && cached.Length == pixels.Length)
+                    {
+                        double diff = 0; int max = 0, over = 0;
+                        for (int k = 0; k < pixels.Length; k++)
+                        {
+                            int d = Mathf.Max(Mathf.Abs(pixels[k].r - cached[k].r), Mathf.Abs(pixels[k].g - cached[k].g), Mathf.Abs(pixels[k].b - cached[k].b));
+                            diff += d; max = Mathf.Max(max, d); if (d > 8) over++;
+                        }
+                        report.AppendLine($"    vs {twin}: mean abs {diff / pixels.Length:0.000}, max {max}, pixels > 8: {over}");
+                    }
                     double mean = sum / (rt.width * rt.height);
                     string file = Path.Combine(folder, $"{mapName}_{name}_{mode}.png");
                     File.WriteAllBytes(file, image.EncodeToPNG());
@@ -287,7 +343,7 @@ namespace RTXMnesia.Dev
                     }
                     string line = $"{name} {mode}: mean {mean:0.0}, {ms:0.0} ms, enhanced applied={HplEnhancedLighting.Applied} " +
                                   $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} wax={HplEnhancedLighting.WaxCandles} (not generated {HplEnhancedLighting.WaxWithoutGenerated}), " +
-                                  $"RT={HplRayTracing.Active} SSGI={HplRayTracing.ScreenGi} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
+                                  $"RT={HplRayTracing.Active} SSGI={HplRayTracing.ScreenGi} shadow cache={HplShadowCache.CachedLights} (redraws {redraws}, no room {HplShadowCache.Fallbacks}) traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
                     report.AppendLine(line);
                     report.AppendLine($"    camera hpl={HplSpace.Position(camera.transform.position)}; silent volume={AudioListener.volume:0.00}");
                     Debug.Log("[EnhancedLighting] " + line);
