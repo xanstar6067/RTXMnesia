@@ -98,6 +98,7 @@ namespace RTXMnesia.Dev
             VerifyPrisonNorthEvents(map, user, report);
             VerifyCisternEntranceState(map, user, report);
             VerifyControlRoomState(map, user, report);
+            VerifyCisternState(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -139,6 +140,7 @@ namespace RTXMnesia.Dev
                     HplEnhancedEmission.GainScale = mode.Contains("emitx") ? 30f : 1f;
                     ApplyPrisonNorthCheckpointPreview(map, mode);
                     ApplyCisternEntranceWaterPreview(map, mode);
+                    ApplyCisternLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -1804,6 +1806,121 @@ namespace RTXMnesia.Dev
                 foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
                 HplGraphics.Apply(user);
             }
+        }
+
+        static readonly int[][] CisternTorchGroups = { new[] { 10, 4, 3, 13 }, new[] { 11, 2, 9, 7, 12 }, new[] { 6, 5, 8 } };
+        static readonly string[][] CisternFillGroups = { new[] { "PointLight_14", "PointLight_7", "PointLight_17" },
+            new[] { "PointLight_6", "PointLight_13", "PointLight_11", "PointLight_16" },
+            new[] { "SpotLight_11", "PointLight_10", "PointLight_15", "PointLight_12" } };
+        static readonly int[][] CisternWaterGroups = { new[] { 8 }, new[] { 4, 2, 3 }, new[] { 7, 5, 6 } };
+        static readonly Color CisternCyan = new(0.025f, 0.15f, 0.18f, 1f), CisternWaterCyan = new(0.05f, 0.15f, 0.2f, 0f);
+
+        static void VerifyCisternState(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/18_cistern.map", StringComparison.Ordinal)) return;
+            var savedLights = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) savedLights.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 13) throw new InvalidOperationException("Cistern: expected 13 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            var box = map.GetLight("BoxLight_1");
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f));
+                }
+                var burning = new List<bool>(); foreach (var (lamp, _) in lamps) burning.Add(lamp.Lit);
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                    s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                    {
+                        float factor = mode == 4 ? 1f : e.light.name == "SpotLight_11" ? 0f :
+                            e.light.name is "PointLight_8" or "PointLight_9" ? 0.3f :
+                            e.light.name.StartsWith("PointLight_", StringComparison.Ordinal) ? (mode is 0 or 2 ? 0f : 0.6f) : 1f;
+                        bool mapLight = e.light.name.StartsWith("PointLight_", StringComparison.Ordinal) || e.light.name.StartsWith("SpotLight_", StringComparison.Ordinal);
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (mapLight && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity)) ||
+                            (e.light.box && e.light.enhancedIntensity != 1f))
+                            throw new InvalidOperationException("Cistern: valve/caustic/ambient/gameplay state changed " + e.light.name);
+                    }
+                    for (int i = 0; i < lamps.Count; i++)
+                    {
+                        var lamp = lamps[i].lamp; float intensity = 0f;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) intensity += rendered.intensity;
+                        if (lamp.Lit != burning[i] || (burning[i] ? intensity <= 0f : intensity > 0.001f))
+                            throw new InvalidOperationException("Cistern: extinguished torch was resurrected " + lamp.Name);
+                    }
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Cistern: sky source affects gameplay darkness");
+                }
+            }
+            void FadeAndSwitch(AmnesiaLight light, Color target, float duration)
+            {
+                light.FadeTo(target, light.CurrentRadius, duration); light.UpdateLight(duration * 0.5f);
+                VerifyModes(); light.UpdateLight(duration * 0.5f); VerifyModes();
+                if (light.CurrentColor != target) throw new InvalidOperationException("Cistern: ongoing fade interrupted " + light.name);
+            }
+            try
+            {
+                VerifyModes();
+                for (int group = 0; group < 3; group++)
+                {
+                    foreach (int number in CisternTorchGroups[group])
+                    { var lamp = (Props.PropLamp)map.GetEntityByName("torch_static01_" + number); lamp.SetLit(false, false); lamp.UpdateLogic(0f); }
+                    foreach (string name in CisternFillGroups[group]) FadeAndSwitch(map.GetLight(name), new Color(0f, 0f, 0f, 0f), 2f);
+                    foreach (int number in CisternWaterGroups[group])
+                    {
+                        var light = map.GetLight("SpotLight_" + number); var color = CisternWaterCyan; color.a = light.CurrentColor.a;
+                        FadeAndSwitch(light, color, 2f);
+                    }
+                    float level = group == 0 ? 0.8f : group == 1 ? 0.6f : 0.3f;
+                    FadeAndSwitch(box, new Color(CisternCyan.r * level, CisternCyan.g * level, CisternCyan.b * level, 1f), 0.5f);
+                }
+                FadeAndSwitch(box, new Color(0.2f, 0.1f, 0.02f, box.CurrentColor.a), 4f);
+                box.SetColor(CisternCyan); VerifyModes(); // Checkpoint / OnLeave restores cyan without reigniting torches.
+                string line = "Cistern state PASS: three valve groups extinguish 12/13 torches; 11 fill/cone fades and seven caustic colour fades continue for 2 s through switching; all ten water projectors keep rendering, pump ambient .8/.6/.3 fades for .5 s, guardian amber for 4 s and checkpoint cyan survive RTGI, no-GI, SSGI, raster and classic; original gameplay light is preserved and sky light is excluded.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in savedLights) light.Restore(saved);
+                foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                HplGraphics.Apply(user);
+            }
+        }
+
+        // Lighting endpoints only; no pumping, monsters, checkpoint, water movement or story timers.
+        static void ApplyCisternLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/18_cistern.map", StringComparison.Ordinal)) return;
+            int stage = mode.Contains("pump3") || mode.Contains("guardian") ? 3 : mode.Contains("pump2") ? 2 : mode.Contains("pump1") ? 1 : 0;
+            for (int group = 0; group < 3; group++)
+            {
+                bool off = group < stage;
+                foreach (int number in CisternTorchGroups[group])
+                { var lamp = (Props.PropLamp)map.GetEntityByName("torch_static01_" + number); lamp.SetLit(!off, false); lamp.UpdateLogic(0f); }
+                foreach (string name in CisternFillGroups[group])
+                { var light = map.GetLight(name); light.SetColor(off ? new Color(0f, 0f, 0f, 0f) : light.diffuseColor); }
+                foreach (int number in CisternWaterGroups[group])
+                { var light = map.GetLight("SpotLight_" + number); var color = CisternWaterCyan; color.a = light.diffuseColor.a; light.SetColor(off ? color : light.diffuseColor); }
+            }
+            float level = stage == 0 ? 1f : stage == 1 ? 0.8f : stage == 2 ? 0.6f : 0.3f;
+            map.GetLight("BoxLight_1").SetColor(mode.Contains("guardian") ? new Color(0.2f, 0.1f, 0.02f, 1f) :
+                new Color(CisternCyan.r * level, CisternCyan.g * level, CisternCyan.b * level, 1f));
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
