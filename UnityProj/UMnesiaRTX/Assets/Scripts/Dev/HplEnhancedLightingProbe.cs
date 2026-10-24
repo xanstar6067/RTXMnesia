@@ -85,6 +85,7 @@ namespace RTXMnesia.Dev
             VerifyStorageEvents(map, user, report);
             VerifyMachineRoomEvents(map, user, report);
             VerifyElevatorEvents(map, user, report);
+            VerifyPrisonSouthEvents(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -1265,6 +1266,117 @@ namespace RTXMnesia.Dev
             bool scraping = !view.StartsWith("stopped", StringComparison.Ordinal) && !view.StartsWith("impact", StringComparison.Ordinal);
             map.GetLight("PointLight_3").SetVisible(scraping);
             map.GetLight("PointLight_4").SetVisible(scraping);
+        }
+
+        static void VerifyPrisonSouthEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/15_prison_south.map", StringComparison.Ordinal)) return;
+            var events = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "CPLight", "LightAreaFlick_1", "LightAreaFlick_2", "LightAreaFlick_3", "LightAreaFlick_4", "PointLight_4", "PointLight_6", "PointLight_38" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Prison south: missing event light " + name);
+                events.Add((light, light.Save()));
+            }
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            var classic = user.Copy(); classic.lightingSet = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, bool visible, float intensity)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                    bool accent = events.Exists(e => e.light == light) || light.name == "PointLight_18";
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f), light.Visible, accent ? light.GetComponent<Light>().intensity : -1f));
+                }
+                var burning = new List<bool>();
+                foreach (var (lamp, _) in lamps) burning.Add(lamp.Lit);
+                for (int mode = 0; mode < 4; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                    HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity) > 1e-4f * Mathf.Max(1f, e.intensity)))
+                            throw new InvalidOperationException("Prison south: event/gameplay light changed " + e.light.name);
+                    for (int i = 0; i < lamps.Count; i++)
+                    {
+                        var lamp = lamps[i].lamp; float intensity = 0f;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) intensity += rendered.intensity;
+                        if (lamp.Lit != burning[i] || (burning[i] ? intensity <= 0f : intensity > 0.001f))
+                            throw new InvalidOperationException("Prison south: switching relit/extinguished lamp " + lamp.Component.name);
+                    }
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Prison south: added roof light affects darkness");
+                }
+            }
+            try
+            {
+                for (int stage = 0; stage < 4; stage++)
+                {
+                    HplGraphics.Apply(classic);
+                    foreach (var (light, saved) in events)
+                    {
+                        bool torch = light.name is "PointLight_4" or "PointLight_6";
+                        Color on = torch ? new Color(0.35f, 0.25f, 0.1f, saved.color.a) : light.name == "PointLight_38" ? new Color(0.8f, 0.4f, 0.2f, 1f) : Color.white;
+                        light.SetColor(stage == 0 ? saved.color : stage == 1 ? on : stage == 2 ? on * 0.5f : torch ? on : new Color(0f, 0f, 0f, light.name == "PointLight_38" ? 0f : 1f));
+                    }
+                    VerifyModes();
+                }
+                // Actual short checkpoint fade must continue through a full set of lighting switches.
+                var flash = map.GetLight("CPLight"); flash.SetColor(new Color(0f, 0f, 0f, 1f));
+                flash.FadeTo(Color.white, flash.CurrentRadius, 0.1f); flash.UpdateLight(0.05f);
+                VerifyModes(); flash.UpdateLight(0.05f);
+                if (Mathf.Abs(flash.CurrentColor.r - 1f) > 1e-5f) throw new InvalidOperationException("Prison south: checkpoint fade interrupted");
+                // The breeze extinguishes four groups in order; a change of rendering mode must not relight them.
+                foreach (var (lamp, _) in lamps)
+                    if (lamp.Component.name.StartsWith("torch_static0b", StringComparison.Ordinal)) { lamp.SetLit(true, false); lamp.UpdateLogic(0f); }
+                VerifyModes();
+                for (int group = 1; group <= 4; group++)
+                {
+                    foreach (var (lamp, _) in lamps)
+                        if (lamp.Component.name.StartsWith("torch_static0b" + group + "_1", StringComparison.Ordinal)) { lamp.SetLit(false, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                foreach (var pair in new[] { ("torch_static0b4_12", "SpotLight_7"), ("torch_static01_5", "PointLight_30"),
+                    ("torch_static01_6", "PointLight_31"), ("torch_static01_7", "PointLight_28"), ("torch_static01_8", "PointLight_29"),
+                    ("torch_static01_9", "PointLight_27"), ("torch_static01_10", "PointLight_26"), ("torch_static0b4_11", "PointLight_25"),
+                    ("torch_static0b3_12", "PointLight_24"), ("torch_static0b2_13", "PointLight_23"), ("torch_static0b1_14", "PointLight_32"),
+                    ("torch_static0b2_15", "PointLight_22"), ("torch_static0b2_16", "PointLight_21"), ("torch_static0b3_17", "PointLight_20"),
+                    ("torch_static0b4_18", "PointLight_16") })
+                {
+                    var lamp = (Props.PropLamp)map.GetEntityByName(pair.Item1); var fill = map.GetLight(pair.Item2);
+                    foreach (bool burning in new[] { false, true })
+                    {
+                        HplGraphics.Apply(classic); lamp.SetLit(burning, false); lamp.UpdateLogic(0f);
+                        Color color = fill.CurrentColor; float intensity = fill.GetComponent<Light>().intensity;
+                        if (!burning && color != fill.diffuseColor) throw new InvalidOperationException("Prison south: connected torch leaves colour after extinction");
+                        for (int mode = 0; mode < 4; mode++)
+                        {
+                            var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                            HplGraphics.Apply(s);
+                            float expected = intensity * (mode == 3 ? 1f : mode == 0 ? 0f : 0.6f);
+                            if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - expected) > 1e-4f * Mathf.Max(1f, intensity))
+                                throw new InvalidOperationException("Prison south: torch loses GI fallback " + pair);
+                        }
+                    }
+                }
+                string line = "Prison south events PASS: eight scripted flash/reveal/torch accents and a continuing checkpoint fade, nine breeze torches extinguished in four groups, all 15 lamp connections including SpotLight_7, original sampled gameplay light and lamp states survive RTGI, no-GI, raster and classic; roof areas do not affect darkness.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in events) light.Restore(saved);
+                foreach (var (lamp, burning) in lamps) { lamp.SetLit(burning, false); lamp.UpdateLogic(0f); }
+                HplGraphics.Apply(user);
+            }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
