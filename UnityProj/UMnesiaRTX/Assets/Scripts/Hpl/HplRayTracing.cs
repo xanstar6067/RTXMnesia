@@ -13,8 +13,8 @@ namespace RTXMnesia.Hpl
     /// The pipeline asset supports ray tracing and screen space shadows (ConfigureHDRP); a camera traces rays only
     /// when its frame settings allow it, which this class sets on every game camera before rendering (water mirrors
     /// never trace). Ray-traced shadows: HDRP has a fixed number of screen space shadow slots, so each frame the map
-    /// lights with shadows nearest to the camera (visible, camera inside or close to their range) get ray-traced
-    /// shadows up to the chosen count; the others keep their shadow maps. "Shadows from all lights" adds the lights
+    /// lights whose shadows show most in view (HplLightAnalysis: their share of the light of the visible surfaces) get
+    /// ray-traced shadows up to the chosen count; the others keep their shadow maps. "Shadows from all lights" adds the lights
     /// HPL2 drew without shadows (most candles) to that choice; the lantern in the hand has its own setting and slot.
     /// </summary>
     public static class HplRayTracing
@@ -99,7 +99,7 @@ namespace RTXMnesia.Hpl
         public static bool LanternShadows { get; private set; }
         /// <summary>The hand-held lights traced in the last frame (RTX tab, checks).</summary>
         public static int TracedHandLights { get; private set; }
-        /// <summary>The lights traced in the last frame, of the shadowed lights considered (RTX tab).</summary>
+        /// <summary>The lights traced in the last frame, of the shadowed lights whose shadows show in view (RTX tab).</summary>
         public static int TracedLights { get; private set; }
         public static int ShadowedLights { get; private set; }
 
@@ -110,6 +110,8 @@ namespace RTXMnesia.Hpl
         public const float MinHandShadowRadius = 1f;
         /// <summary>HDRP's screen space shadow slots (the pipeline asset, ConfigureHDRP).</summary>
         const int MaxSlots = 16;
+        /// <summary>A traced light keeps its slot against one up to this many times more important.</summary>
+        const float TracedKeep = 1.25f;
         static readonly Dictionary<Light, float> s_radius = new();
         static int s_frame = -1;
 
@@ -125,7 +127,7 @@ namespace RTXMnesia.Hpl
             AllShadows = Shadows > 0 && s.rtAllShadows;
             LanternShadows = Active && s.rtLanternShadows;
             // The next render selects the lights again with the new settings.
-            s_frame = -1;
+            Reselect();
             if (Shadows == 0 && !LanternShadows) ReleaseLights();
         }
 
@@ -288,9 +290,9 @@ namespace RTXMnesia.Hpl
         }
 
         /// <summary>
-        /// The nearest shadowed lights get ray-traced shadows: the score is the distance from the camera to the light's
-        /// range (negative inside it), lights out of view are skipped; the lights traced last frame are kept a little
-        /// longer so that two lights at about the same distance do not swap every frame.
+        /// The shadowed lights whose shadows show most get ray-traced shadows (HplLightAnalysis.Importance; a light whose
+        /// shadow shows nowhere in view gets none, even with slots left); the lights traced last frame are kept a little
+        /// longer so that two lights of about the same share do not swap.
         /// </summary>
         static void SelectLights(Camera camera)
         {
@@ -318,8 +320,7 @@ namespace RTXMnesia.Hpl
             s_hand.RemoveWhere(l => l == null || !l.handHeld || !LanternShadows || !l.isActiveAndEnabled);
             TracedHandLights = hand;
             int max = Mathf.Min(ShadowLights[Shadows], MaxSlots - hand);
-            var planes = GeometryUtility.CalculateFrustumPlanes(camera);
-            Vector3 eye = camera.transform.position;
+            HplLightAnalysis.Update(camera);
             s_candidates.Clear();
             foreach (var light in AmnesiaLight.All)
             {
@@ -328,14 +329,12 @@ namespace RTXMnesia.Hpl
                 if (!light.TryGetComponent<Light>(out var unityLight) || !unityLight.enabled || unityLight.intensity <= 0f) continue;
                 // Map shadows: the graphics tab's shadow setting (Off: none); the added ones only follow its Off.
                 if (light.castShadows ? unityLight.shadows == LightShadows.None : HplGraphics.Shadows == HplGraphics.ShadowsOff) continue;
-                float range = unityLight.range;
-                Vector3 position = light.transform.position;
-                if (!GeometryUtility.TestPlanesAABB(planes, new Bounds(position, Vector3.one * (2f * range)))) continue;
-                float score = Vector3.Distance(eye, position) - range;
-                if (s_traced.Contains(light)) score -= 1f;
-                s_candidates.Add((light, score));
+                float importance = HplLightAnalysis.Importance(light);
+                if (importance < HplLightAnalysis.MinImportance) continue;
+                if (s_traced.Contains(light)) importance *= TracedKeep;
+                s_candidates.Add((light, importance));
             }
-            s_candidates.Sort((a, b) => a.score.CompareTo(b.score));
+            s_candidates.Sort((a, b) => b.score.CompareTo(a.score));
             ShadowedLights = s_candidates.Count;
             var chosen = new HashSet<AmnesiaLight>();
             for (int i = 0; i < s_candidates.Count && i < max; i++) chosen.Add(s_candidates[i].light);
@@ -384,7 +383,11 @@ namespace RTXMnesia.Hpl
         }
 
         /// <summary>The traced lights are chosen again at the next render (the lights of the map changed).</summary>
-        public static void Reselect() => s_frame = -1;
+        public static void Reselect()
+        {
+            s_frame = -1;
+            HplLightAnalysis.Invalidate();
+        }
 
         /// <summary>A light stops being traced now (it is changed or removed by the enhanced lighting).</summary>
         public static void Release(AmnesiaLight light)

@@ -403,7 +403,7 @@ namespace RTXMnesia.Ui
             if (on)
                 Note(!HplRayTracing.Applied(settings) ? "Применится после «OK»."
                     : settings.rtShadows == 0 ? "Тени: картами теней."
-                    : "С трассировкой: " + HplRayTracing.TracedLights + " из " + HplRayTracing.ShadowedLights + " источников с тенями в кадре" + (HplRayTracing.TracedHandLights > 0 ? " + фонарь." : "."));
+                    : "С трассировкой: " + HplRayTracing.TracedLights + " из " + HplRayTracing.ShadowedLights + " источников, чьи тени видны в кадре" + (HplRayTracing.TracedHandLights > 0 ? " + фонарь." : "."));
             if (supported) Note(CompareHint);
         }
 

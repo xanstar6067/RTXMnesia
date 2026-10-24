@@ -347,6 +347,21 @@ namespace RTXMnesia.Dev
                     report.AppendLine(line);
                     report.AppendLine($"    camera hpl={HplSpace.Position(camera.transform.position)}; silent volume={AudioListener.volume:0.00}");
                     Debug.Log("[EnhancedLighting] " + line);
+                    // Whose shadows show in this view (HplLightAnalysis; the raster modes do not run it, so it runs here,
+                    // a few estimates to settle the smoothing).
+                    for (int pass = 0; pass < 4; pass++)
+                    {
+                        HplLightAnalysis.Invalidate();
+                        HplLightAnalysis.Update(camera);
+                    }
+                    var ranked = HplLightAnalysis.Ranked();
+                    var shares = new StringBuilder();
+                    for (int i = 0; i < ranked.Count && i < 12; i++)
+                        shares.Append(i > 0 ? ", " : "").Append($"{ranked[i].light.name} {ranked[i].importance:0.000}");
+                    string analysis = $"light analysis: {HplLightAnalysis.Points} points, {HplLightAnalysis.Rays} rays, {HplLightAnalysis.Milliseconds:0.00} ms; " +
+                                      $"{ranked.Count} lights seen: {shares}";
+                    report.AppendLine("    " + analysis);
+                    Debug.Log($"[EnhancedLighting] {name} {mode} {analysis}");
                     // The lights near the view as this mode draws them.
                     foreach (var light in AmnesiaLight.All)
                     {
@@ -354,7 +369,7 @@ namespace RTXMnesia.Dev
                         if (Vector3.Distance(light.transform.position, feet) > l.range + 2f) continue;
                         bool traced = light.TryGetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(out var hd) && hd.useRayTracedShadows;
                         report.AppendLine($"    {light.name}: {l.type} {l.intensity:0.##} {l.lightUnit} range={l.range:0.##} shadows={l.shadows} " +
-                                          $"traced={traced} shape={l.shapeRadius:0.###} added={light.enhancedAdded} hand={light.handHeld} hpl={HplSpace.Position(light.transform.position)}");
+                                          $"traced={traced} share={HplLightAnalysis.Importance(light):0.000} shape={l.shapeRadius:0.###} added={light.enhancedAdded} hand={light.handHeld} hpl={HplSpace.Position(light.transform.position)}");
                     }
                 }
             }
