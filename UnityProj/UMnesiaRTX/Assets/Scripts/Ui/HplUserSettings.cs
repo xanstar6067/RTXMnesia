@@ -62,6 +62,8 @@ namespace RTXMnesia.Ui
         public bool softShadows = true, contactShadows = true;
         /// <summary>Enhanced lighting: the lantern in the hand casts shadows (HplEnhancedShadows.Lantern).</summary>
         public bool lanternShadow = true;
+        /// <summary>Enhanced lighting without RTGI: screen space GI, 0 — off, 1..3 — low, medium, high (HplRayTracing.ScreenGi).</summary>
+        public int ssgi = HplRayTracing.SsgiDefault;
         /// <summary>Post effects of the original options: bloom, image trail, radial blur.</summary>
         public bool bloom = true, imageTrail = true, radialBlur = true;
         /// <summary>Display gamma (HPL2 Graphics Gamma, 0.3–2, SDL_SetGamma); drawn by HplScreenEffectsPass.</summary>
@@ -186,6 +188,7 @@ namespace RTXMnesia.Ui
             rtAo = Mathf.Clamp(rtAo, 0, HplRayTracing.AoLevels - 1);
             rtReflections = Mathf.Clamp(rtReflections, 0, HplRayTracing.ReflectionLevels - 1);
             rtGi = Mathf.Clamp(rtGi, 0, HplRayTracing.GiLevels - 1);
+            ssgi = Mathf.Clamp(ssgi, 0, HplRayTracing.SsgiLevels - 1);
             rtPathTracing = Mathf.Clamp(rtPathTracing, 0, HplRayTracing.PathTracingSamples.Length - 1);
             textureQuality = Mathf.Clamp(textureQuality, 0, 2);
             if (Array.IndexOf(HplGraphics.TextureMemoryBudgetsGb, textureMemoryBudgetGb) < 0) textureMemoryBudgetGb = 2;

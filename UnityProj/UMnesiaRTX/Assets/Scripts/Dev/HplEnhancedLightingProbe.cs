@@ -126,6 +126,8 @@ namespace RTXMnesia.Dev
                     s.contactShadows = !mode.Contains("nocontact");
                     // "nolanternshadow": the lantern without its shadow map (with "lantern" in the name, it is held).
                     s.lanternShadow = !mode.Contains("nolanternshadow");
+                    // "ssgi": screen space GI, medium ("ssgi1" / "ssgi3": low / high); only without RTGI. Off otherwise.
+                    s.ssgi = !mode.Contains("ssgi") ? 0 : mode.Contains("ssgi1") ? 1 : mode.Contains("ssgi3") ? 3 : 2;
                     if (mode.Contains("tex")) s.textures = 1;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
                     // "noemit": without the GI copies of glowing materials (what their glow adds).
@@ -285,7 +287,7 @@ namespace RTXMnesia.Dev
                     }
                     string line = $"{name} {mode}: mean {mean:0.0}, {ms:0.0} ms, enhanced applied={HplEnhancedLighting.Applied} " +
                                   $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} wax={HplEnhancedLighting.WaxCandles} (not generated {HplEnhancedLighting.WaxWithoutGenerated}), " +
-                                  $"RT={HplRayTracing.Active} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
+                                  $"RT={HplRayTracing.Active} SSGI={HplRayTracing.ScreenGi} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
                     report.AppendLine(line);
                     report.AppendLine($"    camera hpl={HplSpace.Position(camera.transform.position)}; silent volume={AudioListener.volume:0.00}");
                     Debug.Log("[EnhancedLighting] " + line);

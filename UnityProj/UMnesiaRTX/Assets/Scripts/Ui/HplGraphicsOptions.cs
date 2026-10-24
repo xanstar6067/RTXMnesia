@@ -26,7 +26,7 @@ namespace RTXMnesia.Ui
         /// <summary>The anti-aliasing methods at the start of the image method list (off, FXAA, SMAA, TAA); DLSS follows.</summary>
         const int AaMethods = 4;
 
-        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.RtPathTracing;
+        public static bool IsCombo(MenuControl c) => c >= MenuControl.Lighting && c <= MenuControl.Ssgi;
 
         /// <summary>DLSS is chosen and runs on this GPU: it replaces the anti-aliasing of the graphics tab.</summary>
         public static bool DlssOn(HplUserSettings s) => s.dlssMode != (int)HplDlssMode.Off && HplDlss.Available;
@@ -147,6 +147,11 @@ namespace RTXMnesia.Ui
                         items.Add(new HplComboItem(HplRayTracing.PathTracingSamples[i] + " сэмплов на кадр"));
                     current = s.rtPathTracing;
                     break;
+                case MenuControl.Ssgi:
+                    items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
+                    for (int i = 1; i < HplRayTracing.SsgiLevels; i++) items.Add(new HplComboItem(RtLevel(i, t)));
+                    current = s.ssgi;
+                    break;
                 case MenuControl.RtAllShadows:
                 case MenuControl.RtLanternShadows:
                     items.Add(new HplComboItem(t("OptionsMenu", "Off", "Выкл")));
@@ -180,6 +185,7 @@ namespace RTXMnesia.Ui
             MenuControl.RtGi => "Глобальное освещение (RTGI)",
             MenuControl.RtReflections => "Отражения (трассировка)",
             MenuControl.RtAo => "Затенение (RTAO)",
+            MenuControl.Ssgi => "Отражённый свет (SSGI)",
             _ => "",
         };
 
@@ -251,6 +257,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.RtAllShadows: s.rtAllShadows = index == 1; break;
                 case MenuControl.RtPathTracing: s.rtPathTracing = index; break;
                 case MenuControl.RtLanternShadows: s.rtLanternShadows = index == 1; break;
+                case MenuControl.Ssgi: s.ssgi = index; break;
             }
         }
 

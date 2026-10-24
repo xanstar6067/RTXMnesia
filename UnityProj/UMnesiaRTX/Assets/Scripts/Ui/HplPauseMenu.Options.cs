@@ -352,6 +352,11 @@ namespace RTXMnesia.Ui
             ScrollToggle("Контактные тени", settings.contactShadows, MenuControl.ContactShadows, !shadowMaps);
             ScrollToggle("Тень фонаря", settings.lanternShadow, MenuControl.LanternShadow, !shadowMaps);
             if (!shadowMaps) Note("Мягкие и контактные тени, тень фонаря: только с «Улучшенным» освещением и включёнными тенями.");
+            bool rtgi = SystemInfo.supportsRayTracing && settings.lighting == 1 && settings.rtGi > 0;
+            ScrollCombo(MenuControl.Ssgi, settings, settings.lightingSet != 1 || rtgi);
+            Note(settings.lightingSet != 1 ? "Отражённый свет (SSGI): только с «Улучшенным» освещением."
+                : rtgi ? "Отражённый свет считает RTGI (вкладка «Трассировка»)."
+                : "Отражённый свет по изображению на экране: от источников за краем кадра его нет.");
             // Own text: the game's Russian "Bloom" entry reads "Потускнение" (dimming), the opposite of the effect.
             ScrollToggle("Свечение (Bloom)", settings.bloom, MenuControl.Bloom);
             ScrollToggle(T("OptionsMenu", "ImageTrail", "След при движении"), settings.imageTrail, MenuControl.ImageTrail);

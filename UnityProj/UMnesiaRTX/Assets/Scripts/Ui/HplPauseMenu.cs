@@ -18,7 +18,7 @@ namespace RTXMnesia.Ui
         KeyConfig, KeyCategory, KeySlot, KeyDefaults, KeyOk, ConfirmKeyDefaults, ConfirmKeyInvalid,
         GammaLess, GammaMore, GammaSlider, Commentary,
         // Graphics drop-down lists (contiguous: HplGraphicsOptions.IsCombo), toggles, and the open list's controls.
-        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, TextureMemoryBudget, Anisotropy, ImageMethod, Shadows, DlssPreset, HdrMode, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows, RtPathTracing,
+        Lighting, Textures, Resolution, ScreenMode, FpsLimit, TextureQuality, TextureMemoryBudget, Anisotropy, ImageMethod, Shadows, DlssPreset, HdrMode, RtShadows, RtAo, RtReflections, RtGi, RtAllShadows, RtLanternShadows, RtPathTracing, Ssgi,
         Bloom, ImageTrail, RadialBlur, ComboItem, ComboScrollUp, ComboScrollDown,
         // Profiles (cLuxMainMenu_Profile), message boxes with one OK button.
         ChangeProfile, ProfileRow, ProfileSelect, ProfileCreate, ProfileDelete, ProfileClose, ConfirmProfileDelete,

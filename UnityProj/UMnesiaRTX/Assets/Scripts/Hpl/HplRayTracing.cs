@@ -43,6 +43,12 @@ namespace RTXMnesia.Hpl
         /// second denoiser pass, high — full resolution.
         /// </summary>
         public const int GiLevels = 4, GiDefault = 2;
+        /// <summary>
+        /// Screen space GI choices (graphics tab, enhanced lighting without RTGI): off, low, medium, high. The same HDRP
+        /// component as RTGI, ray marched in the depth buffer: it bounces only the light of what is on screen.
+        /// </summary>
+        public const int SsgiLevels = 4, SsgiDefault = 2;
+        static readonly int[] SsgiRaySteps = { 0, 32, 48, 64 };
         /// <summary>Lights found by the rays (reflections, GI) within this distance of the camera (HDRP: 10 m).</summary>
         public const float LightClusterRange = 40f;
 
@@ -83,6 +89,8 @@ namespace RTXMnesia.Hpl
         public static int Reflections { get; private set; }
         /// <summary>RTGI: 0 — off, 1..3 — low, medium, high.</summary>
         public static int Gi { get; private set; }
+        /// <summary>Screen space GI in effect: 0 — off, 1..3 — low, medium, high (never with RTGI).</summary>
+        public static int ScreenGi { get; private set; }
         /// <summary>Path tracing: index of <see cref="PathTracingSamples"/>, 0 — off.</summary>
         public static int PathTracing { get; private set; }
         /// <summary>Lights without CastShadows in the map (candles) also get ray-traced shadows (remaster).</summary>
@@ -112,6 +120,7 @@ namespace RTXMnesia.Hpl
             Ao = Active ? s.rtAo : 0;
             Reflections = Active ? s.rtReflections : 0;
             Gi = Active ? s.rtGi : 0;
+            ScreenGi = Gi == 0 && s.lightingSet == 1 ? s.ssgi : 0;
             PathTracing = Active ? s.rtPathTracing : 0;
             AllShadows = Shadows > 0 && s.rtAllShadows;
             LanternShadows = Active && s.rtLanternShadows;
@@ -181,7 +190,7 @@ namespace RTXMnesia.Hpl
             if (Enum.TryParse("Optix", out HDDenoiserType optix)) s_pathTracing.denoising.Override(optix);
         }
 
-        /// <summary>RTGI and the light cluster the rays of the reflections and of the GI see.</summary>
+        /// <summary>RTGI or SSGI, and the light cluster the rays of the reflections and of the GI see.</summary>
         static void ApplyGi(VolumeProfile profile)
         {
             if (s_cluster == null && !profile.TryGet(out s_cluster)) s_cluster = profile.Add<LightCluster>();
@@ -194,9 +203,21 @@ namespace RTXMnesia.Hpl
                 // The values below are set through properties (no overrideState of their own).
                 s_gi.SetAllOverridesTo(true);
             }
-            s_gi.active = Gi > 0;
-            if (Gi == 0) return;
+            s_gi.active = Gi > 0 || ScreenGi > 0;
+            if (!s_gi.active) return;
             s_gi.enable.Override(true);
+            if (Gi == 0)
+            {
+                s_gi.tracing.Override(RayCastingMode.RayMarching);
+                s_gi.quality.Override(ScalableSettingLevelParameter.LevelCount);
+                s_gi.fullResolutionSS.Override(ScreenGi == 3);
+                s_gi.maxRaySteps = SsgiRaySteps[ScreenGi];
+                s_gi.denoiseSS = true;
+                s_gi.halfResolutionDenoiserSS = ScreenGi == 1;
+                s_gi.secondDenoiserPassSS = ScreenGi > 1;
+                s_gi.denoiserRadiusSS = 0.75f;
+                return;
+            }
             s_gi.layerMask.Override(~(1 << HandsLayer));
             s_gi.tracing.Override(RayCastingMode.RayTracing);
             s_gi.mode.Override(RayTracingMode.Performance);
@@ -255,8 +276,8 @@ namespace RTXMnesia.Hpl
             Override(data, FrameSettingsField.ScreenSpaceShadows, on && Shadows > 0);
             // The asset supports SSR only for these reflections: never ray marched, never with the classic lighting.
             Override(data, FrameSettingsField.SSR, on && Reflections > 0);
-            // Likewise SSGI: only the ray-traced GI.
-            Override(data, FrameSettingsField.SSGI, on && Gi > 0);
+            // Likewise SSGI: the ray-traced GI, or the screen space GI of the enhanced lighting without it.
+            Override(data, FrameSettingsField.SSGI, on && Gi > 0 || !mirror && ScreenGi > 0);
             if (on && !mirror && (Shadows > 0 || LanternShadows)) SelectLights(camera);
         }
 

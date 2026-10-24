@@ -20,7 +20,7 @@ namespace RTXMnesia.World
     /// The overlay is Resources/HplEnhancedLighting/&lt;map file without extension&gt;.json (our own data, in git):
     /// "lights" change lights of the map by name, "add" creates new ones. Positions are HPL2 map coordinates
     /// ("x y z", as in the .map), lights look at "target". Values are strings, empty = unchanged. "when" limits an
-    /// entry to "rt" / "raster" (ray tracing on or off) or "gi" / "nogi" (ray-traced GI on or off).
+    /// entry to "rt" / "raster" (ray tracing on or off) or "gi" / "nogi" (bounced light on or off: RTGI, or SSGI of the graphics tab, which replace the fill lights alike).
     /// </summary>
     public static class HplEnhancedLighting
     {
@@ -69,7 +69,7 @@ namespace RTXMnesia.World
         {
             /// <summary>The light of the map (lights) or the new light's name (add).</summary>
             public string name;
-            /// <summary>"" — always, "rt" / "raster", "gi" / "nogi".</summary>
+            /// <summary>"" — always, "rt" / "raster", "gi" / "nogi" (RTGI or SSGI on / neither).</summary>
             public string when;
             /// <summary>Added lights: "point", "spot" or "rect".</summary>
             public string type;
@@ -212,8 +212,8 @@ namespace RTXMnesia.World
             "" => true,
             "rt" => HplRayTracing.Active,
             "raster" => !HplRayTracing.Active,
-            "gi" => HplRayTracing.Gi > 0,
-            "nogi" => HplRayTracing.Gi == 0,
+            "gi" => HplRayTracing.Gi > 0 || HplRayTracing.ScreenGi > 0,
+            "nogi" => HplRayTracing.Gi == 0 && HplRayTracing.ScreenGi == 0,
             var other => Warn($"unknown \"when\": {other}"),
         };
 

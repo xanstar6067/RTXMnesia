@@ -211,6 +211,7 @@ namespace RTXMnesia.Dev
                 var s = saved.Copy();
                 s.lighting = 1;
                 s.rtGi = level;
+                s.ssgi = 0;
                 HplGraphics.Apply(s);
                 double ms = Capture(camera, rt, $"{mapName}_gi{level}", out var image);
                 if (level == 0) giOff = image;
@@ -229,10 +230,52 @@ namespace RTXMnesia.Dev
             {
                 var s = saved.Copy();
                 s.lighting = 0;
+                s.ssgi = 0;
                 HplGraphics.Apply(s);
                 Capture(camera, rt, $"{mapName}_classic_again", out _);
                 hd = HDCamera.GetOrCreate(camera);
                 Check(!hd.frameSettings.IsEnabled(FrameSettingsField.SSR) && !hd.frameSettings.IsEnabled(FrameSettingsField.SSGI), "classic lighting: the camera renders no SSR and no SSGI");
+            }
+
+            // Screen space GI of the enhanced lighting (graphics tab): every level without ray tracing, ignored under RTGI.
+            byte[] ssgiOff = null, ssgiHigh = null;
+            for (int level = 0; level < HplRayTracing.SsgiLevels; level++)
+            {
+                var s = saved.Copy();
+                s.lightingSet = 1;
+                s.lighting = 0;
+                s.ssgi = level;
+                HplGraphics.Apply(s);
+                double ms = Capture(camera, rt, $"{mapName}_ssgi{level}", out var image);
+                if (level == 0) ssgiOff = image;
+                if (level == HplRayTracing.SsgiLevels - 1) ssgiHigh = image;
+                var profile = HplGraphics.SettingsVolume != null ? HplGraphics.SettingsVolume.sharedProfile : null;
+                GlobalIllumination gi = null;
+                bool found = profile != null && profile.TryGet(out gi);
+                hd = HDCamera.GetOrCreate(camera);
+                bool cameraGi = hd.frameSettings.IsEnabled(FrameSettingsField.SSGI);
+                _report.AppendLine($"SSGI {level}: component {found}, active {gi?.active}, tracing {gi?.tracing.value}, ray steps {gi?.maxRaySteps}, camera SSGI {cameraGi}, {ms:0.00} ms/frame, mean brightness {Brightness(image):0.0000}");
+                Check(found && gi.active == (level > 0) && cameraGi == (level > 0) && (level == 0 || gi.tracing.value == RayCastingMode.RayMarching),
+                      $"SSGI {level}: {(level > 0 ? "ray marched by the camera" : "no SSGI on the camera")}");
+            }
+            // Not brighter: with SSGI the "gi" entries of the overlay turn the fill lights off, as with RTGI.
+            Check(Difference(ssgiOff, ssgiHigh) > 0.0001f, $"SSGI changes the image (mean difference {Difference(ssgiOff, ssgiHigh):0.0000}, brightness {Brightness(ssgiOff):0.0000} → {Brightness(ssgiHigh):0.0000})");
+            {
+                var s = saved.Copy();
+                s.lightingSet = 1;
+                s.lighting = 1;
+                s.rtGi = HplRayTracing.GiDefault;
+                s.ssgi = HplRayTracing.SsgiDefault;
+                HplGraphics.Apply(s);
+                var profile = HplGraphics.SettingsVolume.sharedProfile;
+                Check(HplRayTracing.ScreenGi == 0 && profile.TryGet(out GlobalIllumination gi) && gi.tracing.value == RayCastingMode.RayTracing,
+                      "SSGI chosen with RTGI on: the GI is ray traced");
+                s.lightingSet = 0;
+                s.lighting = 0;
+                HplGraphics.Apply(s);
+                Capture(camera, rt, $"{mapName}_ssgi_classic", out _);
+                hd = HDCamera.GetOrCreate(camera);
+                Check(HplRayTracing.ScreenGi == 0 && !hd.frameSettings.IsEnabled(FrameSettingsField.SSGI), "SSGI chosen with the classic lighting: no SSGI");
             }
 
             // Path tracing: 64 samples accumulated by a camera that stands still, then denoised.
