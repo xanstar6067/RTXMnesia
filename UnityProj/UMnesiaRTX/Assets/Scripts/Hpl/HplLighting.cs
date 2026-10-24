@@ -95,8 +95,8 @@ namespace RTXMnesia.Hpl
         /// </summary>
         public static void SetTranslucentFog(bool active, Color color, float start, float end, float falloffExp)
         {
-            // The world fog itself (HplFogAreaPass) and the factor of the multiply decals (HplMultiply.shader, _HplFog:
-            // HPL2 fogs after the decals, so their factor fades to 1 with the fog opacity): x = opacity at the end, 0 = off.
+            // The world fog itself (HplFogAreaPass) and the haze the multiply decals keep (HplMultiply.shader, _HplFog:
+            // HPL2 fogs after the decals, so they multiply only what is behind the fog): x = opacity at the end, 0 = off.
             WorldFogActive = active;
             WorldFogParams = new Vector4(start, end - start, falloffExp, color.a);
             WorldFogRadiance = Radiance(new Color(color.r, color.g, color.b, 1f));
