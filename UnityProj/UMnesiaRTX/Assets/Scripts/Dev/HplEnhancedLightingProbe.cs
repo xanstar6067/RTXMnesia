@@ -109,6 +109,7 @@ namespace RTXMnesia.Dev
                 // Diagnostic comparison with this map's overlay temporarily absent; generic switching checks still run.
                 if (defaultModes.Contains("baseline")) report.AppendLine("Baseline diagnostic: map-specific overlay assertions skipped.");
                 else VerifySewerLighting(map, user, report);
+                VerifyNaveLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -154,6 +155,7 @@ namespace RTXMnesia.Dev
                     ApplyCisternEntranceWaterPreview(map, mode);
                     ApplyCisternLightingPreview(map, mode);
                     ApplyMorgueLightingPreview(map, mode);
+                    ApplyNaveLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -2164,6 +2166,150 @@ namespace RTXMnesia.Dev
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally { HplGraphics.Apply(user); }
+        }
+
+        static readonly string[] NaveBlackoutLamps = { "torch_static01_40", "torch_static01_44", "torch_static01_22",
+            "torch_static01_43", "torch_static01_47", "chandelier_simple_2", "hanging_lantern_ceiling_8", "hanging_lantern_ceiling_5" };
+        static readonly string[] NaveBlackoutLights = { "PointLight_83", "PointLight_77", "SpotLight_6", "SpotLight_9",
+            "PointLight_78", "PointLight_82", "PointLight_12", "PointLight_94", "PointLight_87", "PointLight_90", "PointLight_91", "PointLight_92" };
+        static readonly HashSet<string> NaveProtectedLights = new() { "PointLight_4", "PointLight_8", "PointLight_44", "PointLight_45",
+            "PointLight_46", "PointLight_59", "PointLight_64", "PointLight_69", "PointLight_72", "PointLight_73", "PointLight_85", "PointLight_86", "PointLight_95", "PointLight_97" };
+
+        // Light endpoints only: no cell event timers, door impulses, NPC voices, sanity effects or AI.
+        static void ApplyNaveLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/21_torture_nave.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = mode.Contains("navelit") || lamp.Component.GetVariable("Lit") != "false";
+                    if (mode.Contains("naveblackout") && Array.IndexOf(NaveBlackoutLamps, lamp.Name) >= 0) on = false;
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                }
+            foreach (string name in NaveBlackoutLights)
+            { var light = map.GetLight(name); light.SetColor(mode.Contains("naveblackout") ? new Color(0f, 0f, 0f, 0f) : light.diffuseColor); }
+            for (int i = 1; i <= 8; i++)
+            {
+                var light = map.GetLight("light_prison_" + i);
+                light.SetColor(mode.Contains("navecell" + i) ? new Color(.9f, .15f, .05f, 1f) : light.diffuseColor);
+            }
+        }
+
+        static void VerifyNaveLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/21_torture_nave.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 64) throw new InvalidOperationException("Nave: expected 64 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float accent)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    var sample = light.transform.position + light.transform.forward * .3f;
+                    bool accent = NaveProtectedLights.Contains(light.name) || light.name.StartsWith("light_prison_", StringComparison.Ordinal);
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        accent ? light.GetComponent<Light>().intensity : -1f));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.accent >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.accent) > 1e-4f * Mathf.Max(1f, e.accent)) ||
+                            (e.light.box && e.light.enhancedIntensity != 1f))
+                            throw new InvalidOperationException("Nave: cell/candle/slime/residual/gameplay light changed " + e.light.name);
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int ownCount = 0;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) { ownCount++; value += rendered.intensity; }
+                        if (ownCount == 0) { noLight++; continue; }
+                        if (lamp.Lit ? value <= 0f : value > .001f) throw new InvalidOperationException("Nave: lamp state lost " + lamp.Name);
+                    }
+                    if (noLight != 11) throw new InvalidOperationException("Nave: no_light candles unexpectedly acquired/lost owned lights");
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Nave: sky changes legacy HPL2 light level");
+                }
+            }
+            void FadeAndSwitch(AmnesiaLight light, Color target, float duration)
+            {
+                light.FadeTo(target, light.CurrentRadius, duration); light.UpdateLight(duration * .5f); VerifyModes();
+                light.UpdateLight(duration * .5f); VerifyModes();
+                if (light.CurrentColor != target) throw new InvalidOperationException("Nave: fade interrupted " + light.name);
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { true, false })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                int effective = 0, missing = 0, inert = 0;
+                foreach (var (lamp, _) in lamps)
+                {
+                    string name = lamp.Component.GetVariable("ConnectedLight"); if (string.IsNullOrEmpty(name)) continue;
+                    var fill = map.GetLight(name);
+                    if (fill == null) { missing++; continue; }
+                    bool hasLight = lamp.Component.GetComponentsInChildren<AmnesiaLight>(true).Length > 0;
+                    if (!hasLight)
+                    {
+                        inert++; Color original = fill.CurrentColor;
+                        foreach (bool on in new[] { true, false }) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); VerifyModes(); }
+                        if (fill.CurrentColor != original) throw new InvalidOperationException("Nave: inert no_light connection changed colour");
+                        continue;
+                    }
+                    effective++;
+                    foreach (bool on in new[] { true, false })
+                    {
+                        HplGraphics.Apply(classic); lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                        Color color = fill.CurrentColor; float intensity = fill.GetComponent<Light>().intensity;
+                        if (!on && color != fill.diffuseColor) throw new InvalidOperationException("Nave: extinguished contribution remains " + lamp.Name);
+                        if (on && color == fill.diffuseColor) throw new InvalidOperationException("Nave: missing connected contribution " + lamp.Name);
+                        for (int mode = 0; mode < 5; mode++)
+                        {
+                            HplGraphics.Apply(Mode(mode));
+                            float factor = mode == 4 ? 1f : name == "SpotLight_3" ? 0f : mode is 0 or 2 ? 0f : .6f;
+                            if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - intensity * factor) > 1e-4f * Mathf.Max(1f, intensity))
+                                throw new InvalidOperationException("Nave: connected fill loses GI fallback " + lamp.Name);
+                        }
+                    }
+                }
+                if (effective != 29 || missing != 1 || inert != 1 || map.GetLight("PointLight_40") != null)
+                    throw new InvalidOperationException($"Nave: unexpected source connections {effective}/{missing}/{inert}");
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (string name in NaveBlackoutLamps) { var lamp = (Props.PropLamp)map.GetEntityByName(name); lamp.SetLit(false, false); lamp.UpdateLogic(0f); }
+                foreach (string name in NaveBlackoutLights) FadeAndSwitch(map.GetLight(name), new Color(0f, 0f, 0f, 0f), 1f);
+                for (int i = 1; i <= 8; i++)
+                {
+                    var light = map.GetLight("light_prison_" + i);
+                    FadeAndSwitch(light, new Color(.9f, .15f, .05f, 1f), .2f);
+                    FadeAndSwitch(light, new Color(0f, 0f, 0f, 0f), .4f);
+                }
+                string line = "Nave state PASS: 64 lamp states (53 with owned lights, 11 no_light candles), 29 effective connections, original missing PointLight_40 and inert no_light connection retained; eight lamps extinguished, 12 continuing one-second blackout fades and eight .2/.4-second red cell pulses survive RTGI, RT no-GI, SSGI, raster no-GI and classic; residual PointLight_8, candle/slime accents, four boxes and legacy HPL2 light levels are preserved. Visible-darkness readings are checked separately per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
