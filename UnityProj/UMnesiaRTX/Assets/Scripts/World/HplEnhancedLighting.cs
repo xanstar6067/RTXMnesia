@@ -85,6 +85,12 @@ namespace RTXMnesia.World
             public string shadows;
             /// <summary>The source radius of soft (ray-traced) shadows, m.</summary>
             public string sourceRadius;
+            /// <summary>
+            /// "off": the light gives no specular highlight (diffuse only), "on": it does; "" — unchanged for the map's
+            /// lights, on for added point / spot lights, off for added rect lights: they are windows and openings, and
+            /// on stone of smoothness ~0.5 their highlight at grazing angles made the reveals and sills shine white.
+            /// </summary>
+            public string specular;
             /// <summary>Added lights: a light of the map whose brightness and visibility the light follows (a lamp that is lit / put out, flicker).</summary>
             public string follow;
             /// <summary>Why: not read, for the reader of the file.</summary>
@@ -96,7 +102,7 @@ namespace RTXMnesia.World
             public AmnesiaLight light;
             public Vector3 localPosition;
             public Quaternion localRotation;
-            public bool moved, castShadows;
+            public bool moved, castShadows, affectSpecular = true;
             public int baseShadowLevel;
             public LightShadows shadows;
             public ShadowUpdateMode updateMode;
@@ -525,6 +531,7 @@ namespace RTXMnesia.World
                 updateMode = hd != null ? hd.shadowUpdateMode : ShadowUpdateMode.EveryFrame,
                 normalBias = hd != null ? hd.normalBias : 0.75f, slopeBias = hd != null ? hd.slopeBias : 0.5f,
                 nearPlane = hd != null ? hd.shadowNearPlane : 0.1f,
+                affectSpecular = hd == null || hd.affectSpecular,
             };
             s_changed.Add(record);
             return record;
@@ -587,8 +594,11 @@ namespace RTXMnesia.World
                 case "on": SetShadows(light, true); break;
                 case "off": SetShadows(light, false); break;
             }
+            if (SpecularOff(e) && light.TryGetComponent(out HDAdditionalLightData hd)) hd.affectSpecular = false;
             light.Apply(light.CurrentColor, light.CurrentRadius);
         }
+
+        static bool SpecularOff(Entry e) => (e.specular ?? "").Trim().ToLowerInvariant() == "off";
 
         static void Add(Entry e)
         {
@@ -635,6 +645,8 @@ namespace RTXMnesia.World
             {
                 hd.SetShadowResolutionOverride(false);
                 hd.SetShadowResolutionLevel(2);
+                if (SpecularOff(e) || type == LightType.Rectangle && (e.specular ?? "").Trim().ToLowerInvariant() != "on")
+                    hd.affectSpecular = false;
             }
             // Like the map's lights, they also light the player's hands.
             HplLighting.SetLightLayers(light, HplLighting.LightLayersMask);
@@ -689,6 +701,7 @@ namespace RTXMnesia.World
                     hd.normalBias = r.normalBias;
                     hd.slopeBias = r.slopeBias;
                     hd.shadowNearPlane = r.nearPlane;
+                    hd.affectSpecular = r.affectSpecular;
                 }
                 HplGraphics.ApplyShadows(light);
                 light.Apply(light.CurrentColor, light.CurrentRadius);

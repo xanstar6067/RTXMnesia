@@ -83,6 +83,7 @@ namespace RTXMnesia.Dev
             var studyCheck = VerifyStudyEvents(map, user, report);
             while (studyCheck.MoveNext()) yield return studyCheck.Current;
             VerifyStorageEvents(map, user, report);
+            VerifyMachineRoomEvents(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -1063,6 +1064,104 @@ namespace RTXMnesia.Dev
                 foreach (var (light, saved) in states) light.Restore(saved);
                 altar.SetLit(altarLit, false); altar.UpdateLogic(0f);
                 map.player.lanternDisabled = disabled;
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void VerifyMachineRoomEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/13_machine_room.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "PointLight_4", "PointLight_5", "PointLight_6", "PointLight_7",
+                "SlimeLight_1", "SlimeLight_2", "SlimeLight_3", "SlimeLight_4", "SlimeLight_5", "SlimeLight_6" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Machine room: missing event light " + name);
+                states.Add((light, light.Save()));
+            }
+            var burner = map.GetEntityByName("13_burner") as Props.PropLamp;
+            if (burner == null) throw new InvalidOperationException("Machine room: missing burner");
+            bool burnerLit = burner.Lit;
+            var classic = user.Copy(); classic.lightingSet = 0;
+            try
+            {
+                // Endpoints and middle of the two slime radius fades and blue puzzle-marker colour fades.
+                // Burner ignition/failure is tested without starting machinery or changing puzzle progression.
+                for (int stage = 0; stage < 3; stage++)
+                {
+                    HplGraphics.Apply(classic);
+                    foreach (var (light, saved) in states)
+                    {
+                        bool slime = light.name.StartsWith("SlimeLight_", StringComparison.Ordinal);
+                        light.SetColor(slime ? saved.color : saved.color * (1f - stage * 0.5f));
+                        light.SetRadius(slime ? stage * 2.5f : saved.radius);
+                    }
+                    burner.SetLit(stage == 1, false); burner.UpdateLogic(0f);
+                    var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float eventIntensity)>();
+                    foreach (var light in AmnesiaLight.All)
+                    {
+                        if (light == null || light.handHeld || light.enhancedAdded) continue;
+                        Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                        bool eventLight = light.name.StartsWith("SlimeLight_", StringComparison.Ordinal) ||
+                            light.name is "PointLight_4" or "PointLight_5" or "PointLight_6" or "PointLight_7";
+                        sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                            eventLight ? light.GetComponent<Light>().intensity : -1f));
+                    }
+                    for (int mode = 0; mode < 4; mode++)
+                    {
+                        var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        HplGraphics.Apply(settings);
+                        foreach (var e in sources)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                                (e.eventIntensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.eventIntensity) > 1e-4f * Mathf.Max(1f, e.eventIntensity)) ||
+                                (e.light.box && e.light.enhancedIntensity != 1f))
+                                throw new InvalidOperationException("Machine room: event/box/gameplay light changed " + e.light.name);
+                        float ownIntensity = 0f;
+                        foreach (var own in burner.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) ownIntensity += rendered.intensity;
+                        if (burner.Lit != (stage == 1) || (stage == 1 ? ownIntensity <= 0f : ownIntensity > 0.001f))
+                            throw new InvalidOperationException("Machine room: burner ignition/failure state lost");
+                    }
+                }
+                foreach (var pair in new[] { ("hanging_lantern_wall_3", "PointLight_18"), ("hanging_lantern_ceiling_7", "PointLight_26"),
+                    ("hanging_lantern_ceiling_8", "PointLight_16"), ("hanging_lantern_ceiling_12", "PointLight_2"),
+                    ("hanging_lantern_ceiling_15", "PointLight_24"), ("hanging_lantern_ceiling_17", "PointLight_17"),
+                    ("hanging_lantern_ceiling_13", "PointLight_3"), ("hanging_lantern_ceiling_14", "PointLight_1") })
+                {
+                    var lamp = map.GetEntityByName(pair.Item1) as Props.PropLamp;
+                    var fill = map.GetLight(pair.Item2);
+                    if (lamp == null || fill == null) throw new InvalidOperationException("Machine room: missing lamp connection " + pair);
+                    bool wasLit = lamp.Lit;
+                    try
+                    {
+                        foreach (bool burning in new[] { false, true })
+                        {
+                            HplGraphics.Apply(classic); lamp.SetLit(burning, false); lamp.UpdateLogic(0f);
+                            Color color = fill.CurrentColor; float original = fill.GetComponent<Light>().intensity;
+                            if (!burning && color != fill.diffuseColor) throw new InvalidOperationException("Machine room: extinguished lantern leaves connected colour");
+                            for (int mode = 0; mode < 4; mode++)
+                            {
+                                var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                                settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                                HplGraphics.Apply(settings);
+                                float expected = original * (mode == 3 ? 1f : mode == 0 ? 0f : 0.6f);
+                                if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - expected) > 1e-4f * Mathf.Max(1f, original))
+                                    throw new InvalidOperationException("Machine room: connected lantern loses GI fallback " + pair);
+                            }
+                        }
+                    }
+                    finally { lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f); }
+                }
+                string line = "Machine room events PASS: six slime radius fades (0/2.5/5), four blue puzzle-marker colour fades (full/half/black), burner ignition/failure and eight lantern connections survive RTGI, no-GI, raster and classic; all original sampled gameplay light and six ambient boxes preserved.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                burner.SetLit(burnerLit, false); burner.UpdateLogic(0f);
                 HplGraphics.Apply(user);
             }
         }
