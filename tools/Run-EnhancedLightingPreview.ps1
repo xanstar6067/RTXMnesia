@@ -30,7 +30,11 @@ $log = Join-Path $project "Logs\EnhancedLighting_run.log"
 $arguments = @('-projectPath', "`"$project`"", '-batchmode', '-executeMethod', 'RTXMnesia.EditorDev.EnhancedLightingPreview.RunBatch',
     '-amnesiaMap', $Map, '-lightViews', "`"$Views`"", '-lightModes', $Modes, '-lightSize', $Size, '-logFile', "`"$log`"")
 if ($Lit) { $arguments += @('-lightLit', $Lit) }
-$process = Start-Process $Unity -ArgumentList $arguments -WindowStyle Hidden -PassThru -Wait
+$process = Start-Process $Unity -ArgumentList $arguments -WindowStyle Hidden -PassThru
+# -Wait also waits for the process tree, including Unity's persistent licensing client.
+# Keep the editor handle and wait for this editor only, so a successful run can finish.
+$null = $process.Handle
+$process.WaitForExit()
 "Unity exit code $($process.ExitCode); log $log"
 Select-String -Path $log -Pattern "error CS|Exception|\[EnhancedLighting\]" | Select-Object -Last 40 | ForEach-Object { $_.Line }
 $changed = Get-ChildItem (Join-Path $project "ProjectSettings") -File |

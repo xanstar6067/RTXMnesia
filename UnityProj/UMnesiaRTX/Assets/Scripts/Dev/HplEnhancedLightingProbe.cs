@@ -84,6 +84,7 @@ namespace RTXMnesia.Dev
             while (studyCheck.MoveNext()) yield return studyCheck.Current;
             VerifyStorageEvents(map, user, report);
             VerifyMachineRoomEvents(map, user, report);
+            VerifyElevatorEvents(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -115,6 +116,7 @@ namespace RTXMnesia.Dev
                     HplEnhancedEmission.Enabled = !mode.Contains("noemit");
                     HplEnhancedEmission.GainScale = mode.Contains("emitx") ? 30f : 1f;
                     HplGraphics.Apply(s);
+                    ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
                     HplEnhancedRelief.SeparateSharedWalls();
                     yield return SetLantern(map, mode.Contains("lantern"));
@@ -1164,6 +1166,105 @@ namespace RTXMnesia.Dev
                 burner.SetLit(burnerLit, false); burner.UpdateLogic(0f);
                 HplGraphics.Apply(user);
             }
+        }
+
+        static void VerifyElevatorEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/14_elevator.map", StringComparison.Ordinal)) return;
+            var states = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "PointLight_1", "PointLight_3", "PointLight_4" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Elevator: missing event light " + name);
+                states.Add((light, light.Save()));
+            }
+            var lamp = map.GetEntityByName("elevator_lamp_1") as Props.PropLamp;
+            if (lamp == null) throw new InvalidOperationException("Elevator: missing cabin lamp");
+            bool wasLit = lamp.Lit;
+            var classic = user.Copy(); classic.lightingSet = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, bool visible, float eventIntensity)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + Vector3.down * 0.2f;
+                    bool eventLight = states.Exists(e => e.light == light);
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f), light.Visible,
+                        eventLight ? light.GetComponent<Light>().intensity : -1f));
+                }
+                bool burning = lamp.Lit;
+                for (int mode = 0; mode < 4; mode++)
+                {
+                    var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
+                    settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                    HplGraphics.Apply(settings);
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.eventIntensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.eventIntensity) > 1e-4f * Mathf.Max(1f, e.eventIntensity)))
+                            throw new InvalidOperationException("Elevator: scripted colour/visibility/gameplay light changed " + e.light.name);
+                    float ownIntensity = 0f;
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                        if (own.TryGetComponent<Light>(out var rendered)) ownIntensity += rendered.intensity;
+                    if (lamp.Lit != burning || (burning ? ownIntensity <= 0f : ownIntensity > 0.001f))
+                        throw new InvalidOperationException("Elevator: cabin lamp state lost");
+                }
+            }
+            try
+            {
+                // Endpoints of the light changes, without starting the ride or changing maps.
+                foreach (string state in new[] { "initial", "amber", "red", "stopped", "falling", "impact" })
+                {
+                    HplGraphics.Apply(classic);
+                    ApplyElevatorPreviewState(map, state);
+                    VerifyModes();
+                }
+                // Switching must preserve the fade itself, not just its end colour.
+                var cabin = map.GetLight("PointLight_1");
+                cabin.SetColor(new Color(0f, 0f, 0f, 1f));
+                foreach (Color destination in new[] { new Color(0.6f, 0.3f, 0f, 1f), new Color(0.2f, 0f, 0f, 1f) })
+                {
+                    Color start = cabin.CurrentColor;
+                    cabin.FadeTo(destination, cabin.CurrentRadius, 2f);
+                    for (int quarter = 1; quarter <= 4; quarter++)
+                    {
+                        VerifyModes();
+                        cabin.UpdateLight(0.5f);
+                        Color expected = Color.Lerp(start, destination, quarter * 0.25f);
+                        Color actual = cabin.CurrentColor;
+                        if (Mathf.Max(Mathf.Abs(actual.r - expected.r), Mathf.Abs(actual.g - expected.g), Mathf.Abs(actual.b - expected.b)) > 1e-5f)
+                            throw new InvalidOperationException("Elevator: switching interrupted cabin colour fade");
+                    }
+                }
+                string line = "Elevator events PASS: initial/amber/red/stop/fall/impact light states, cabin lamp ignition/extinction, both scrape visibility flags and live amber/red fades survive RTGI, no-GI, raster and classic; original HDRP event intensity and sampled gameplay light preserved.";
+                report.AppendLine(line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in states) light.Restore(saved);
+                lamp.SetLit(wasLit, false); lamp.UpdateLogic(0f);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        // Editor-only staged snapshots of the cabin; no gameplay timers, movement or chapter transition are run.
+        // View names amber*, red*, stopped*, falling*, impact* select the matching script light state.
+        static void ApplyElevatorPreviewState(HplMap map, string view)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/14_elevator.map", StringComparison.Ordinal)) return;
+            bool amber = view.StartsWith("amber", StringComparison.Ordinal);
+            bool red = view.StartsWith("red", StringComparison.Ordinal) || view.StartsWith("stopped", StringComparison.Ordinal) ||
+                view.StartsWith("falling", StringComparison.Ordinal) || view.StartsWith("impact", StringComparison.Ordinal);
+            var lamp = (Props.PropLamp)map.GetEntityByName("elevator_lamp_1");
+            lamp.SetLit(!amber, false); lamp.UpdateLogic(0f);
+            var cabin = map.GetLight("PointLight_1");
+            cabin.SetColor(amber ? new Color(0.6f, 0.3f, 0f, 1f) : red ? new Color(0.2f, 0f, 0f, 1f) : cabin.diffuseColor);
+            bool scraping = !view.StartsWith("stopped", StringComparison.Ordinal) && !view.StartsWith("impact", StringComparison.Ordinal);
+            map.GetLight("PointLight_3").SetVisible(scraping);
+            map.GetLight("PointLight_4").SetVisible(scraping);
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)

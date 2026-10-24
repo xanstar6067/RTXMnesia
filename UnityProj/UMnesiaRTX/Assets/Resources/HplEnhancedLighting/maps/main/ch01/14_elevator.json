@@ -1,0 +1,8 @@
+{
+  "lights": [
+    { "name": "PointLight_1", "note": "Scripted cabin colour during the elevator scare: black initially, amber (0.6, 0.3, 0) while the lamp is out, red (0.2, 0, 0) when it relights. Preserve all colour fades, original radius and intensity, including with RTGI; this is an event light, not synthetic lamp bounce." },
+    { "name": "PointLight_3", "note": "Small moving/falling elevator scrape accent beside ScriptArea_1 sparks. Preserve original intensity, radius, flicker and script visibility: hidden at the stop and impact, visible during the fall. No synthetic shadows." },
+    { "name": "PointLight_4", "note": "Small moving/falling elevator scrape accent beside ScriptArea_2 sparks. Preserve original intensity, radius, flicker and script visibility: hidden at the stop and impact, visible during the fall. No synthetic shadows." }
+  ],
+  "add": []
+}
