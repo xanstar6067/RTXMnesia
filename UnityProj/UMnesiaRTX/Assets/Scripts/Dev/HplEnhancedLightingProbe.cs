@@ -97,6 +97,7 @@ namespace RTXMnesia.Dev
             VerifyPrisonSouthEvents(map, user, report);
             VerifyPrisonNorthEvents(map, user, report);
             VerifyCisternEntranceState(map, user, report);
+            VerifyControlRoomState(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -131,7 +132,7 @@ namespace RTXMnesia.Dev
                     s.shadowCache = !mode.Contains("nocache");
                     // "ssgi": screen space GI, medium ("ssgi1" / "ssgi3": low / high); only without RTGI. Off otherwise.
                     s.ssgi = !mode.Contains("ssgi") ? 0 : mode.Contains("ssgi1") ? 1 : mode.Contains("ssgi3") ? 3 : 2;
-                    if (mode.Contains("tex")) s.textures = 1;
+                    s.textures = mode.Contains("classictex") ? 0 : mode.Contains("tex") ? 1 : user.textures;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
                     // "noemit": without the GI copies of glowing materials (what their glow adds).
                     HplEnhancedEmission.Enabled = !mode.Contains("noemit");
@@ -392,6 +393,7 @@ namespace RTXMnesia.Dev
             if (Resources.Load<TextAsset>(overlay) == null) return;
             var classic = user.Copy();
             classic.lightingSet = 0;
+            classic.ssgi = 0;
             HplGraphics.Apply(classic);
             var originals = new List<(AmnesiaLight data, Vector3 position, Quaternion rotation,
                 float intensity, float range, Color color, bool shadows)>();
@@ -1700,6 +1702,108 @@ namespace RTXMnesia.Dev
         {
             if (!map.mapFile.Replace('\\', '/').EndsWith("/16_cistern_entrance.map", StringComparison.Ordinal)) return;
             foreach (string name in CisternWaterEntities) map.GetEntityByName(name).SetActive(!mode.Contains("drained"));
+        }
+
+        static void VerifyControlRoomState(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/17_control_room.map", StringComparison.Ordinal)) return;
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            var pipes = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "PointLight_playpipesmall_part01", "PointLight_playpipehigh_part02", "PointLight_playpipelarge_part03" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Control room: missing pipe light " + name);
+                pipes.Add((light, light.Save()));
+            }
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 20) throw new InvalidOperationException("Control room: expected 20 lamps");
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float accent)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                    bool accent = light.name.StartsWith("PointLight_playpipe", StringComparison.Ordinal) || light.name is "PointLight_1" or "PointLight_25";
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        accent ? light.GetComponent<Light>().intensity : -1f));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.accent >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.accent) > 1e-4f * Mathf.Max(1f, e.accent)))
+                            throw new InvalidOperationException("Control room: pipe/accent/gameplay light changed " + e.light.name);
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Control room: sky source affects gameplay darkness");
+                }
+            }
+            try
+            {
+                // Real .5 s RemovePipeLight fades must continue through all five rendering modes.
+                VerifyModes();
+                foreach (var (light, saved) in pipes)
+                {
+                    light.SetColor(saved.color); light.FadeTo(new Color(0f, 0f, 0f, 0f), saved.radius, 0.5f);
+                    light.UpdateLight(0.25f); VerifyModes(); light.UpdateLight(0.25f); VerifyModes();
+                    if (light.CurrentColor.maxColorComponent != 0f || light.GetComponent<Light>().intensity > 0.001f)
+                        throw new InvalidOperationException("Control room: pipe cue was resurrected or its fade interrupted");
+                }
+                foreach (var pair in new[] { ("hanging_lantern_wall_1", "PointLight_37"), ("hanging_lantern_wall_3", "PointLight_36"),
+                    ("candle_floor_2", "SpotLight_10"), ("candle_floor_3", "PointLight_20"),
+                    ("candle_floor_5", "PointLight_21"), ("candle_floor_8", "SpotLight_12") })
+                {
+                    var lamp = (Props.PropLamp)map.GetEntityByName(pair.Item1); var fill = map.GetLight(pair.Item2);
+                    foreach (bool lit in new[] { false, true })
+                    {
+                        HplGraphics.Apply(classic); lamp.SetLit(lit, false); lamp.UpdateLogic(0f);
+                        Color color = fill.CurrentColor; float intensity = fill.GetComponent<Light>().intensity;
+                        if (!lit && color != fill.diffuseColor) throw new InvalidOperationException("Control room: lamp contribution remains after extinguishing");
+                        for (int mode = 0; mode < 5; mode++)
+                        {
+                            HplGraphics.Apply(Mode(mode)); float expected = intensity * (mode == 4 ? 1f : mode is 0 or 2 ? 0f : 0.6f);
+                            if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - expected) > 1e-4f * Mathf.Max(1f, intensity))
+                                throw new InvalidOperationException("Control room: connected light loses GI fallback " + pair);
+                        }
+                    }
+                }
+                foreach (bool lit in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                    for (int mode = 0; mode < 5; mode++)
+                    {
+                        HplGraphics.Apply(Mode(mode));
+                        foreach (var (lamp, _) in lamps)
+                        {
+                            float intensity = 0f;
+                            foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                                if (own.TryGetComponent<Light>(out var rendered)) intensity += rendered.intensity;
+                            if (lamp.Lit != lit || (lit ? intensity <= 0f : intensity > 0.001f))
+                                throw new InvalidOperationException("Control room: lamp ignition lost " + lamp.Name);
+                        }
+                    }
+                }
+                string line = "Control room state PASS: three continuing .5 s pipe fades remain black after switching; two blue interaction accents, 20 lamps off/on, all six lamp connections and sampled original gameplay light survive RTGI, RT no-GI, SSGI, raster no-GI and classic; added shaft lights do not affect darkness.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in pipes) light.Restore(saved);
+                foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                HplGraphics.Apply(user);
+            }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
