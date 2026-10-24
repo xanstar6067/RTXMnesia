@@ -40,6 +40,19 @@ namespace RTXMnesia.Dev
             Finish(0);
         }
 
+        /// <summary>Only the current player's hands exist: no copy of an earlier player's hands stays in the world.</summary>
+        void CheckOneHands(string where)
+        {
+            // FindObjectsByType skips DontSave objects, which the hands are: every loaded one, without the prefab asset.
+            var all = System.Array.FindAll(Resources.FindObjectsOfTypeAll<Player.HplHandsData>(), h => h.gameObject.scene.IsValid());
+            var player = HplMap.Current.player;
+            var text = new System.Text.StringBuilder();
+            foreach (var h in all)
+                text.Append($" [{h.gameObject.scene.name} at {h.transform.position} current={player.Hands != null && h.transform == player.Hands.Root}]");
+            Debug.Log($"[MapChangeCheck] hands {where}: {all.Length}{text}");
+            Check(all.Length == 1 && player.Hands != null && all[0].transform == player.Hands.Root, $"Hands copies {where}: {all.Length}{text}");
+        }
+
         void Check(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException(message);
@@ -126,6 +139,7 @@ namespace RTXMnesia.Dev
             Check(HplGame.GetGlobalVar("carry") == "1", "Global data was lost");
             Check(map.sound.Music.CurrentSongName == "01_amb_darkness.ogg", "Music did not go on in the new map: " + map.sound.Music.CurrentSongName);
             Check(player.lanternActive && player.Hands != null && player.Hands.CurrentHandObject == "lantern" && player.Hands.State == Player.PlayerHands.HandsState.Idle && player.Hands.HandObjectAlpha >= 1f, "The held lantern did not come along");
+            CheckOneHands("after 00 → 01");
             Check(Mathf.Approximately(map.effects.ImageTrail.Amount, 0.4f), "Image trail was not carried over");
             Check(map.effects.Fade.Alpha >= 1f && map.effects.Fade.IsFading, "New map does not start black and fading in");
             Check(map.IsMenuPaused && Time.timeScale == 0 && player.UiInputBlocked, "New map runs while the load screen is up");
@@ -198,6 +212,7 @@ namespace RTXMnesia.Dev
             player = map.player;
             player.readDevices = false;
             Check(map.MapName == "01_old_archives" && map.GetVar("cache_test") == "7", "Local variables were not restored");
+            CheckOneHands("after the return to 01");
             Check(map.GetTimerTimeLeft("cache_timer") > 90f, "Timers were not restored");
             Check(map.PlayerCollideCallbacks.Export().Count == playerCallbacks, "Player collide callbacks were not restored");
             Check(((PropSwingDoor)map.GetEntityByName("Door_1")).Locked, "Locked door was not restored");
@@ -224,6 +239,7 @@ namespace RTXMnesia.Dev
             player = map.player;
             player.readDevices = false;
             Check(map.MapName == "02_entrance_hall" && map.Script is Levels.Ch01.EntranceHall, "02_entrance_hall did not load with its script");
+            CheckOneHands("after 01 → 02");
             var hubStart = map.GetPlayerStart("PlayerStartArea_4");
             Check(hubStart != null && Vector3.Distance(player.Body.FeetPosition, hubStart.transform.position) < 0.3f, "Player is not at PlayerStartArea_4 of 02_entrance_hall");
             Check(!HplSavedMaps.MapExists("01_old_archives"), "02_entrance_hall OnStart did not clear the saved maps");

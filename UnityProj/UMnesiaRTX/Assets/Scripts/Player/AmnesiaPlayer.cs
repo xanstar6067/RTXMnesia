@@ -422,6 +422,8 @@ namespace RTXMnesia.Player
 
         void OnDisable() => LockCursor(false);
 
+        void OnDestroy() => Hands?.Destroy();
+
         // ------------------------------------------------------------------ placement
 
         static AmnesiaArea FindStart(string name)

@@ -359,6 +359,7 @@ namespace RTXMnesia.ScriptApi
             _started = true;
             SetCharacterShapes();
             player?.Hands?.SetWorld(sound, ParticleWorld);
+            player?.Hands?.RemoveStrayCopies();
             // cMapHandlerSoundCallback: started sound entities can be heard by enemies.
             Sound.HplSoundEntity.Started += OnSoundEntityStarted;
             if (player != null && player.LookAt != null)

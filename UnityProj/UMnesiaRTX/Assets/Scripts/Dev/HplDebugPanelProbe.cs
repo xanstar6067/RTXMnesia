@@ -131,6 +131,57 @@ namespace RTXMnesia.Dev
             Check(HplGame.HasType("Lantern") && HplGame.Items.Single(i => i.type == "LampOil").count == 5, "Justine starter supplies missing");
             map.player.Lantern.SetActive(true, true);
             Check(map.player.lanternActive, "Justine test lantern is unusable");
+            map.player.Lantern.SetActive(false, true);
+            yield return new WaitForSecondsRealtime(1.5f);
+
+            // The lantern lit with its key (F), then teleports to other maps: only the current player's hands stay.
+            // A player build showed the old player's hands with the lit lantern standing in the new map.
+            int strays = 0;
+            void OnLog(string message, string stack, LogType type)
+            {
+                if (message.Contains("Stray player hands")) { strays++; Debug.Log("[DebugPanelCheck] " + message); }
+            }
+            Application.logMessageReceived += OnLog;
+            try
+            {
+                foreach (var next in new[] { "01_old_archives", "02_entrance_hall" })
+                {
+                    yield return PressLantern(map);
+                    Check(map.player.lanternActive && map.player.Hands != null && map.player.Hands.CurrentHandObject == "lantern",
+                          $"F did not light the lantern on {map.MapName}");
+                    var before = map;
+                    ui = map.GameUi;
+                    Check(ui.OpenDebugPanel() && ui.BeginDebugLoad(stages.First(s => s.MapName == next)), "Teleport to " + next + " rejected");
+                    deadline = Time.realtimeSinceStartupAsDouble + 90;
+                    while (HplMap.Current == null || HplMap.Current == before || HplMap.Current.MapName != next)
+                    {
+                        if (Time.realtimeSinceStartupAsDouble >= deadline) throw new InvalidOperationException("Teleport to " + next + " timed out");
+                        yield return null;
+                    }
+                    yield return new WaitForSecondsRealtime(1f);
+                    map = HplMap.Current;
+                    map.player.readDevices = false;
+                    if (map.GameUi.IsPaused) map.GameUi.Resume();
+                    var all = Array.FindAll(Resources.FindObjectsOfTypeAll<Player.HplHandsData>(), h => h.gameObject.scene.IsValid());
+                    string list = string.Join(", ", all.Select(h => $"{h.gameObject.scene.name} model at {(h.hands != null ? h.hands.position : h.transform.position)} current={map.player.Hands != null && h.transform == map.player.Hands.Root}"));
+                    Debug.Log($"[DebugPanelCheck] hands on {next}: {all.Length} ({list}), stray copies removed so far {strays}");
+                    Check(strays == 0 && all.Length == 1 && map.player.Hands != null && all[0].transform == map.player.Hands.Root,
+                          $"Hands copies on {next}: {all.Length} ({list}), stray copies removed {strays}");
+                }
+            }
+            finally { Application.logMessageReceived -= OnLog; }
+        }
+
+        /// <summary>The lantern key (F) of the test keyboard, then its draw animation.</summary>
+        IEnumerator PressLantern(HplMap map)
+        {
+            map.player.readDevices = true;
+            InputSystem.QueueStateEvent(_keyboard, new KeyboardState(Key.F));
+            yield return null;
+            yield return null;
+            InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
+            yield return new WaitForSecondsRealtime(1.5f);
+            map.player.readDevices = false;
         }
 
         void Finish(int code)

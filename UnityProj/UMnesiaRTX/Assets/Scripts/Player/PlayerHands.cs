@@ -102,6 +102,34 @@ namespace RTXMnesia.Player
             return new PlayerHands(player, data, config);
         }
 
+        /// <summary>
+        /// The player is gone (its map scene unloads): the hands go with it. They are a root object not saved with the
+        /// scene (DontSave), which a scene change does not destroy: the old map's hands with the lit lantern stayed
+        /// in the world where they were last, inside the next map.
+        /// </summary>
+        public void Destroy()
+        {
+            if (_root != null) Object.Destroy(_root.gameObject);
+        }
+
+        /// <summary>
+        /// When the map begins: no other hands may be left in the world. A player build after a map change showed the
+        /// hands with the lit lantern of an earlier player standing in the new map (not reproduced in the editor's
+        /// Play mode): such copies are reported with their scene and pose, and removed.
+        /// </summary>
+        public void RemoveStrayCopies()
+        {
+            foreach (var other in Resources.FindObjectsOfTypeAll<HplHandsData>())
+            {
+                // The prefab asset has no scene; FindObjectsByType does not see DontSave objects.
+                if (!other.gameObject.scene.IsValid() || other.transform == _root) continue;
+                var model = other.hands != null ? other.hands : other.transform;
+                ScriptApi.HplLog.PortError($"Stray player hands removed: scene '{other.gameObject.scene.name}', model at {model.position}, " +
+                                           $"active {model.gameObject.activeInHierarchy}, this map '{_player.gameObject.scene.name}'");
+                Object.Destroy(other.gameObject);
+            }
+        }
+
         /// <summary>The map's sound and particles for the hand objects' lights (flicker effects).</summary>
         public void SetWorld(Sound.HplSoundHandler sound, Particles.HplParticleWorld particles)
         {
