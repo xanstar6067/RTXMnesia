@@ -114,6 +114,7 @@ namespace RTXMnesia.Dev
                 VerifyTranseptLighting(map, user, report);
                 VerifyChoirWestLighting(map, user, report);
                 VerifyChoirEastLighting(map, user, report);
+                VerifyCellTunnelsLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -164,6 +165,7 @@ namespace RTXMnesia.Dev
                     ApplyTranseptLightingPreview(map, mode);
                     ApplyChoirWestLightingPreview(map, mode);
                     ApplyChoirEastLightingPreview(map, mode);
+                    ApplyCellTunnelsLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -2820,6 +2822,188 @@ namespace RTXMnesia.Dev
                 foreach (string name in new[] { "PointLight_7", "PointLight_8", "PointLight_9" })
                 { var light = map.GetLight(name); light.SetColor(light.diffuseColor); Fade(light, Color.clear); }
                 string line = "Choir east state PASS: 47 lamp states, 27 connections with 19 targets (shared targets checked per lamp), five continuing two-second poison/orb fades, five caustic projectors and ambient survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Five added apertures do not accumulate or affect legacy HPL2 darkness; visible-darkness checked separately per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly string[] CellTunnelsGuardian = { "PointLight_10", "PointLight_11", "PointLight_12", "PointLight_13", "PointLight_14", "PointLight_15", "PointLight_16", "PointLight_17", "PointLight_18", "PointLight_19", "PointLight_22", "PointLight_23", "PointLight_24", "PointLight_38", "PointLight_39", "PointLight_40", "PointLight_53", "PointLight_54", "PointLight_59", "PointLight_60", "PointLight_61", "PointLight_62", "PointLight_63", "PointLight_64", "PointLight_65", "PointLight_66", "PointLight_67", "PointLight_68", "PointLight_69", "PointLight_7", "PointLight_71", "PointLight_72", "PointLight_74", "PointLight_75", "PointLight_76", "PointLight_77", "PointLight_78", "PointLight_79", "PointLight_8", "PointLight_80", "PointLight_81", "PointLight_9" };
+        static readonly string[] CellTunnelsCheckpointPoints = { "PointLight_7", "PointLight_8", "PointLight_10", "PointLight_11", "PointLight_12", "PointLight_16", "PointLight_17", "PointLight_22", "PointLight_23" };
+        static readonly string[] CellTunnelsCheckpointSpots = { "SpotLight_14", "SpotLight_9", "SpotLight_8", "SpotLight_7", "SpotLight_3", "SpotLight_2", "SpotLight_4", "SpotLight_5", "SpotLight_6" };
+
+        static void ApplyCellTunnelsLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/25_cell_tunnels.map", StringComparison.Ordinal)) return;
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded && light.GetComponentInParent<AmnesiaEntity>() == null) light.SetColor(light.diffuseColor);
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool off = mode.Contains("cellstairsout") && (lamp.Name is "torch_static01_14" or "torch_static01_15" or "torch_static01_16");
+                    lamp.SetLit(!off, false); lamp.UpdateLogic(0f);
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.SetFlickerActive(false);
+                }
+            if (mode.Contains("cellguardian"))
+                foreach (string name in CellTunnelsGuardian) map.GetLight(name).SetColor(new Color(1f, 0f, .2f, .6f));
+            if (mode.Contains("cellcheckpoint"))
+            {
+                foreach (string name in CellTunnelsCheckpointPoints) map.GetLight(name).SetColor(new Color(0f, 0f, .1f, 0f));
+                foreach (string name in CellTunnelsCheckpointSpots) map.GetLight(name).SetColor(Color.clear);
+            }
+            if (mode.Contains("cellstairsout"))
+                foreach (string name in new[] { "PointLight_25", "PointLight_26", "PointLight_27" }) map.GetLight(name).SetColor(Color.clear);
+            if (mode.Contains("celltools")) map.GetLight("PointLight_21").SetColor(new Color(.9f, .8f, .3f, .8f));
+            if (mode.Contains("celljar")) map.GetLight("PointLight_58").SetColor(new Color(.3f, .4f, 1f, .8f));
+            if (mode.Contains("cellending")) map.GetLight("PointLight_1").SetColor(new Color(1f, 0f, 0f, 1f));
+            // Lighting endpoints only: no chase, damage, death, item pickup, cutscene, timer or quest progression.
+        }
+
+        static void VerifyCellTunnelsLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/25_cell_tunnels.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 11) throw new InvalidOperationException("Cell tunnels: expected 11 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            float Factor(string name, int mode)
+            {
+                if (mode == 4) return 1f;
+                if (name == "BoxLight_1") return mode is 0 or 2 ? .6f : .8f;
+                if (name == "BoxLight_2") return 1f;
+                if (name.StartsWith("SpotLight_", StringComparison.Ordinal) && int.Parse(name.Substring(10), CultureInfo.InvariantCulture) <= 16) return 0f;
+                if (name.StartsWith("SpotLight_", StringComparison.Ordinal) || Array.IndexOf(CellTunnelsGuardian, name) >= 0 ||
+                    name is "PointLight_1" or "PointLight_20" or "PointLight_21" or "PointLight_28" or "PointLight_58") return 1f;
+                if (!name.StartsWith("PointLight_", StringComparison.Ordinal)) return 1f; // Player's auxiliary darkness light is not map fill.
+                int number = int.Parse(name.Substring(11), CultureInfo.InvariantCulture);
+                if (number >= 32 && number <= 52) return .3f;
+                if (number == 73) return .6f;
+                return mode is 0 or 2 ? 0f : .6f;
+            }
+
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity, bool standalone)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f, light.GetComponentInParent<AmnesiaEntity>() == null));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || (e.light.box && Mathf.Abs(e.light.enhancedIntensity - Factor(e.light.name, mode)) > 1e-5f) ||
+                            (e.standalone && e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * Factor(e.light.name, mode)) > 1e-4f * Mathf.Max(1f, e.intensity)))
+                            throw new InvalidOperationException("Cell tunnels: accent/caustic/lamp fill/legacy light changed " + e.light.name);
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int own = 0;
+                        foreach (var light in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (light.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0 || (lamp.Lit ? value <= 0f : value > .001f)) throw new InvalidOperationException("Cell tunnels: lamp state lost " + lamp.Name);
+                    }
+                    int sky = 0;
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded)
+                        {
+                            sky++;
+                            if (light.TryGetComponent<HplEnhancedLightFollow>(out var follow))
+                            {
+                                // Execute the normal lifecycle synchronously, between graphics-setting changes.
+                                follow.SendMessage("Start"); follow.SendMessage("LateUpdate");
+                                Color c = follow.source.CurrentColor, original = follow.source.diffuseColor;
+                                float expected = 150f * Mathf.GammaToLinearSpace(Mathf.Max(c.r, c.g, c.b)) / Mathf.GammaToLinearSpace(Mathf.Max(original.r, original.g, original.b));
+                                var rendered = light.GetComponent<Light>();
+                                if (Mathf.Abs(rendered.intensity - expected) > .001f || rendered.enabled != (expected > 0f))
+                                    throw new InvalidOperationException("Cell tunnels: replacement shaft does not follow checkpoint fade " + light.name);
+                            }
+                            if (light.LightLevelAt(light.transform.position, 0f) != 0f) throw new InvalidOperationException("Cell tunnels: sky contributes to legacy darkness");
+                        }
+                    if (sky != (mode == 4 ? 0 : 18)) throw new InvalidOperationException("Cell tunnels: sky sources accumulate or disappear");
+                }
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                int connections = 0; var targets = new HashSet<string>();
+                foreach (var (lamp, _) in lamps)
+                {
+                    string target = lamp.Component.GetVariable("ConnectedLight");
+                    if (string.IsNullOrEmpty(target)) continue;
+                    connections++; targets.Add(target); var fill = map.GetLight(target);
+                    if (fill == null) throw new InvalidOperationException("Cell tunnels: missing connection " + target);
+                    foreach (bool on in new[] { false, true })
+                    {
+                        lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                        if (on ? fill.CurrentColor.maxColorComponent <= fill.diffuseColor.maxColorComponent : fill.CurrentColor != fill.diffuseColor)
+                            throw new InvalidOperationException("Cell tunnels: broken lamp connection " + lamp.Name);
+                        VerifyModes();
+                    }
+                }
+                if (connections != 1 || targets.Count != 1) throw new InvalidOperationException("Cell tunnels: expected one torch link to PointLight_15");
+                void FadeBatch(string[] names, Func<string, Color> target, float duration)
+                {
+                    var starts = new Dictionary<string, Color>();
+                    foreach (string name in names)
+                    { var light = map.GetLight(name); starts[name] = light.CurrentColor; light.FadeTo(target(name), light.CurrentRadius, duration); light.UpdateLight(duration * .5f); }
+                    VerifyModes();
+                    foreach (string name in names)
+                    {
+                        var light = map.GetLight(name);
+                        if (starts[name] != target(name) && (light.CurrentColor == starts[name] || light.CurrentColor == target(name)))
+                            throw new InvalidOperationException("Cell tunnels: missing fade midpoint " + name);
+                        light.UpdateLight(duration * .5f);
+                    }
+                    VerifyModes();
+                    foreach (string name in names) if (map.GetLight(name).CurrentColor != target(name)) throw new InvalidOperationException("Cell tunnels: fade interrupted " + name);
+                }
+                FadeBatch(CellTunnelsGuardian, _ => new Color(1f, 0f, .2f, .6f), 1f);
+                FadeBatch(CellTunnelsGuardian, name => map.GetLight(name).diffuseColor, .2f);
+                FadeBatch(CellTunnelsCheckpointPoints, _ => new Color(0f, 0f, .1f, 0f), .1f);
+                FadeBatch(CellTunnelsCheckpointSpots, _ => Color.clear, .1f);
+                // The script's reset affects exactly these 16 points; other guardian red lights go dark.
+                string[] blue = { "PointLight_7", "PointLight_14", "PointLight_8", "PointLight_18", "PointLight_9", "PointLight_10", "PointLight_11", "PointLight_12", "PointLight_13", "PointLight_15", "PointLight_17", "PointLight_23", "PointLight_24", "PointLight_22", "PointLight_16", "PointLight_19" };
+                FadeBatch(blue, _ => new Color(.1f, .15f, .2f, 0f), .2f);
+                foreach (string name in new[] { "PointLight_21", "PointLight_58" })
+                {
+                    map.GetLight(name).SetColor(Color.clear);
+                    FadeBatch(new[] { name }, _ => name == "PointLight_21" ? new Color(.9f, .8f, .3f, .8f) : new Color(.3f, .4f, 1f, .8f), 1f);
+                    FadeBatch(new[] { name }, _ => Color.clear, 1f);
+                }
+                foreach (string name in new[] { "torch_static01_14", "torch_static01_15", "torch_static01_16" })
+                {
+                    var lamp = (Props.PropLamp)map.GetEntityByName(name); lamp.SetLit(true, false); lamp.UpdateLogic(0f); lamp.SetLit(false, true);
+                    foreach (float step in new[] { .5f, .5f })
+                    {
+                        lamp.UpdateLogic(step);
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.UpdateLight(step);
+                    }
+                }
+                FadeBatch(new[] { "PointLight_25", "PointLight_26", "PointLight_27" }, _ => Color.clear, 1f);
+                FadeBatch(new[] { "PointLight_1" }, _ => new Color(1f, 0f, 0f, 1f), 4f);
+                string line = "Cell tunnels state PASS: 11 lamp states, one torch/PointLight_15 link, 42 continuing guardian red-wave and reset fades, 16 blue reset points, nine checkpoint point and nine cone fades (including their physical shaft followers), three staircase lamps/fills, four one-second item/puzzle fades and four-second cell-ending red light survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Eighteen added sources do not accumulate or affect legacy HPL2 darkness; visible darkness checked per view.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally
