@@ -111,6 +111,7 @@ namespace RTXMnesia.Dev
                 else VerifySewerLighting(map, user, report);
                 VerifyNaveLighting(map, user, report);
                 VerifyChancelLighting(map, user, report);
+                VerifyTranseptLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -158,6 +159,7 @@ namespace RTXMnesia.Dev
                     ApplyMorgueLightingPreview(map, mode);
                     ApplyNaveLightingPreview(map, mode);
                     ApplyChancelLightingPreview(map, mode);
+                    ApplyTranseptLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -2440,6 +2442,129 @@ namespace RTXMnesia.Dev
                     light.SetFlickerActive(false);
                 }
                 string line = "Chancel state PASS: 102 lamp states (38 with owned light, 64 no_light candles), western lantern connection and GI fallback, continuing one-second pedestal ignition/extinguishing fades (debug sixth-piece path), five live barrier flicker colour/radius states and ambient survive RTGI, RT no-GI, SSGI, raster no-GI and classic; legacy HPL2 light is preserved and no sky sources are added. Visible-darkness readings are checked separately per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void ApplyTranseptLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/23_torture_transept.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = mode.Contains("transeptlit") || lamp.Component.GetVariable("Lit") != "false";
+                    if (mode.Contains("transeptoff")) on = false;
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.SetFlickerActive(false);
+                }
+        }
+
+        static void VerifyTranseptLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/23_torture_transept.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 25) throw new InvalidOperationException("Transept: expected 25 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            float Factor(string name, int mode)
+            {
+                if (mode == 4) return 1f;
+                if (name.StartsWith("SpotLight_", StringComparison.Ordinal)) return 0f;
+                if (name is "PointLight_1" or "PointLight_2" or "PointLight_3" or "PointLight_4" or "PointLight_5" or "PointLight_6" or
+                    "PointLight_20" or "PointLight_29" or "PointLight_30" or "PointLight_31" or "PointLight_32" or "PointLight_36" or
+                    "PointLight_38" or "PointLight_40" or "PointLight_41") return 1f;
+                if (name is "PointLight_33" or "PointLight_34" or "PointLight_35" or "PointLight_39") return .7f;
+                if (name.StartsWith("PointLight_", StringComparison.Ordinal) && int.TryParse(name.Substring(11), out int number) && number >= 7 && number <= 19) return .3f;
+                return mode is 0 or 2 ? 0f : .6f;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity, bool standalone)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.GetComponent<Light>().intensity, light.GetComponentInParent<AmnesiaEntity>() == null));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.standalone && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * Factor(e.light.name, mode)) > 1e-4f * Mathf.Max(1f, e.intensity)))
+                            throw new InvalidOperationException("Transept: accent/connected fill/legacy light changed " + e.light.name);
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int ownCount = 0;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) { ownCount++; value += rendered.intensity; }
+                        if (ownCount == 0 || (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f))
+                            throw new InvalidOperationException("Transept: lamp state lost " + lamp.Name);
+                    }
+                    int sky = 0;
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded)
+                        {
+                            sky++;
+                            if (light.LightLevelAt(light.transform.position, 0f) != 0f)
+                                throw new InvalidOperationException("Transept: sky contributes to legacy HPL2 darkness");
+                        }
+                    if (sky != (mode == 4 ? 0 : 13)) throw new InvalidOperationException("Transept: sky sources accumulate or disappear");
+                }
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                int connections = 0;
+                foreach (var (lamp, _) in lamps)
+                {
+                    string target = lamp.Component.GetVariable("ConnectedLight");
+                    if (string.IsNullOrEmpty(target)) continue;
+                    connections++; var fill = map.GetLight(target);
+                    if (fill == null) throw new InvalidOperationException("Transept: missing connection " + target);
+                    foreach (bool on in new[] { false, true })
+                    {
+                        lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                        if (on ? fill.CurrentColor.maxColorComponent <= fill.diffuseColor.maxColorComponent : fill.CurrentColor != fill.diffuseColor)
+                            throw new InvalidOperationException("Transept: broken lamp connection " + lamp.Name);
+                        VerifyModes();
+                    }
+                }
+                if (connections != 12) throw new InvalidOperationException("Transept: expected twelve connections");
+                var candle = (Props.PropLamp)map.GetEntityByName("candlestick_wall_1");
+                void Advance(float step)
+                {
+                    candle.UpdateLogic(step);
+                    foreach (var own in candle.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.UpdateLight(step);
+                }
+                candle.SetLit(false, false); candle.UpdateLogic(0f); candle.SetLit(true, true); Advance(.5f); VerifyModes();
+                float half = candle.EffectsAlpha; Advance(.5f); VerifyModes();
+                if (half <= 0f || candle.EffectsAlpha <= half) throw new InvalidOperationException("Transept: candle ignition fade interrupted");
+                candle.SetLit(false, true); Advance(.5f); VerifyModes(); Advance(.5f); VerifyModes();
+                if (candle.EffectsAlpha > .001f) throw new InvalidOperationException("Transept: candle extinguishing fade interrupted");
+                string line = "Transept state PASS: 25 lamp states, twelve connected fills with GI fallback, continuing one-second candle ignition/extinguishing and fifteen blood/torture/interaction accents survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Thirteen window sources do not accumulate or affect legacy HPL2 darkness; visible-darkness readings are checked separately per view.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally
