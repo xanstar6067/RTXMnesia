@@ -86,6 +86,7 @@ namespace RTXMnesia.Dev
             VerifyMachineRoomEvents(map, user, report);
             VerifyElevatorEvents(map, user, report);
             VerifyPrisonSouthEvents(map, user, report);
+            VerifyPrisonNorthEvents(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -116,6 +117,7 @@ namespace RTXMnesia.Dev
                     // "noemit": without the GI copies of glowing materials (what their glow adds).
                     HplEnhancedEmission.Enabled = !mode.Contains("noemit");
                     HplEnhancedEmission.GainScale = mode.Contains("emitx") ? 30f : 1f;
+                    ApplyPrisonNorthCheckpointPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -131,6 +133,7 @@ namespace RTXMnesia.Dev
                     player.active = true;
                     Vector3 dir0 = target - feet;
                     player.PlaceAt(feet, Mathf.Atan2(dir0.x, dir0.z));
+                    player.MoveState.SetCrouch(mode.Contains("crouch"));
                     yield return new WaitForSecondsRealtime(0.3f);
                     Vector3 dir = target - player.LogicCameraPosition;
                     float yaw = Mathf.Atan2(dir.x, dir.z), pitch = -Mathf.Atan2(dir.y, new Vector2(dir.x, dir.z).magnitude);
@@ -1377,6 +1380,151 @@ namespace RTXMnesia.Dev
                 foreach (var (lamp, burning) in lamps) { lamp.SetLit(burning, false); lamp.UpdateLogic(0f); }
                 HplGraphics.Apply(user);
             }
+        }
+
+        static void VerifyPrisonNorthEvents(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/15_prison_north.map", StringComparison.Ordinal)) return;
+            var events = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (string name in new[] { "AcidLight", "PointLight_14", "CPLight", "CPLight02", "LightSiime_1", "LightSiime_2", "LightSiime_3", "LightSiime_4", "LightSiime_5" })
+            {
+                var light = map.GetLight(name);
+                if (light == null) throw new InvalidOperationException("Prison north: missing event light " + name);
+                events.Add((light, light.Save()));
+            }
+            var lamps = new List<(Props.PropLamp lamp, bool lit, bool active)>();
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit, lamp.Active));
+            var holders = new List<(HplEntity entity, bool active)>();
+            for (int i = 1; i <= 4; i++)
+            {
+                var holder = map.GetEntityByName("torch_empty_" + i);
+                if (holder == null) throw new InvalidOperationException("Prison north: missing checkpoint holder");
+                holders.Add((holder, holder.Active));
+            }
+            var classic = user.Copy(); classic.lightingSet = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, bool visible, float intensity)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                    bool accent = events.Exists(e => e.light == light) || light.name is "PointLight_8" or "SpotLight_4";
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f), light.Visible,
+                        accent ? light.GetComponent<Light>().intensity : -1f));
+                }
+                var burning = new List<bool>(); var active = new List<bool>(); var empty = new List<bool>();
+                foreach (var (lamp, _, _) in lamps) { burning.Add(lamp.Lit); active.Add(lamp.Active); }
+                foreach (var (holder, _) in holders) empty.Add(holder.Active);
+                for (int mode = 0; mode < 4; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                    HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity) > 1e-4f * Mathf.Max(1f, e.intensity)) ||
+                            (e.light.box && e.light.enhancedIntensity != 1f))
+                            throw new InvalidOperationException("Prison north: acid/slime/box/gameplay light changed " + e.light.name);
+                    for (int i = 0; i < lamps.Count; i++)
+                    {
+                        var lamp = lamps[i].lamp; float intensity = 0f; int ownedLights = 0;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) { intensity += rendered.intensity; ownedLights++; }
+                        if (lamp.Lit != burning[i] || lamp.Active != active[i] ||
+                            (ownedLights > 0 && (burning[i] ? intensity <= 0f : intensity > 0.001f)))
+                            throw new InvalidOperationException("Prison north: checkpoint lamp state lost " + lamp.Name);
+                        if (mode != 3 && lamp.Active && lamp.Lit && lamp.Name.StartsWith("torch_cp_", StringComparison.Ordinal))
+                            foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                                if (own.TryGetComponent<Light>(out _) && own.enhancedCandela <= 0f)
+                                    throw new InvalidOperationException("Prison north: activated checkpoint torch misses physical flame rule");
+                    }
+                    for (int i = 0; i < holders.Count; i++)
+                        if (holders[i].entity.Active != empty[i]) throw new InvalidOperationException("Prison north: empty holder visibility changed");
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Prison north: added roof light affects darkness");
+                }
+            }
+            try
+            {
+                for (int stage = 0; stage < 4; stage++)
+                {
+                    HplGraphics.Apply(classic);
+                    foreach (var (light, saved) in events)
+                    {
+                        bool slime = light.name.StartsWith("LightSiime_", StringComparison.Ordinal);
+                        Color on = slime ? new Color(0.2f, 0.04f, 0.08f, 1f) : light.name == "AcidLight" ? new Color(0f, 1f, 0.4f, 1f) :
+                            light.name == "PointLight_14" ? new Color(0f, 1f, 0.3f, 1f) : Color.white;
+                        light.SetColor(stage == 0 ? saved.color : stage == 1 ? on : stage == 2 ? on * 0.5f : slime ? on :
+                            new Color(0f, 0f, 0f, light.name.StartsWith("CPLight", StringComparison.Ordinal) ? 1f : 0f));
+                    }
+                    VerifyModes();
+                }
+                var acid = map.GetLight("AcidLight"); acid.SetColor(new Color(0f, 0f, 0f, 0f));
+                acid.FadeTo(new Color(0f, 1f, 0.4f, 1f), acid.CurrentRadius, 2f); acid.UpdateLight(1f);
+                VerifyModes(); acid.UpdateLight(1f);
+                if (Mathf.Abs(acid.CurrentColor.g - 1f) > 1e-5f) throw new InvalidOperationException("Prison north: acid fade interrupted");
+                // CP03 activates real torches in place of the empty holders and ignites the two northern torches.
+                foreach (var (lamp, _, _) in lamps)
+                {
+                    if (lamp.Name.StartsWith("torch_cp_", StringComparison.Ordinal)) lamp.SetActive(true);
+                    if (lamp.Name.StartsWith("torch_cp_", StringComparison.Ordinal) || lamp.Name is "torch_static01_17" or "torch_static01_18")
+                    { lamp.SetLit(true, false); lamp.UpdateLogic(0f); }
+                }
+                foreach (var (holder, _) in holders) holder.SetActive(false);
+                VerifyModes();
+                foreach (var pair in new[] { ("torch_static01_1", "SpotLight_7"), ("torch_static01_6", "PointLight_17"),
+                    ("torch_static01_7", "PointLight_20"), ("torch_static01_8", "PointLight_21"), ("torch_static01_11", "PointLight_37"),
+                    ("torch_static01_12", "PointLight_36"), ("torch_static01_13", "PointLight_31"), ("torch_static01_14", "PointLight_28"),
+                    ("torch_static01_15", "PointLight_29"), ("torch_static01_16", "PointLight_30"), ("torch_static01_17", "PointLight_38"),
+                    ("torch_static01_18", "PointLight_35"), ("torch_static01_19", "PointLight_32"), ("torch_static01_20", "PointLight_33"),
+                    ("torch_static01_21", "PointLight_34"), ("torch_static01_22", "PointLight_27"), ("torch_static01_23", "PointLight_26"),
+                    ("torch_static01_24", "PointLight_25"), ("torch_static01_25", "PointLight_24"), ("torch_cp_1", "cp_light_03_1"),
+                    ("torch_cp_2", "cp_light_03_2"), ("torch_cp_3", "cp_light_03_4"), ("torch_cp_4", "cp_light_03_2") })
+                {
+                    var lamp = (Props.PropLamp)map.GetEntityByName(pair.Item1); var fill = map.GetLight(pair.Item2);
+                    foreach (bool lit in new[] { false, true })
+                    {
+                        HplGraphics.Apply(classic); lamp.SetLit(lit, false); lamp.UpdateLogic(0f);
+                        Color color = fill.CurrentColor; float intensity = fill.GetComponent<Light>().intensity;
+                        if (!lit && color != fill.diffuseColor) throw new InvalidOperationException("Prison north: extinguished torch leaves connected colour");
+                        for (int mode = 0; mode < 4; mode++)
+                        {
+                            var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                            HplGraphics.Apply(s);
+                            float expected = intensity * (mode == 3 ? 1f : mode == 0 ? 0f : 0.6f);
+                            if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - expected) > 1e-4f * Mathf.Max(1f, intensity))
+                                throw new InvalidOperationException("Prison north: connected torch loses GI fallback " + pair);
+                        }
+                    }
+                }
+                string line = "Prison north events PASS: nine acid/lock/slime/checkpoint lights, continuing acid fade, acid caustics, CP03 activation of four torches/empty-holder replacement and ignition of torches 17/18, all 23 connections (22 targets, original shared CP target retained), box ambience and sampled gameplay light survive RTGI, no-GI, raster and classic; roof areas do not affect darkness.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (light, saved) in events) light.Restore(saved);
+                foreach (var (lamp, lit, active) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); lamp.SetActive(active); }
+                foreach (var (holder, active) in holders) holder.SetActive(active);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        // A staged CP03 view, without enemy activation, checkpoints or gameplay timers.
+        static void ApplyPrisonNorthCheckpointPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/15_prison_north.map", StringComparison.Ordinal) || !mode.Contains("cp03")) return;
+            for (int i = 1; i <= 4; i++)
+            {
+                var lamp = (Props.PropLamp)map.GetEntityByName("torch_cp_" + i);
+                lamp.SetActive(true); lamp.SetLit(true, false); lamp.UpdateLogic(0f);
+                map.GetEntityByName("torch_empty_" + i).SetActive(false);
+            }
+            foreach (string name in new[] { "torch_static01_17", "torch_static01_18" })
+            { var lamp = (Props.PropLamp)map.GetEntityByName(name); lamp.SetLit(true, false); lamp.UpdateLogic(0f); }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
