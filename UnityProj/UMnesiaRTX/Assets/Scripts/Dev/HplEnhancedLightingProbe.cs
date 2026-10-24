@@ -112,6 +112,8 @@ namespace RTXMnesia.Dev
                 VerifyNaveLighting(map, user, report);
                 VerifyChancelLighting(map, user, report);
                 VerifyTranseptLighting(map, user, report);
+                VerifyChoirWestLighting(map, user, report);
+                VerifyChoirEastLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -160,6 +162,8 @@ namespace RTXMnesia.Dev
                     ApplyNaveLightingPreview(map, mode);
                     ApplyChancelLightingPreview(map, mode);
                     ApplyTranseptLightingPreview(map, mode);
+                    ApplyChoirWestLightingPreview(map, mode);
+                    ApplyChoirEastLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -2565,6 +2569,257 @@ namespace RTXMnesia.Dev
                 candle.SetLit(false, true); Advance(.5f); VerifyModes(); Advance(.5f); VerifyModes();
                 if (candle.EffectsAlpha > .001f) throw new InvalidOperationException("Transept: candle extinguishing fade interrupted");
                 string line = "Transept state PASS: 25 lamp states, twelve connected fills with GI fallback, continuing one-second candle ignition/extinguishing and fifteen blood/torture/interaction accents survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Thirteen window sources do not accumulate or affect legacy HPL2 darkness; visible-darkness readings are checked separately per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly string[] ChoirWestOutsideLights = { "PointLight_11", "PointLight_10", "PointLight_9", "PointLight_8", "PointLight_4", "PointLight_5", "PointLight_6", "PointLight_7", "PointLight_12" };
+        static readonly string[] ChoirWestOutsideLamps = {
+            "candle_floor_no_light_21", "candle_floor_no_light_22", "candle_floor_no_light_23", "candle_floor_no_light_24", "candle_floor_7",
+            "candle_floor_no_light_25", "candle_floor_no_light_26", "candle_floor_no_light_27", "candle_floor_no_light_28", "candle_floor_no_light_32",
+            "candle_floor_no_light_36", "candle_floor_no_light_29", "candle_floor_2", "candle_floor_no_light_31", "candle_floor_no_light_33",
+            "candle_floor_no_light_34", "candle_floor_no_light_35", "candle_floor_no_light_51", "candle_floor_no_light_50", "candle_floor_no_light_49",
+            "candle_floor_no_light_48", "candle_floor_no_light_47", "candle_floor_no_light_46", "candle_floor_8", "candle_floor_no_light_52",
+            "candle_floor_no_light_45", "candle_floor_no_light_44", "candle_floor_no_light_43" };
+
+        static void SetChoirWestOutside(HplMap map, bool on)
+        {
+            foreach (string name in ChoirWestOutsideLights) map.GetLight(name).SetVisible(on);
+            foreach (string name in ChoirWestOutsideLamps) ((Props.PropLamp)map.GetEntityByName(name)).SetLit(on, false);
+        }
+
+        static void ApplyChoirWestLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/24_torture_choir_west.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp) { lamp.SetLit(true, false); lamp.UpdateLogic(0f); }
+            bool vision = mode.Contains("choirvision");
+            SetChoirWestOutside(map, !vision);
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.SetFlickerActive(false);
+            map.GetLight("PointLight_knife").SetColor(mode.Contains("choirknife") ? new Color(.8f, .1f, .1f, .7f) : Color.clear);
+            map.GetLight("PointLight_chest").SetColor(mode.Contains("choirchest") ? new Color(.2f, .8f, .2f, .7f) : Color.clear);
+            map.GetLight("PointLight_Blood").SetColor(mode.Contains("choirblood") ? new Color(.8f, .1f, .1f, .7f) : Color.clear);
+            // Light endpoints only: no prisoner, dialogue, inventory, effects, door impulses or quest progression.
+        }
+
+        static void VerifyChoirWestLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/24_torture_choir_west.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 101) throw new InvalidOperationException("Choir west: expected 101 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            float Factor(string name, int mode)
+            {
+                if (mode == 4) return 1f;
+                if (name.StartsWith("SpotLight_", StringComparison.Ordinal)) return 0f;
+                if (name is "PointLight_3" or "PointLight_4" or "PointLight_8" or "PointLight_9" or "PointLight_10" or "PointLight_11") return .7f;
+                if (name is "PointLight_13" or "PointLight_14" or "PointLight_15" or "PointLight_16") return mode is 0 or 2 ? 0f : .6f;
+                return 1f;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity, bool visible, bool standalone)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.GetComponent<Light>().intensity, light.Visible, light.GetComponentInParent<AmnesiaEntity>() == null));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.standalone && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * Factor(e.light.name, mode)) > 1e-4f * Mathf.Max(1f, e.intensity)))
+                            throw new InvalidOperationException("Choir west: ritual/visibility/legacy light changed " + e.light.name);
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int ownCount = 0;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) { ownCount++; value += rendered.intensity; }
+                        if (ownCount == 0) { noLight++; continue; }
+                        if (lamp.Lit ? value <= 0f : value > .001f) throw new InvalidOperationException("Choir west: lamp state lost " + lamp.Name);
+                    }
+                    if (noLight != 79) throw new InvalidOperationException("Choir west: expected 79 candles without owned lights");
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded) throw new InvalidOperationException("Choir west: unexpected sky source");
+                }
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                foreach (bool on in new[] { false, true, false, true })
+                {
+                    SetChoirWestOutside(map, on);
+                    foreach (string name in ChoirWestOutsideLights)
+                        if (map.GetLight(name).Visible != on) throw new InvalidOperationException("Choir west: outside visibility failed");
+                    foreach (string name in ChoirWestOutsideLamps)
+                        if (((Props.PropLamp)map.GetEntityByName(name)).Lit != on) throw new InvalidOperationException("Choir west: outside candle failed");
+                    VerifyModes();
+                }
+                foreach (var pair in new[] { ("PointLight_knife", new Color(.8f, .1f, .1f, .7f)),
+                    ("PointLight_chest", new Color(.2f, .8f, .2f, .7f)), ("PointLight_Blood", new Color(.8f, .1f, .1f, .7f)) })
+                {
+                    var light = map.GetLight(pair.Item1); light.SetColor(Color.clear);
+                    light.FadeTo(pair.Item2, light.CurrentRadius, 1f); light.UpdateLight(.5f); VerifyModes();
+                    if (light.CurrentColor == Color.clear || light.CurrentColor == pair.Item2) throw new InvalidOperationException("Choir west: missing fade midpoint");
+                    light.UpdateLight(.5f); VerifyModes();
+                    if (light.CurrentColor != pair.Item2) throw new InvalidOperationException("Choir west: ritual fade interrupted");
+                    light.FadeTo(Color.clear, light.CurrentRadius, 1f); light.UpdateLight(.5f); VerifyModes(); light.UpdateLight(.5f); VerifyModes();
+                    if (light.CurrentColor != Color.clear) throw new InvalidOperationException("Choir west: ritual fade-out interrupted");
+                }
+                string line = "Choir west state PASS: 101 lamps (22 owned sources, 79 no_light candles), nine outside lights and 28 vision candles, six continuing one-second knife/chest/blood fades survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Original HPL2 light/visibility are preserved; no sky sources added. Visible-darkness checked separately per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void ApplyChoirEastLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/24_torture_choir_east.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = mode.Contains("choirlit") || lamp.Component.GetVariable("Lit") != "false";
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.SetFlickerActive(false);
+                }
+            foreach (string name in new[] { "PointLight_5", "PointLight_7", "PointLight_8", "PointLight_9" })
+            {
+                var light = map.GetLight(name);
+                light.SetColor(name == "PointLight_5" ? (mode.Contains("choirpoison") ? new Color(0f, .6f, .8f, .8f) : light.diffuseColor) :
+                    mode.Contains("choirorbs") ? Color.clear : light.diffuseColor);
+            }
+        }
+
+        static void VerifyChoirEastLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/24_torture_choir_east.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 47) throw new InvalidOperationException("Choir east: expected 47 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            float Factor(string name, int mode)
+            {
+                if (mode == 4 || name == "BoxLight_1") return 1f;
+                if (name is "SpotLight_3" or "SpotLight_4" or "SpotLight_5" or "SpotLight_6" or "SpotLight_7") return 1f;
+                if (name.StartsWith("SpotLight_", StringComparison.Ordinal)) return 0f;
+                if (name is "PointLight_3" or "PointLight_5" or "PointLight_6" or "PointLight_7" or "PointLight_8" or "PointLight_9" or "PointLight_11" or "PointLight_17") return 1f;
+                if (name is "PointLight_46" or "PointLight_47" or "PointLight_48" or "PointLight_49" or "PointLight_51" or "PointLight_52" or "PointLight_53" or "PointLight_80" or "PointLight_81") return .3f;
+                if (name.StartsWith("PointLight_", StringComparison.Ordinal) && int.TryParse(name.Substring(11), out int number) &&
+                    (number is 18 or 19 or 20 || number >= 55 && number <= 79)) return 1f;
+                return mode is 0 or 2 ? 0f : .6f;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity, bool standalone)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f, light.GetComponentInParent<AmnesiaEntity>() == null));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || (e.light.box && e.light.enhancedIntensity != 1f) ||
+                            (e.standalone && e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * Factor(e.light.name, mode)) > 1e-4f * Mathf.Max(1f, e.intensity)))
+                            throw new InvalidOperationException("Choir east: accent/caustic/lamp fill/legacy light changed " + e.light.name);
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int own = 0;
+                        foreach (var light in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (light.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0 || (lamp.Lit ? value <= 0f : value > .001f)) throw new InvalidOperationException("Choir east: lamp state lost " + lamp.Name);
+                    }
+                    int sky = 0;
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded)
+                        {
+                            sky++;
+                            if (light.LightLevelAt(light.transform.position, 0f) != 0f) throw new InvalidOperationException("Choir east: sky contributes to legacy darkness");
+                        }
+                    if (sky != (mode == 4 ? 0 : 5)) throw new InvalidOperationException("Choir east: sky sources accumulate or disappear");
+                }
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                int connections = 0; var targets = new HashSet<string>();
+                foreach (var (lamp, _) in lamps)
+                {
+                    string target = lamp.Component.GetVariable("ConnectedLight");
+                    if (string.IsNullOrEmpty(target)) continue;
+                    connections++; targets.Add(target); var fill = map.GetLight(target);
+                    if (fill == null) throw new InvalidOperationException("Choir east: missing connection " + target);
+                    foreach (bool on in new[] { false, true })
+                    {
+                        lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                        if (on ? fill.CurrentColor.maxColorComponent <= fill.diffuseColor.maxColorComponent : fill.CurrentColor != fill.diffuseColor)
+                            throw new InvalidOperationException("Choir east: broken lamp connection " + lamp.Name);
+                        VerifyModes();
+                    }
+                }
+                if (connections != 27 || targets.Count != 19) throw new InvalidOperationException("Choir east: expected 27 links with 19 targets");
+                void Fade(AmnesiaLight light, Color target)
+                {
+                    Color start = light.CurrentColor; light.FadeTo(target, light.CurrentRadius, 2f); light.UpdateLight(1f); VerifyModes();
+                    if (light.CurrentColor == start || light.CurrentColor == target) throw new InvalidOperationException("Choir east: missing fade midpoint");
+                    light.UpdateLight(1f); VerifyModes();
+                    if (light.CurrentColor != target) throw new InvalidOperationException("Choir east: scripted fade interrupted");
+                }
+                var poison = map.GetLight("PointLight_5"); poison.SetColor(Color.clear); Fade(poison, new Color(0f, .6f, .8f, .8f)); Fade(poison, Color.clear);
+                foreach (string name in new[] { "PointLight_7", "PointLight_8", "PointLight_9" })
+                { var light = map.GetLight(name); light.SetColor(light.diffuseColor); Fade(light, Color.clear); }
+                string line = "Choir east state PASS: 47 lamp states, 27 connections with 19 targets (shared targets checked per lamp), five continuing two-second poison/orb fades, five caustic projectors and ambient survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Five added apertures do not accumulate or affect legacy HPL2 darkness; visible-darkness checked separately per view.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally
