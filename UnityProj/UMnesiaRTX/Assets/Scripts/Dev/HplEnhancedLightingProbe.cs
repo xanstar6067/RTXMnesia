@@ -110,6 +110,7 @@ namespace RTXMnesia.Dev
                 if (defaultModes.Contains("baseline")) report.AppendLine("Baseline diagnostic: map-specific overlay assertions skipped.");
                 else VerifySewerLighting(map, user, report);
                 VerifyNaveLighting(map, user, report);
+                VerifyChancelLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -156,6 +157,7 @@ namespace RTXMnesia.Dev
                     ApplyCisternLightingPreview(map, mode);
                     ApplyMorgueLightingPreview(map, mode);
                     ApplyNaveLightingPreview(map, mode);
+                    ApplyChancelLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -2302,6 +2304,142 @@ namespace RTXMnesia.Dev
                     FadeAndSwitch(light, new Color(0f, 0f, 0f, 0f), .4f);
                 }
                 string line = "Nave state PASS: 64 lamp states (53 with owned lights, 11 no_light candles), 29 effective connections, original missing PointLight_40 and inert no_light connection retained; eight lamps extinguished, 12 continuing one-second blackout fades and eight .2/.4-second red cell pulses survive RTGI, RT no-GI, SSGI, raster no-GI and classic; residual PointLight_8, candle/slime accents, four boxes and legacy HPL2 light levels are preserved. Visible-darkness readings are checked separately per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly string[] ChancelBarrierLights = { "PointLight_26", "PointLight_27", "PointLight_28", "SpotLight_1", "SpotLight_4" };
+
+        // Light endpoints only. The sixth orb piece is a debug-only path in this map; no assembly/progression is changed.
+        static void ApplyChancelLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/22_torture_chancel.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = lamp.Component.GetVariable("Lit") != "false";
+                    if (lamp.Name == "orb_pedestal_1" && mode.Contains("chancelorb")) on = true;
+                    if (lamp.Name == "hanging_lantern_ceiling_3" && mode.Contains("chancelwestlit")) on = true;
+                    if (mode.Contains("chancelalloff")) on = false;
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.SetFlickerActive(false);
+                }
+            foreach (string name in ChancelBarrierLights)
+            {
+                var light = map.GetLight(name); bool low = mode.Contains("chancelflickerlow");
+                light.SetFlickerActive(false);
+                light.SetColor(low ? light.flickerOffColor : light.diffuseColor);
+                light.SetRadius(low ? light.flickerOffRadius : light.radius);
+            }
+        }
+
+        static void VerifyChancelLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/22_torture_chancel.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 102) throw new InvalidOperationException("Chancel: expected 102 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float accent, bool flicker)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    var sample = light.transform.position + light.transform.forward * .3f;
+                    var parent = light.GetComponentInParent<AmnesiaEntity>();
+                    bool accent = Array.IndexOf(ChancelBarrierLights, light.name) >= 0 || (parent != null &&
+                        (parent.entityType != "Lamp" || parent.name == "orb_pedestal_1"));
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        accent ? light.GetComponent<Light>().intensity : -1f, light.FlickerActive));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.FlickerActive != e.flicker ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.accent >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.accent) > 1e-4f * Mathf.Max(1f, e.accent)) ||
+                            (e.light.box && e.light.enhancedIntensity != 1f))
+                            throw new InvalidOperationException("Chancel: barrier/orb/flicker/ambient/legacy light changed " + e.light.name);
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int ownCount = 0;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) { ownCount++; value += rendered.intensity; }
+                        if (ownCount == 0) { noLight++; continue; }
+                        if (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f)
+                            throw new InvalidOperationException("Chancel: lamp effect state lost " + lamp.Name);
+                    }
+                    if (noLight != 64) throw new InvalidOperationException("Chancel: expected 64 candles without owned lights");
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded) throw new InvalidOperationException("Chancel: unexpected added sky light");
+                }
+            }
+            float OwnIntensity(Props.PropLamp lamp)
+            {
+                float result = 0f;
+                foreach (var light in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                    if (light.TryGetComponent<Light>(out var rendered)) result += rendered.intensity;
+                return result;
+            }
+            void AdvanceLamp(Props.PropLamp lamp, float step)
+            {
+                lamp.UpdateLogic(step);
+                foreach (var light in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) light.UpdateLight(step);
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                var linked = (Props.PropLamp)map.GetEntityByName("hanging_lantern_ceiling_3"); var fill = map.GetLight("PointLight_7");
+                foreach (bool on in new[] { false, true })
+                {
+                    HplGraphics.Apply(classic); linked.SetLit(on, false); linked.UpdateLogic(0f);
+                    Color color = fill.CurrentColor; float intensity = fill.GetComponent<Light>().intensity;
+                    if (on ? color == fill.diffuseColor : color != fill.diffuseColor) throw new InvalidOperationException("Chancel: broken lantern connection");
+                    for (int mode = 0; mode < 5; mode++)
+                    {
+                        HplGraphics.Apply(Mode(mode)); float factor = mode == 4 ? 1f : mode is 0 or 2 ? 0f : .6f;
+                        if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - intensity * factor) > 1e-4f * Mathf.Max(1f, intensity))
+                            throw new InvalidOperationException("Chancel: connected fill loses GI fallback");
+                    }
+                }
+                var orb = (Props.PropLamp)map.GetEntityByName("orb_pedestal_1");
+                orb.SetLit(false, false); orb.UpdateLogic(0f); orb.SetLit(true, true); AdvanceLamp(orb, .5f); VerifyModes();
+                HplGraphics.Apply(classic); float half = OwnIntensity(orb); AdvanceLamp(orb, .5f); VerifyModes();
+                HplGraphics.Apply(classic); if (half <= 0f || OwnIntensity(orb) <= half) throw new InvalidOperationException("Chancel: pedestal ignition fade interrupted");
+                orb.SetLit(false, true); AdvanceLamp(orb, .5f); VerifyModes(); AdvanceLamp(orb, .5f); VerifyModes();
+                if (OwnIntensity(orb) > .001f) throw new InvalidOperationException("Chancel: pedestal extinguishing fade interrupted");
+                foreach (string name in ChancelBarrierLights)
+                {
+                    var light = map.GetLight(name); light.SetFlickerActive(true); var colours = new HashSet<Color>(); var radii = new HashSet<float>();
+                    for (int step = 0; step < 4; step++) { light.UpdateLight(1f); colours.Add(light.CurrentColor); radii.Add(light.CurrentRadius); VerifyModes(); }
+                    if (colours.Count < 2 || (name.StartsWith("SpotLight_", StringComparison.Ordinal) && radii.Count < 2))
+                        throw new InvalidOperationException("Chancel: barrier flicker stopped " + name);
+                    light.SetFlickerActive(false);
+                }
+                string line = "Chancel state PASS: 102 lamp states (38 with owned light, 64 no_light candles), western lantern connection and GI fallback, continuing one-second pedestal ignition/extinguishing fades (debug sixth-piece path), five live barrier flicker colour/radius states and ambient survive RTGI, RT no-GI, SSGI, raster no-GI and classic; legacy HPL2 light is preserved and no sky sources are added. Visible-darkness readings are checked separately per view.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally
