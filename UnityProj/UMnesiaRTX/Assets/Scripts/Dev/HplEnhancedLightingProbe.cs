@@ -99,6 +99,8 @@ namespace RTXMnesia.Dev
             VerifyCisternEntranceState(map, user, report);
             VerifyControlRoomState(map, user, report);
             VerifyCisternState(map, user, report);
+            var morgueCheck = VerifyMorgueState(map, user, report);
+            while (morgueCheck.MoveNext()) yield return morgueCheck.Current;
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -141,6 +143,7 @@ namespace RTXMnesia.Dev
                     ApplyPrisonNorthCheckpointPreview(map, mode);
                     ApplyCisternEntranceWaterPreview(map, mode);
                     ApplyCisternLightingPreview(map, mode);
+                    ApplyMorgueLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -1921,6 +1924,162 @@ namespace RTXMnesia.Dev
             float level = stage == 0 ? 1f : stage == 1 ? 0.8f : stage == 2 ? 0.6f : 0.3f;
             map.GetLight("BoxLight_1").SetColor(mode.Contains("guardian") ? new Color(0.2f, 0.1f, 0.02f, 1f) :
                 new Color(CisternCyan.r * level, CisternCyan.g * level, CisternCyan.b * level, 1f));
+        }
+
+        static void SetMorgueRoomLights(HplMap map, bool inside)
+        {
+            void Set(int number, Color color) => map.GetLight("SpotLight_" + number).SetColor(color);
+            Set(1, inside ? new Color(.8f, .7f, .6f, .5f) : new Color(0f, 0f, 0f, 0f));
+            Set(8, inside ? new Color(.6f, .6f, .5f, .6f) : new Color(0f, 0f, 0f, 0f));
+            Set(2, inside ? new Color(0f, 0f, 0f, 0f) : new Color(.3f, .3f, .2f, 1f));
+            foreach (int number in new[] { 3, 4, 5, 6, 7, 10 })
+            {
+                var light = map.GetLight("SpotLight_" + number);
+                float level = inside ? number == 7 ? .4f : number == 10 ? 0f : .3f : number == 10 ? .4f : 0f;
+                light.SetColor(new Color(level, level, number == 10 ? level * .75f : level, light.CurrentColor.a));
+            }
+        }
+
+        // Only the light endpoints of CollideLights and CheckPoint02, without triggering AI or story timers.
+        static void ApplyMorgueLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/19_morgue.map", StringComparison.Ordinal)) return;
+            foreach (string name in new[] { "candlestick_wall_9", "candlestick_wall_25", "candlestick_wall_28", "candlestick_wall_30",
+                "candlestick_wall_32", "candlestick_wall_35", "candle_floor_small_1", "candlestick_wall_12", "candlestick_wall_14", "candlestick_wall_13", "candlestick_wall_15" })
+            {
+                var lamp = (Props.PropLamp)map.GetEntityByName(name);
+                lamp.SetLit(mode.Contains("morguelit"), false); lamp.UpdateLogic(0f);
+            }
+            foreach (int number in new[] { 1, 2, 3, 4, 5, 6, 7, 8, 10 })
+            { var light = map.GetLight("SpotLight_" + number); light.SetColor(light.diffuseColor); }
+            if (mode.Contains("morgueinside") || mode.Contains("morgueoutside"))
+                SetMorgueRoomLights(map, mode.Contains("morgueinside"));
+            var red = map.GetLight("PointLight_24");
+            red.SetColor(mode.Contains("morguered") ? new Color(.6f, 0f, 0f, .55f) : red.diffuseColor);
+        }
+
+        static IEnumerator VerifyMorgueState(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/19_morgue.map", StringComparison.Ordinal)) yield break;
+            var savedLights = new List<(AmnesiaLight light, AmnesiaLight.SaveData saved)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) savedLights.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 17) throw new InvalidOperationException("Morgue: expected 17 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            float Factor(string name, int mode)
+            {
+                if (mode == 4 || name is "PointLight_2" or "PointLight_24") return 1f;
+                if (name == "PointLight_14") return mode is 0 or 2 ? .35f : .6f;
+                if (name is "SpotLight_1" or "SpotLight_2" or "SpotLight_8" or "SpotLight_10") return 0f;
+                if (name is "PointLight_6" or "PointLight_34" or "PointLight_35" or "PointLight_38" or "PointLight_44" or "PointLight_45" or "PointLight_51" or "PointLight_52" or "PointLight_32" or "PointLight_62") return .3f;
+                if (name is "PointLight_13" or "PointLight_26" or "PointLight_31" or "PointLight_40" or "PointLight_59" or "PointLight_64" or "PointLight_65") return .7f;
+                return name.StartsWith("PointLight_", StringComparison.Ordinal) ? (mode is 0 or 2 ? 0f : .6f) : 1f;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                    {
+                        bool standalone = e.light.name.StartsWith("PointLight_", StringComparison.Ordinal) || e.light.name.StartsWith("SpotLight_", StringComparison.Ordinal);
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (standalone && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * Factor(e.light.name, mode)) > 1e-4f * Mathf.Max(1f, e.intensity)) ||
+                            (e.light.box && e.light.enhancedIntensity != 1f))
+                            throw new InvalidOperationException("Morgue: scripted/caustic/gameplay light changed " + e.light.name);
+                    }
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f;
+                        foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (own.TryGetComponent<Light>(out var rendered)) value += rendered.intensity;
+                        if (lamp.Lit ? value <= 0f : value > .001f) throw new InvalidOperationException("Morgue: lamp state lost " + lamp.Name);
+                    }
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Morgue: sky affects gameplay darkness");
+                }
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool lit in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                foreach (var pair in new[] { ("candlestick_wall_9", "PointLight_42"), ("candlestick_wall_25", "PointLight_17"),
+                    ("candlestick_wall_28", "PointLight_16"), ("candlestick_wall_30", "PointLight_18"),
+                    ("candlestick_wall_32", "PointLight_25"), ("candlestick_wall_35", "PointLight_19"),
+                    ("candlestick_wall_12", "PointLight_36"), ("candlestick_wall_14", "PointLight_37"), ("candlestick_wall_15", "PointLight_11") })
+                {
+                    var lamp = (Props.PropLamp)map.GetEntityByName(pair.Item1); var fill = map.GetLight(pair.Item2);
+                    foreach (bool lit in new[] { false, true })
+                    {
+                        lamp.SetLit(lit, false); lamp.UpdateLogic(0f);
+                        if (!lit && fill.CurrentColor != fill.diffuseColor) throw new InvalidOperationException("Morgue: connected fill remains after extinguishing " + pair);
+                        if (lit && fill.CurrentColor.maxColorComponent <= fill.diffuseColor.maxColorComponent) throw new InvalidOperationException("Morgue: missing lamp contribution " + pair);
+                        VerifyModes();
+                    }
+                }
+                // The source .map references absent PointLight_41 from candlestick_wall_13. Preserve this existing quirk.
+                if (map.GetLight("PointLight_41") != null) throw new InvalidOperationException("Morgue: unexpected invented connection target");
+                var red = map.GetLight("PointLight_24"); var target = new Color(.6f, 0f, 0f, .55f);
+                red.FadeTo(target, red.CurrentRadius, 1f); red.UpdateLight(.5f); VerifyModes(); red.UpdateLight(.5f); VerifyModes();
+                if (red.CurrentColor != target) throw new InvalidOperationException("Morgue: checkpoint fade interrupted");
+                foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                foreach (bool inside in new[] { true, false, true })
+                {
+                    SetMorgueRoomLights(map, inside); VerifyModes();
+                    for (int mode = 0; mode < 5; mode++)
+                    {
+                        HplGraphics.Apply(Mode(mode)); yield return null; yield return null;
+                        int count = 0;
+                        foreach (var added in AmnesiaLight.All)
+                        {
+                            if (added == null || !added.enhancedAdded || !added.TryGetComponent<HplEnhancedLightFollow>(out var follow)) continue;
+                            count++; var rendered = added.GetComponent<Light>(); var c = follow.source.CurrentColor; var original = follow.source.diffuseColor;
+                            float level = Mathf.GammaToLinearSpace(Mathf.Max(c.r, c.g, c.b));
+                            float basis = Mathf.GammaToLinearSpace(Mathf.Max(original.r, original.g, original.b));
+                            float expected = follow.source.Visible ? follow.intensity * level / basis : 0f;
+                            if (Mathf.Abs(rendered.intensity - expected) > 1e-4f * Mathf.Max(1f, expected) || rendered.enabled != (expected > 0f))
+                                throw new InvalidOperationException("Morgue: sky ignores CollideLights " + added.name);
+                        }
+                        if (count != (mode == 4 ? 0 : 3)) throw new InvalidOperationException("Morgue: sky sources accumulate or disappear");
+                    }
+                }
+                var settings = Mode(0); HplGraphics.Apply(settings);
+                var source = map.GetLight("SpotLight_1"); source.SetVisible(false); yield return null; yield return null;
+                foreach (var added in AmnesiaLight.All)
+                    if (added != null && added.enhancedAdded && added.TryGetComponent<HplEnhancedLightFollow>(out var follow) && follow.source == source && added.GetComponent<Light>().enabled)
+                        throw new InvalidOperationException("Morgue: sky ignores source visibility");
+                string line = "Morgue state PASS: 17 lamps off/on, nine valid .6 lamp connections (source map has one missing PointLight_41), one-second checkpoint red fade, both CollideLights room endpoints and all five water caustics survive RTGI, RT no-GI, SSGI, raster no-GI and classic; three sky areas follow brightness/visibility without accumulating or affecting original gameplay darkness.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, lit) in lamps) { lamp.SetLit(lit, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, saved) in savedLights) light.Restore(saved);
+                HplGraphics.Apply(user);
+            }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
