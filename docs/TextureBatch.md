@@ -124,3 +124,27 @@ double-sided; варианты с разными порогами не объе�
 На 2026-10-19 обе очереди завершены: 497 RGB + 119 cutout наборов для 630 материалов.
 Полный импорт сохраняет маски, отсечение, mip coverage, двусторонность и настройки теней;
 улучшенные материалы загружаются по использованию на карте, текстуры поддерживают streaming.
+
+## Проход ×2 для исходников 2K (2026-10-24)
+
+Первые очереди пропустили 31 материал с исходником больше 1024 (`needs_separate_2x_workflow`):
+×4 дал бы 8K. Среди них стены `mansionbase` (глава 1), `cisternbase`, `sanctumbase`, атлас
+`dungeonbase` (почти все стены глав 2–3 и Justine), `torture_chancel`, `gigantic_stones`, враги
+grunt и brute, Агриппа. Без набора они и с «Улучшенными» текстурами оставались классическими.
+
+```powershell
+& '<ComfyUI Python>' ./tools/Remix-Textures.py plan --scale 2
+& '<ComfyUI Python>' ./tools/Remix-Textures.py run --scale 2
+& '<ComfyUI Python>' ./tools/Remix-Textures.py plan --scale 2 --kind alpha-test
+& '<ComfyUI Python>' ./tools/Remix-Textures.py run --scale 2 --kind alpha-test
+```
+
+Те же модели и граф; после DAT2 (×4) добавлен узел `ImageScale` (Lanczos) до ×2, из него строятся
+albedo, нормаль, шероховатость и высота — 2048 → 4096, предел 4K соблюдён. Маска alpha — nearest ×2.
+План 2026-10-24: 27 непрозрачных текстур (29 материалов) и 2 cutout (Агриппа, `strange_sketch`).
+Вывод — `pbrify-x2-batch-v1` / `pbrify-alpha-x2-batch-v1`, статус — `_batch/pbrify-x2-v1`,
+`_batch/pbrify-alpha-x2-v1`; в `result.json` поле `scale: 2`. `Prepare-EnhancedTextures.py` и
+`EnhancedMaterialConverter.ConvertReadyBatch` берут и эти папки.
+Прогон 2026-10-24: 27 + 2 набора за ~31 мин (RTX 5080), все карты 4096; `Prepare-EnhancedTextures.py` —
+94 новых DDS, итого 645 наборов / 16.6 ГБ; `ConvertReadyBatch`: READY PASS, 645 наборов, 661 пара
+материалов, ProjectSettings не изменились.

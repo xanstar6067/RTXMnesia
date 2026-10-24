@@ -61,6 +61,7 @@ def scalar(material, name):
 def plan(args):
     root = args.project
     kind = getattr(args, 'kind', 'opaque')
+    args.scale = getattr(args, 'scale', 4)
     imported = root / 'UnityProj/UMnesiaRTX/Assets/AmnesiaImported'
     textures = imported / 'Textures'
     materials = imported / 'Materials'
@@ -122,15 +123,19 @@ def plan(args):
             if max(size) >= args.max_size:
                 excluded.append({'material': rel, 'reason': 'already_at_resolution_cap'})
                 continue
-            if max(size) > args.max_size // 4:
+            if max(size) > args.max_size // 4 and args.scale == 4:
                 excluded.append({'material': rel, 'reason': 'needs_separate_2x_workflow'})
+                continue
+            if max(size) <= args.max_size // 4 and args.scale == 2:
+                excluded.append({'material': rel, 'reason': 'x4_workflow'})
                 continue
             stem = texture_rel.removesuffix('.png').replace('__albedo', '')
             grouped[texture_rel] = {
-                'id': hashlib.sha256((texture_rel + (':alpha-test' if kind == 'alpha-test' else '')).encode()).hexdigest()[:16],
-                'input': str(texture), 'texture': texture_rel, 'size': size,
+                'id': hashlib.sha256((texture_rel + (':alpha-test' if kind == 'alpha-test' else '')
+                                      + ('' if args.scale == 4 else ':x2')).encode()).hexdigest()[:16],
+                'input': str(texture), 'texture': texture_rel, 'size': size, 'scale': args.scale,
                 'sha256': sha256(texture), 'materials': [], 'state': 'pending',
-                'destination': str(args.output / stem / ('pbrify-alpha-x4-batch-v1' if kind == 'alpha-test' else 'pbrify-x4-batch-v1')),
+                'destination': str(args.output / stem / result_folder(kind, args.scale)),
             }
             if kind == 'alpha-test':
                 grouped[texture_rel].update(alpha_mode='source-nearest', material_settings={})
@@ -144,7 +149,7 @@ def plan(args):
     entries = sorted(grouped.values(), key=lambda e: (
         0 if e['texture'].startswith('static_objects/castlebase/') else
         1 if e['texture'].startswith('static_objects/') else 2, e['texture']))
-    value = {'version': VERSION, 'created': now(), 'project': str(root), 'kind': kind,
+    value = {'version': VERSION, 'created': now(), 'project': str(root), 'kind': kind, 'scale': args.scale,
              'output': str(args.output), 'max_size': args.max_size,
              'entries': entries, 'excluded': excluded}
     if args.manifest.exists():
@@ -194,6 +199,10 @@ def batch_lock(path):
             msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
 
 
+def result_folder(kind, scale):
+    return ('pbrify-alpha-' if kind == 'alpha-test' else 'pbrify-') + f'x{scale}-batch-v1'
+
+
 def build_prompt(reference, entry, uploaded):
     prompt = json.loads(json.dumps(reference))
     # Opaque materials: RGB only. The template's extra DAT pass on the alpha mask
@@ -201,7 +210,16 @@ def build_prompt(reference, entry, uploaded):
     for node in ('28', '33', '34', '27', '35', '37', '38'):
         prompt.pop(node, None)
     prompt['177']['inputs']['image'] = uploaded
-    prompt['181']['inputs']['textures'] = ['31', 0]
+    upscaled = ['31', 0]
+    if entry.get('scale', 4) == 2:
+        # 2K originals: the x4 model, then Lanczos down to x2 (4096); the PBR maps come from that.
+        width, height = (v * 2 for v in entry.get('size', (0, 0)))
+        prompt['300'] = {'class_type': 'ImageScale', 'inputs': {'image': ['31', 0], 'upscale_method': 'lanczos',
+                                                                 'width': width, 'height': height, 'crop': 'disabled'}}
+        upscaled = ['300', 0]
+        for node in ('44', '45', '46'):
+            prompt[node]['inputs']['image'] = upscaled
+    prompt['181']['inputs']['textures'] = upscaled
     return prompt
 
 
@@ -219,13 +237,14 @@ def collect(url, result, entry, workflow_hash):
     destination = Path(entry['destination'])
     destination.mkdir(parents=True, exist_ok=True)
     files = {}
-    expected = tuple(v * 4 for v in entry['size'])
+    scale = entry.get('scale', 4)
+    expected = tuple(v * scale for v in entry['size'])
     alpha = None
     if entry.get('alpha_mode') == 'source-nearest':
         with Image.open(entry['input']) as source:
             if 'A' not in source.getbands():
                 raise RuntimeError('Cutout input lost its alpha channel')
-            alpha = upscale_alpha(source.getchannel('A'), expected)
+            alpha = upscale_alpha(source.getchannel('A'), expected, scale)
     for node, role in ROLES.items():
         outputs = [i for i in result['outputs'][node]['images'] if i['type'] == 'output']
         if len(outputs) != 1:
@@ -264,17 +283,19 @@ def collect(url, result, entry, workflow_hash):
               'workflow_sha256': workflow_hash, 'prompt_id': entry['prompt_id'],
               'normal_convention': 'PBRify_NormalV3 (verify G as in docs/EnhancedTextures.md)',
               'files': files, 'unity_imported': False}
+    if scale != 4:
+        record['scale'] = scale
     if alpha is not None:
         record.update(alpha_mode=entry['alpha_mode'], material_settings=entry['material_settings'],
-                      alpha_note='Original alpha samples replicated exactly 4x4; cutoff coverage unchanged.')
+                      alpha_note=f'Original alpha samples replicated exactly {scale}x{scale}; cutoff coverage unchanged.')
     write_json(destination / 'result.json', record)
     return files
 
 
-def upscale_alpha(source, expected):
+def upscale_alpha(source, expected, scale=4):
     """No invented opacity: exact source samples and coverage at every cutoff."""
-    if source.mode != 'L' or expected != tuple(v * 4 for v in source.size):
-        raise ValueError('Expected a grayscale source mask and exact x4 dimensions')
+    if source.mode != 'L' or expected != tuple(v * scale for v in source.size):
+        raise ValueError(f'Expected a grayscale source mask and exact x{scale} dimensions')
     return source.resize(expected, Image.Resampling.NEAREST)
 
 
@@ -296,7 +317,8 @@ def run(args):
         sample = args.output / SAMPLE
         reference = read_json(sample / 'request.json')['prompt']
         # Hash the effective RGB graph, not sample-specific input path or client id.
-        signature = build_prompt(reference, {}, '<input>')
+        scale = data.get('scale', 4)
+        signature = build_prompt(reference, {'scale': scale}, '<input>')
         if data.get('kind') == 'alpha-test':
             signature = {'graph': signature, 'alpha_mode': 'source-nearest', 'version': 1}
         workflow_hash = hashlib.sha256(json.dumps(signature, sort_keys=True).encode()).hexdigest()
@@ -407,12 +429,15 @@ def main():
     parser.add_argument('--folder', default='')
     parser.add_argument('--kind', choices=('opaque', 'alpha-test'), default='opaque')
     parser.add_argument('--max-size', type=int, default=4096)
+    parser.add_argument('--scale', type=int, choices=(2, 4), default=4,
+                        help='4: originals up to max-size/4; 2: larger originals up to max-size/2 (x4 model, Lanczos to x2)')
     parser.add_argument('--limit', type=int, default=0)
     parser.add_argument('--retry-failed', action='store_true')
     args = parser.parse_args()
     args.project = args.project.resolve()
     args.output = (args.output or args.project / 'sourceRTXRemix').resolve()
-    batch_name = 'pbrify-alpha-v1' if args.kind == 'alpha-test' else 'pbrify-v1'
+    batch_name = ('pbrify-alpha-v1' if args.kind == 'alpha-test' else 'pbrify-v1') if args.scale == 4 else \
+        ('pbrify-alpha-x2-v1' if args.kind == 'alpha-test' else 'pbrify-x2-v1')
     args.manifest = (args.manifest or args.output / '_batch' / batch_name / 'manifest.json').resolve()
     if args.url != 'http://127.0.0.1:8188':
         raise ValueError('Only the local ComfyUI endpoint is supported; no external uploads.')

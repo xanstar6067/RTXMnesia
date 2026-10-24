@@ -10,6 +10,8 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageOps
 
 VERSION = 'dds-pbrify-v3'
+# x4 sets, and x2 sets of 2K originals (Remix-Textures.py --scale 2).
+RESULT_FOLDERS = ('pbrify-x4-batch-v1', 'pbrify-alpha-x4-batch-v1', 'pbrify-x2-batch-v1', 'pbrify-alpha-x2-batch-v1')
 DEFAULT_NVTT = Path('C:/Program Files/NVIDIA Corporation/RTX Remix/exts/omni.flux.resources/deps/tools/nvtt/nvtt_export.exe')
 
 
@@ -129,7 +131,7 @@ def main():
     logs.mkdir(parents=True, exist_ok=True)
     temporary = logs/'Packing'
     temporary.mkdir(exist_ok=True)
-    results = sorted(p for p in source.rglob('result.json') if p.parent.name in ('pbrify-x4-batch-v1', 'pbrify-alpha-x4-batch-v1'))
+    results = sorted(p for p in source.rglob('result.json') if p.parent.name in RESULT_FOLDERS)
     if args.limit:
         results = results[:args.limit]
     cutout_inputs = {d['texture'] for p in results if (d := json.loads(p.read_text(encoding='utf-8-sig'))).get('alpha_mode') == 'source-nearest'}

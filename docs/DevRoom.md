@@ -49,6 +49,18 @@
   снимки в `Logs/EnhancedRelief/ManualWall/DevRoom`, без `-nographics`). Стенд рельефа не
   перестраивается: его объёмные меши — источник утверждённых игровых профилей.
   После его переустановки образцы нужно добавить заново (подписи хранятся в стенде).
+- **Подземелье `dungeonbase`** (2026-10-24, `DungeonReliefDevRoomStand`, карты —
+  `tools/Build-ManualRelief.py dungeon`, см. «Атлас dungeonbase» в `EnhancedRelief.md`): три настоящих
+  модуля `wall/default_short` (2 × 4 м) у передней стены левее стенда (x 9.6 / 12.0 / 14.4):
+  **1 — классика** (материал игры, POM), **2 — рельеф при бюджете игры** (120 000 треугольников,
+  92 тыс.), **3 — сетка 1 см** (506 тыс.); свой скользящий свет в F4. Меню **Tools > RTXMnesia >
+  Dev Room > Add or update dungeon relief samples**, batch
+  `RTXMnesia.EditorDev.DungeonReliefDevRoomStand.InstallBatch` (`InstallAndRenderBatch` — снимки в
+  `Logs/EnhancedRelief/Dungeon/DevRoom`, без `-nographics`). Установка убирает со стенда первые
+  образцы 1–3 (плоско / прежний рельеф / объёмная кладка, их подписи и свет; решение пользователя
+  2026-10-24). Их файлы в `DevRoomRelief/` остаются: из `cellarbase_wood_floor_solid.asset` читается
+  игровой профиль досок. Переустановка стенда (`DevRoomReliefBuilder.InstallBatch`) вернёт их, его
+  `CheckBatch` / `ValidateApproachBatch` без них не пройдут.
 - **F4** — выключить / включить проверочное освещение комнаты и стенда. С выключенным светом
   поверхности можно осматривать своим фонарём. Подписи и подсказка видны рядом со стендом в Play.
 - Слева от места появления стоит стол: **один подбираемый фонарь и 24 большие бутылки масла**

@@ -23,7 +23,7 @@ namespace RTXMnesia.EditorDev
     {
         public const string RootName = "Manual relief samples";
         static readonly string[] OldRootNames = { "Manual wall relief samples" };
-        const string Folder = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief/Manual";
+        internal const string Folder = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief/Manual";
         const string StandFolder = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief";
         const float Tile = 2.2f, GameSpacing = .051f;
         // Wall stand: island of the atlas, row above the stand's masonry (y 1.55).
@@ -170,7 +170,7 @@ namespace RTXMnesia.EditorDev
             return Save(material, Folder + "/" + stem + "_manual.mat");
         }
 
-        sealed class HeightMap : IDisposable
+        internal sealed class HeightMap : IDisposable
         {
             readonly Texture2D _texture;
             readonly float _lo, _hi;
@@ -295,7 +295,7 @@ namespace RTXMnesia.EditorDev
             }
         }
 
-        static Texture2D CopyTexture(string maps, string stem, string file, bool normalMap)
+        internal static Texture2D CopyTexture(string maps, string stem, string file, bool normalMap)
         {
             string path = Folder + "/" + stem + "_manual_" + Path.GetFileNameWithoutExtension(file) + ".png";
             File.Copy(Path.Combine(maps, file), AmnesiaPaths.ToAbsolute(path), true);
@@ -312,13 +312,13 @@ namespace RTXMnesia.EditorDev
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
-        static Mesh SaveMesh(Mesh mesh, string file)
+        internal static Mesh SaveMesh(Mesh mesh, string file)
         {
             mesh.name = "manual relief " + file;
             return Save(mesh, Folder + "/" + file + ".asset");
         }
 
-        static T Save<T>(T asset, string path) where T : Object
+        internal static T Save<T>(T asset, string path) where T : Object
         {
             var previous = AssetDatabase.LoadAssetAtPath<T>(path);
             if (previous == null) { AssetDatabase.CreateAsset(asset, path); return asset; }

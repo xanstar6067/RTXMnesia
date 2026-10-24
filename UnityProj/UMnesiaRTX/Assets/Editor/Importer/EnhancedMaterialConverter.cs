@@ -64,7 +64,7 @@ namespace RTXMnesia.Importer
             int snapshotArg = Array.IndexOf(args, "-enhancedResults");
             var results = snapshotArg >= 0 ? File.ReadAllLines(args[snapshotArg + 1]) :
                 Directory.GetFiles(RemixRoot, "result.json", SearchOption.AllDirectories)
-                    .Where(p => Path.GetFileName(Path.GetDirectoryName(p)) is "pbrify-x4-batch-v1" or "pbrify-alpha-x4-batch-v1")
+                    .Where(p => Path.GetFileName(Path.GetDirectoryName(p)) is "pbrify-x4-batch-v1" or "pbrify-alpha-x4-batch-v1" or "pbrify-x2-batch-v1" or "pbrify-alpha-x2-batch-v1")
                     .OrderBy(p => p, StringComparer.Ordinal).ToArray();
             int sets = 0, pairs = 0;
             var cutoutInputs = new HashSet<string>(results.Select(p => JsonUtility.FromJson<BatchResult>(File.ReadAllText(p)))
