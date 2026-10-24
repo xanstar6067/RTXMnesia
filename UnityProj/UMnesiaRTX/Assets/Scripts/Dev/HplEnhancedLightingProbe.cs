@@ -115,6 +115,7 @@ namespace RTXMnesia.Dev
                 VerifyChoirWestLighting(map, user, report);
                 VerifyChoirEastLighting(map, user, report);
                 VerifyCellTunnelsLighting(map, user, report);
+                VerifyNaveReduxLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -166,6 +167,7 @@ namespace RTXMnesia.Dev
                     ApplyChoirWestLightingPreview(map, mode);
                     ApplyChoirEastLightingPreview(map, mode);
                     ApplyCellTunnelsLightingPreview(map, mode);
+                    ApplyNaveReduxLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3004,6 +3006,156 @@ namespace RTXMnesia.Dev
                 FadeBatch(new[] { "PointLight_25", "PointLight_26", "PointLight_27" }, _ => Color.clear, 1f);
                 FadeBatch(new[] { "PointLight_1" }, _ => new Color(1f, 0f, 0f, 1f), 4f);
                 string line = "Cell tunnels state PASS: 11 lamp states, one torch/PointLight_15 link, 42 continuing guardian red-wave and reset fades, 16 blue reset points, nine checkpoint point and nine cone fades (including their physical shaft followers), three staircase lamps/fills, four one-second item/puzzle fades and four-second cell-ending red light survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Eighteen added sources do not accumulate or affect legacy HPL2 darkness; visible darkness checked per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly HashSet<string> NaveReduxProtectedLights = new() {
+            "PointLight_2", "PointLight_4", "PointLight_5", "PointLight_6", "PointLight_7", "PointLight_8", "PointLight_11", "PointLight_12", "PointLight_13",
+            "PointLight_16", "PointLight_17", "PointLight_18", "PointLight_19", "PointLight_20", "PointLight_21", "PointLight_22", "PointLight_23", "PointLight_24",
+            "PointLight_26", "PointLight_27", "PointLight_28", "PointLight_64", "PointLight_69", "PointLight_72", "PointLight_73", "PointLight_85", "PointLight_86"
+        };
+        static readonly HashSet<string> NaveReduxNavigationLights = new() {
+            "PointLight_3", "PointLight_9", "PointLight_10", "PointLight_15", "PointLight_29", "PointLight_33", "PointLight_36",
+            "PointLight_40", "PointLight_54", "PointLight_66", "PointLight_71", "PointLight_75", "PointLight_76", "PointLight_79", "PointLight_81", "PointLight_98", "PointLight_99"
+        };
+
+        static void ApplyNaveReduxLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/26_torture_nave_redux.map", StringComparison.Ordinal)) return;
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded && light.GetComponentInParent<AmnesiaEntity>() == null) light.SetColor(light.diffuseColor);
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = mode.Contains("reduxalllit") || (!mode.Contains("reduxalloff") && lamp.Component.GetVariable("Lit") != "false");
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.SetFlickerActive(false);
+                }
+            if (mode.Contains("reduxingredients"))
+            {
+                map.GetLight("PointLight_20").SetColor(new Color(.5f, .3f, .3f, .5f));
+                map.GetLight("PointLight_24").SetColor(new Color(.8f, .1f, .1f, .5f));
+                map.GetLight("PointLight_23").SetColor(new Color(.3f, .5f, .8f, .5f));
+            }
+            if (mode.Contains("reduxstringout")) map.GetLight("PointLight_23").SetColor(Color.clear);
+            if (mode.Contains("reduxpoison")) map.GetLight("PointLight_12").SetColor(new Color(0f, .6f, .8f, .8f));
+            // Light endpoints only. No ingredient activation/pickup, fungus break, machine use, Agrippa event or story timers.
+        }
+
+        static void VerifyNaveReduxLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/26_torture_nave_redux.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save()));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 42) throw new InvalidOperationException("Nave redux: expected 42 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            HplUserSettings Mode(int mode)
+            {
+                var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; return s;
+            }
+            float Factor(string name, int mode)
+            {
+                if (mode == 4 || name.StartsWith("BoxLight_", StringComparison.Ordinal)) return 1f;
+                if (name.StartsWith("SpotLight_", StringComparison.Ordinal)) return 0f;
+                if (NaveReduxProtectedLights.Contains(name)) return 1f;
+                if (NaveReduxNavigationLights.Contains(name)) return .7f;
+                if (name is "PointLight_34" or "PointLight_35" or "PointLight_37" or "PointLight_41" or "PointLight_42") return .3f;
+                if (!name.StartsWith("PointLight_", StringComparison.Ordinal)) return 1f;
+                return mode is 0 or 2 ? 0f : .6f;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity, bool standalone)>();
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f, light.GetComponentInParent<AmnesiaEntity>() == null));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    HplGraphics.Apply(Mode(mode));
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || (e.light.box && Mathf.Abs(e.light.enhancedIntensity - Factor(e.light.name, mode)) > 1e-5f) ||
+                            (e.standalone && e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * Factor(e.light.name, mode)) > 1e-4f * Mathf.Max(1f, e.intensity)))
+                            throw new InvalidOperationException("Nave redux: accent/caustic/lamp fill/legacy light changed " + e.light.name);
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int own = 0;
+                        foreach (var light in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true))
+                            if (light.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0) { noLight++; continue; }
+                        if (lamp.Lit ? value <= 0f : value > .001f) throw new InvalidOperationException("Nave redux: lamp state lost " + lamp.Name);
+                    }
+                    if (noLight != 15) throw new InvalidOperationException("Nave redux: expected 15 candles without owned light");
+                    int sky = 0;
+                    foreach (var light in AmnesiaLight.All)
+                        if (light != null && light.enhancedAdded)
+                        {
+                            sky++;
+                            if (light.LightLevelAt(light.transform.position, 0f) != 0f) throw new InvalidOperationException("Nave redux: sky contributes to legacy darkness");
+                        }
+                    if (sky != (mode == 4 ? 0 : 2)) throw new InvalidOperationException("Nave redux: sky sources accumulate or disappear");
+                }
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                    VerifyModes();
+                }
+                int effective = 0, inert = 0;
+                foreach (var (lamp, _) in lamps)
+                {
+                    string target = lamp.Component.GetVariable("ConnectedLight");
+                    if (string.IsNullOrEmpty(target)) continue;
+                    var fill = map.GetLight(target);
+                    if (fill == null) throw new InvalidOperationException("Nave redux: missing connection " + target);
+                    bool hasLight = lamp.Component.GetComponentsInChildren<AmnesiaLight>(true).Length > 0;
+                    if (hasLight) effective++; else inert++;
+                    Color before = fill.CurrentColor;
+                    foreach (bool on in new[] { false, true })
+                    {
+                        lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                        if (hasLight ? (on ? fill.CurrentColor == fill.diffuseColor : fill.CurrentColor != fill.diffuseColor) : fill.CurrentColor != before)
+                            throw new InvalidOperationException("Nave redux: broken effective/inert lamp link " + lamp.Name);
+                        VerifyModes();
+                    }
+                }
+                if (effective != 1 || inert != 3) throw new InvalidOperationException("Nave redux: expected one effective and three inert no_light links");
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                void Fade(string name, Color target, float duration)
+                {
+                    var light = map.GetLight(name); Color start = light.CurrentColor;
+                    light.FadeTo(target, light.CurrentRadius, duration); light.UpdateLight(duration * .5f); VerifyModes();
+                    if (start != target && (light.CurrentColor == start || light.CurrentColor == target)) throw new InvalidOperationException("Nave redux: missing fade midpoint " + name);
+                    light.UpdateLight(duration * .5f); VerifyModes();
+                    if (light.CurrentColor != target) throw new InvalidOperationException("Nave redux: ingredient fade interrupted " + name);
+                }
+                Fade("PointLight_20", new Color(.5f, .3f, .3f, .5f), 1f);
+                Fade("PointLight_24", new Color(.8f, .1f, .1f, .5f), 1f);
+                Fade("PointLight_23", new Color(.3f, .5f, .8f, .5f), 1f);
+                Fade("PointLight_23", Color.clear, 2f);
+                Fade("PointLight_12", new Color(0f, .6f, .8f, .8f), 2f);
+                Fade("PointLight_12", Color.clear, 2f);
+                string line = "Nave redux state PASS: 42 lamp states (27 with owned lights, 15 no_light candles), one effective and three authored inert connections, six continuing one-/two-second blood/string/poison-gland fades survive RTGI, RT no-GI, SSGI, raster no-GI and classic. All original colours, radii, seven boxes and legacy HPL2 light are preserved; two added shafts do not accumulate or affect legacy darkness. Visible darkness checked separately per view.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally
