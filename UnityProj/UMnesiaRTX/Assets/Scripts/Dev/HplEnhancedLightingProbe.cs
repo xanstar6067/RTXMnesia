@@ -79,28 +79,37 @@ namespace RTXMnesia.Dev
                 if (map.GetEntityByName(lamp.Trim()) is Props.PropLamp p) p.SetLit(true, false);
                 else Debug.LogWarning("[EnhancedLighting] no lamp " + lamp);
             }
-            VerifySwitching(user, report);
-            VerifyEntranceHallEvents(map, user, report);
-            VerifyArchivesEvents(map, user, report);
-            VerifyLabEvents(map, user, report);
-            VerifyWineCellarEvents(map, user, report);
-            VerifyDistilleryEvents(map, user, report);
-            VerifyArchivesCellarState(map, user, report);
-            VerifyCellarMazeState(map, user, report);
-            VerifyBackHallEvents(map, user, report);
-            VerifyDanielsRoomLamps(map, user, report);
-            var studyCheck = VerifyStudyEvents(map, user, report);
-            while (studyCheck.MoveNext()) yield return studyCheck.Current;
-            VerifyStorageEvents(map, user, report);
-            VerifyMachineRoomEvents(map, user, report);
-            VerifyElevatorEvents(map, user, report);
-            VerifyPrisonSouthEvents(map, user, report);
-            VerifyPrisonNorthEvents(map, user, report);
-            VerifyCisternEntranceState(map, user, report);
-            VerifyControlRoomState(map, user, report);
-            VerifyCisternState(map, user, report);
-            var morgueCheck = VerifyMorgueState(map, user, report);
-            while (morgueCheck.MoveNext()) yield return morgueCheck.Current;
+            // "nostress": capture ordinary setting changes without the synchronous verification cycles first.
+            // Useful when checking whether a render artifact comes from the verification stress or normal switching.
+            if (!defaultModes.Contains("nostress"))
+            {
+                VerifySwitching(user, report);
+                VerifyEntranceHallEvents(map, user, report);
+                VerifyArchivesEvents(map, user, report);
+                VerifyLabEvents(map, user, report);
+                VerifyWineCellarEvents(map, user, report);
+                VerifyDistilleryEvents(map, user, report);
+                VerifyArchivesCellarState(map, user, report);
+                VerifyCellarMazeState(map, user, report);
+                VerifyBackHallEvents(map, user, report);
+                VerifyDanielsRoomLamps(map, user, report);
+                var studyCheck = VerifyStudyEvents(map, user, report);
+                while (studyCheck.MoveNext()) yield return studyCheck.Current;
+                VerifyStorageEvents(map, user, report);
+                VerifyMachineRoomEvents(map, user, report);
+                VerifyElevatorEvents(map, user, report);
+                VerifyPrisonSouthEvents(map, user, report);
+                VerifyPrisonNorthEvents(map, user, report);
+                VerifyCisternEntranceState(map, user, report);
+                VerifyControlRoomState(map, user, report);
+                VerifyCisternState(map, user, report);
+                var morgueCheck = VerifyMorgueState(map, user, report);
+                while (morgueCheck.MoveNext()) yield return morgueCheck.Current;
+                // Diagnostic comparison with this map's overlay temporarily absent; generic switching checks still run.
+                if (defaultModes.Contains("baseline")) report.AppendLine("Baseline diagnostic: map-specific overlay assertions skipped.");
+                else VerifySewerLighting(map, user, report);
+            }
+            else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -2080,6 +2089,53 @@ namespace RTXMnesia.Dev
                 foreach (var (light, saved) in savedLights) light.Restore(saved);
                 HplGraphics.Apply(user);
             }
+        }
+
+        static void VerifySewerLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/20_sewer.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp) throw new InvalidOperationException("Sewer: source map unexpectedly has a lamp");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float accent)>();
+            var caustics = new HashSet<string>();
+            foreach (int number in new[] { 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20, 22, 23, 28, 29 })
+                caustics.Add("SpotLight_" + number);
+            try
+            {
+                HplGraphics.Apply(classic);
+                foreach (var light in AmnesiaLight.All)
+                {
+                    if (light == null || light.handHeld || light.enhancedAdded) continue;
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    bool accent = caustics.Contains(light.name) || light.name is "PointLight_3" or "PointLight_41" or "PointLight_42" or "PointLight_43" or "PointLight_44";
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        accent ? light.GetComponent<Light>().intensity : -1f));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                    s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                            (e.accent >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.accent) > 1e-4f * Mathf.Max(1f, e.accent)) ||
+                            (e.light.box && e.light.enhancedIntensity != 1f))
+                            throw new InvalidOperationException("Sewer: caustic/accent/ambient/gameplay light changed " + e.light.name);
+                    int count = 0;
+                    foreach (var light in AmnesiaLight.All)
+                    {
+                        if (light == null || !light.enhancedAdded) continue;
+                        count++;
+                        if (light.LightLevelAt(light.transform.position, 0f) != 0f)
+                            throw new InvalidOperationException("Sewer: sky source affects gameplay darkness");
+                    }
+                    if (count != (mode == 4 ? 0 : 35)) throw new InvalidOperationException("Sewer: added sky sources accumulate or disappear");
+                }
+                string line = "Sewer lighting PASS: no lamp entities or scripted light changes; 15 water caustics, five coloured accents and map-wide ambient retain rendering across RTGI, RT no-GI, SSGI, raster no-GI and classic; original colours, radii and sampled gameplay light are preserved, 35 sky areas do not accumulate or affect gameplay darkness.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally { HplGraphics.Apply(user); }
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)
