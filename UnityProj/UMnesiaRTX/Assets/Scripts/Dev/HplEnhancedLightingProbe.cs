@@ -35,6 +35,10 @@ namespace RTXMnesia.Dev
         public string folder, mapName;
         public int width = 1600, height = 900;
 
+        // Preview output is silent; keep sound logic/timing running and never save a volume setting.
+        void Awake() => AudioListener.volume = 0f;
+        void LateUpdate() => AudioListener.volume = 0f;
+
         IEnumerator Start()
         {
             var run = Run();
@@ -60,7 +64,11 @@ namespace RTXMnesia.Dev
             player.readDevices = false;
             if (map.GameUi != null && map.GameUi.IsPaused) map.GameUi.Resume();
             var user = HplUserSettings.ReadSaved();
+            float savedVolume = user.masterVolume;
+            user.masterVolume = 0f;
+            AudioListener.volume = 0f;
             var report = new StringBuilder();
+            report.AppendLine("Silent preview: AudioListener.volume = 0; saved user volume is not changed.");
             Directory.CreateDirectory(folder);
             string defaultModes = string.IsNullOrEmpty(modes) ? "classic_raster,classic_rt,enhanced_raster,enhanced_rt" : modes;
             // Flicker switches lights off at random: the modes would not be comparable.
@@ -87,6 +95,7 @@ namespace RTXMnesia.Dev
             VerifyElevatorEvents(map, user, report);
             VerifyPrisonSouthEvents(map, user, report);
             VerifyPrisonNorthEvents(map, user, report);
+            VerifyCisternEntranceState(map, user, report);
             bool previewFog = map.FogActive;
 
             foreach (var spec in (views ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -118,6 +127,7 @@ namespace RTXMnesia.Dev
                     HplEnhancedEmission.Enabled = !mode.Contains("noemit");
                     HplEnhancedEmission.GainScale = mode.Contains("emitx") ? 30f : 1f;
                     ApplyPrisonNorthCheckpointPreview(map, mode);
+                    ApplyCisternEntranceWaterPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -258,6 +268,7 @@ namespace RTXMnesia.Dev
                                   $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} wax={HplEnhancedLighting.WaxCandles} (not generated {HplEnhancedLighting.WaxWithoutGenerated}), " +
                                   $"RT={HplRayTracing.Active} traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
                     report.AppendLine(line);
+                    report.AppendLine($"    camera hpl={HplSpace.Position(camera.transform.position)}; silent volume={AudioListener.volume:0.00}");
                     Debug.Log("[EnhancedLighting] " + line);
                     // The lights near the view as this mode draws them.
                     foreach (var light in AmnesiaLight.All)
@@ -276,6 +287,9 @@ namespace RTXMnesia.Dev
             yield return SetLantern(map, false);
             yield return VerifyThunder(map, user, report);
             HplGraphics.Apply(user);
+            if (AudioListener.volume != 0f || HplUserSettings.ReadSaved().masterVolume != savedVolume)
+                throw new InvalidOperationException("Silent preview changed saved volume or enabled audio output");
+            report.AppendLine("Silent preview PASS: output stayed at zero and saved user volume is unchanged.");
             File.WriteAllText(Path.Combine(folder, mapName + "_report.txt"), report.ToString());
         }
 
@@ -1525,6 +1539,75 @@ namespace RTXMnesia.Dev
             }
             foreach (string name in new[] { "torch_static01_17", "torch_static01_18" })
             { var lamp = (Props.PropLamp)map.GetEntityByName(name); lamp.SetLit(true, false); lamp.UpdateLogic(0f); }
+        }
+
+        static readonly string[] CisternWaterEntities = { "water_plane", "water_flood_block", "LiquidArea_1", "AreaDeepWater",
+            "AreaDeepWater_1", "AreaDeepWater_2", "AreaDeepWater_3", "AreaDeepWater_4", "AreaDeepWater_5", "AreaDeepWaterSafe" };
+
+        static void VerifyCisternEntranceState(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/16_cistern_entrance.map", StringComparison.Ordinal)) return;
+            var classic = user.Copy(); classic.lightingSet = 0; HplGraphics.Apply(classic);
+            var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float accent)>();
+            foreach (var light in AmnesiaLight.All)
+            {
+                if (light == null || light.handHeld || light.enhancedAdded) continue;
+                Vector3 sample = light.transform.position + light.transform.forward * 0.3f;
+                sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                    light.name is "PointLight_14" or "PointLight_29" ? light.GetComponent<Light>().intensity : -1f));
+            }
+            var water = new List<(HplEntity entity, bool active)>();
+            foreach (string name in CisternWaterEntities)
+            {
+                var entity = map.GetEntityByName(name);
+                if (entity == null) throw new InvalidOperationException("Cistern entrance: missing water entity " + name);
+                water.Add((entity, entity.Active));
+            }
+            var mechanisms = new List<(HplProp prop, Matrix4x4 pose)>();
+            foreach (string name in new[] { "bridge_metal_vert_1", "bridge_metal_vert_2", "ladder_static_1" })
+            {
+                var prop = map.GetEntityByName(name) as HplProp;
+                if (prop?.MainBody == null) throw new InvalidOperationException("Cistern entrance: missing mechanism " + name);
+                mechanisms.Add((prop, prop.MainBody.HplMatrix));
+            }
+            try
+            {
+                foreach (bool flooded in new[] { true, false })
+                {
+                    foreach (var (entity, _) in water) entity.SetActive(flooded);
+                    for (int mode = 0; mode < 4; mode++)
+                    {
+                        var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                        HplGraphics.Apply(s);
+                        foreach (var e in sources)
+                            if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
+                                Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f ||
+                                (e.accent >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.accent) > 1e-4f * Mathf.Max(1f, e.accent)) ||
+                                (e.light.name == "BoxLight_2" && e.light.enhancedIntensity != 1f))
+                                throw new InvalidOperationException("Cistern entrance: gameplay/lever/side ambient light changed " + e.light.name);
+                        foreach (var (entity, _) in water)
+                            if (entity.Active != flooded) throw new InvalidOperationException("Cistern entrance: water state lost " + entity.Name);
+                        foreach (var (prop, pose) in mechanisms)
+                            if (prop.MainBody.HplMatrix != pose) throw new InvalidOperationException("Cistern entrance: lighting moved mechanism " + prop.Name);
+                        foreach (var light in AmnesiaLight.All)
+                            if (light != null && light.enhancedAdded && light.LightLevelAt(light.transform.position, 0f) != 0f)
+                                throw new InvalidOperationException("Cistern entrance: roof area affects gameplay darkness");
+                    }
+                }
+                string line = $"Cistern entrance state PASS: {sources.Count} original lights keep colour, radius and sampled gameplay illumination; two lever accents and side box ambience preserved; ten wet/drained entity states and bridge/ladder poses survive RTGI, no-GI, raster and classic; roof area does not affect darkness.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (entity, active) in water) entity.SetActive(active);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static void ApplyCisternEntranceWaterPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/16_cistern_entrance.map", StringComparison.Ordinal)) return;
+            foreach (string name in CisternWaterEntities) map.GetEntityByName(name).SetActive(!mode.Contains("drained"));
         }
 
         static IEnumerator VerifyThunder(HplMap map, HplUserSettings user, StringBuilder report)

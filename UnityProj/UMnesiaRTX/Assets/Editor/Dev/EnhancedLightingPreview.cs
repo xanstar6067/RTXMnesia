@@ -31,6 +31,7 @@ namespace RTXMnesia.EditorDev
                 if (!SessionState.GetBool(Pending, false)) return;
                 if (state == PlayModeStateChange.EnteredPlayMode)
                 {
+                    AudioListener.volume = 0f;
                     var probe = new GameObject("Enhanced lighting verification").AddComponent<Dev.HplEnhancedLightingProbe>();
                     probe.views = SessionState.GetString(ViewsKey, "");
                     probe.modes = SessionState.GetString(ModesKey, "");
@@ -63,6 +64,7 @@ namespace RTXMnesia.EditorDev
             try
             {
                 if (!Application.isBatchMode) throw new InvalidOperationException("Enhanced lighting preview is batch-only.");
+                AudioListener.volume = 0f;
                 string[] args = Environment.GetCommandLineArgs();
                 string Arg(string name) { int i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
                 string map = Arg("-amnesiaMap") ?? "maps/main/ch01/01_old_archives.map";
