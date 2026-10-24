@@ -60,6 +60,8 @@ namespace RTXMnesia.Ui
         public int shadows = HplGraphics.ShadowsHigh;
         /// <summary>Enhanced lighting: soft shadows (PCSS) and contact shadows of the shadow maps (HplEnhancedShadows).</summary>
         public bool softShadows = true, contactShadows = true;
+        /// <summary>Enhanced lighting: the lantern in the hand casts shadows (HplEnhancedShadows.Lantern).</summary>
+        public bool lanternShadow = true;
         /// <summary>Post effects of the original options: bloom, image trail, radial blur.</summary>
         public bool bloom = true, imageTrail = true, radialBlur = true;
         /// <summary>Display gamma (HPL2 Graphics Gamma, 0.3–2, SDL_SetGamma); drawn by HplScreenEffectsPass.</summary>

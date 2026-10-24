@@ -74,7 +74,11 @@ namespace RTXMnesia.Player
             _animation = instance.handsAnimation;
             _hands.gameObject.SetActive(false);
             foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
                 if (r.GetComponent<AmnesiaBillboard>() == null) r.renderingLayerMask = HplLighting.HandsLayerMask;
+                // Out of the RTGI rays (HplRayTracing.HandsLayer).
+                r.gameObject.layer = HplRayTracing.HandsLayer;
+            }
             foreach (var o in instance.handObjects)
             {
                 if (o.entity == null) continue;

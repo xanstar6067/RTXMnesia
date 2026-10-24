@@ -350,7 +350,8 @@ namespace RTXMnesia.Ui
             bool shadowMaps = settings.lightingSet == 1 && settings.shadows != HplGraphics.ShadowsOff;
             ScrollToggle("Мягкие тени (PCSS)", settings.softShadows, MenuControl.SoftShadows, !shadowMaps, alignWithCombo: true);
             ScrollToggle("Контактные тени", settings.contactShadows, MenuControl.ContactShadows, !shadowMaps);
-            if (!shadowMaps) Note("Мягкие и контактные тени: только с «Улучшенным» освещением и включёнными тенями.");
+            ScrollToggle("Тень фонаря", settings.lanternShadow, MenuControl.LanternShadow, !shadowMaps);
+            if (!shadowMaps) Note("Мягкие и контактные тени, тень фонаря: только с «Улучшенным» освещением и включёнными тенями.");
             // Own text: the game's Russian "Bloom" entry reads "Потускнение" (dimming), the opposite of the effect.
             ScrollToggle("Свечение (Bloom)", settings.bloom, MenuControl.Bloom);
             ScrollToggle(T("OptionsMenu", "ImageTrail", "След при движении"), settings.imageTrail, MenuControl.ImageTrail);

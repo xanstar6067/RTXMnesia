@@ -511,12 +511,27 @@ namespace RTXMnesia.World
         /// The light of the hand object (the lantern), when it is drawn or the settings change: a hurricane lantern
         /// gives about 10 candles. The small glow of the glass keeps HPL2's values.
         /// </summary>
+        /// <summary>The lantern's flame (m): the size of its soft shadow (PCSS, RT).</summary>
+        public const float LanternSourceRadius = 0.015f;
+        /// <summary>The lantern's shadow map: HDRP's medium resolution (a cube map every frame).</summary>
+        const int LanternShadowLevel = 1;
+
         public static void HandLight(AmnesiaLight light)
         {
             if (!Applied || light == null || !light.handHeld || light.radius < HplRayTracing.MinHandShadowRadius) return;
             if (s_changed.Exists(c => c.light == light)) return;
             Record(light);
             SetPhysical(light, LanternCandles * CandleCandela);
+            // Its own shadow map (graphics tab "Lantern shadow"; ray traced instead while the RTX tab traces it): the
+            // hands and the lantern's model cast none (HandsConverter), the world does. HPL2's lantern had no shadows.
+            if (HplEnhancedShadows.Lantern)
+            {
+                light.tracedSourceRadius = LanternSourceRadius;
+                light.baseShadowLevel = LanternShadowLevel;
+                SetShadows(light, true);
+                if (light.TryGetComponent(out Light unityLight))
+                    HplEnhancedShadows.ConfigureLight(light, unityLight, light.GetComponent<HDAdditionalLightData>());
+            }
             light.Apply(light.CurrentColor, light.CurrentRadius);
         }
 

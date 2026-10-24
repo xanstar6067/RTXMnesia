@@ -124,6 +124,8 @@ namespace RTXMnesia.Dev
                     // "nopcss" / "nocontact": shadow maps without the soft / contact shadows of the enhanced lighting.
                     s.softShadows = !mode.Contains("nopcss");
                     s.contactShadows = !mode.Contains("nocontact");
+                    // "nolanternshadow": the lantern without its shadow map (with "lantern" in the name, it is held).
+                    s.lanternShadow = !mode.Contains("nolanternshadow");
                     if (mode.Contains("tex")) s.textures = 1;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
                     // "noemit": without the GI copies of glowing materials (what their glow adds).
@@ -195,6 +197,20 @@ namespace RTXMnesia.Dev
                                 string key = $"{classic.name} enhancedNow={m != classic} hasEnhanced={has} shader={m.shader.name} smooth={(m.HasProperty("_Smoothness") ? m.GetFloat("_Smoothness") : -1):0.00} height={m.IsKeywordEnabled("_HEIGHTMAP")}";
                                 if (seen.Add(key)) report.AppendLine($"    mat {r.transform.parent?.name}: {key}");
                             }
+                        }
+                    }
+                    if (mode.Contains("rtat"))
+                    {
+                        // Renderers at the view's target and how the ray tracing structure takes them (path tracing
+                        // draws only that structure).
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                        {
+                            if (r.bounds.SqrDistance(target) > 0.3f * 0.3f) continue;
+                            var names = new List<string>();
+                            foreach (var m in r.sharedMaterials)
+                                if (m != null) names.Add($"{m.name} ({m.shader.name}; {string.Join(" ", m.shaderKeywords)}; queue {m.renderQueue})");
+                            report.AppendLine($"    at {r.name} under {r.transform.parent?.name}: rt={r.rayTracingMode} enabled={r.enabled} layer={r.gameObject.layer} " +
+                                              $"batched={r.isPartOfStaticBatch} shadows={r.shadowCastingMode} mesh={r.GetComponent<MeshFilter>()?.sharedMesh?.name}: {string.Join(" | ", names)}");
                         }
                     }
                     if (mode.Contains("walls"))

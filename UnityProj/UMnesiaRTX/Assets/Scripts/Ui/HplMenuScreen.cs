@@ -549,7 +549,7 @@ namespace RTXMnesia.Ui
             }
             else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
                      control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary || control == MenuControl.DebugPanel ||
-                     control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur or MenuControl.RtEnabled or MenuControl.SoftShadows or MenuControl.ContactShadows ||
+                     control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur or MenuControl.RtEnabled or MenuControl.SoftShadows or MenuControl.ContactShadows or MenuControl.LanternShadow ||
                      control >= MenuControl.HdrPeakLess && control <= MenuControl.HdrDefaults) Activate(_selected, direction);
         }
 
@@ -775,6 +775,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.Bloom: DraftSettings.bloom = !DraftSettings.bloom; break;
                 case MenuControl.SoftShadows: DraftSettings.softShadows = !DraftSettings.softShadows; break;
                 case MenuControl.ContactShadows: DraftSettings.contactShadows = !DraftSettings.contactShadows; break;
+                case MenuControl.LanternShadow: DraftSettings.lanternShadow = !DraftSettings.lanternShadow; break;
                 case MenuControl.ImageTrail: DraftSettings.imageTrail = !DraftSettings.imageTrail; break;
                 case MenuControl.RadialBlur: DraftSettings.radialBlur = !DraftSettings.radialBlur; break;
                 case MenuControl.ComboItem: PickComboItem(_menu.DataAt(index)); break;

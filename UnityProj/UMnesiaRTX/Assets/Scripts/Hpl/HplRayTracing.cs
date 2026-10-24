@@ -59,6 +59,13 @@ namespace RTXMnesia.Hpl
         /// </summary>
         public const int GiOnlyLayer = 28;
         const int AllButGiOnly = ~(1 << GiOnlyLayer);
+        /// <summary>
+        /// Layer of the player's hands and the object in them (PlayerHands): RTGI leaves it out of its rays. The lantern's
+        /// light is a few cm from its model and the hand, which the rays of the hand's own pixels hit at once: the hands
+        /// and the lantern glowed orange (mean of the frame 31 against 20 without RTGI). Still in the acceleration
+        /// structure: path tracing draws only what is in it.
+        /// </summary>
+        public const int HandsLayer = 27;
 
         /// <summary>The source radius of a shadowed light while it is traced (HPL2 lights have none; candles, lamps).</summary>
         public const float SourceRadius = 0.04f;
@@ -190,6 +197,7 @@ namespace RTXMnesia.Hpl
             s_gi.active = Gi > 0;
             if (Gi == 0) return;
             s_gi.enable.Override(true);
+            s_gi.layerMask.Override(~(1 << HandsLayer));
             s_gi.tracing.Override(RayCastingMode.RayTracing);
             s_gi.mode.Override(RayTracingMode.Performance);
             // Custom quality: the values below instead of the asset's quality levels.

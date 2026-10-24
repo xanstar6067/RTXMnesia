@@ -32,6 +32,9 @@ namespace RTXMnesia.World
         /// <summary>Settings chosen in the graphics tab (applied whether or not the enhanced lighting is on).</summary>
         public static bool SoftChosen { get; private set; } = true;
         public static bool ContactChosen { get; private set; } = true;
+        public static bool LanternChosen { get; private set; } = true;
+        /// <summary>The lantern in the hand casts shadows (a shadow map, or RT when the RTX tab traces it).</summary>
+        public static bool Lantern => LanternChosen && On;
         /// <summary>PCSS is in effect: enhanced lighting, shadows on, soft shadows chosen.</summary>
         public static bool Soft => SoftChosen && On;
         /// <summary>Contact shadows are in effect.</summary>
@@ -43,6 +46,7 @@ namespace RTXMnesia.World
         {
             SoftChosen = s.softShadows;
             ContactChosen = s.contactShadows;
+            LanternChosen = s.lanternShadow;
             if (!Application.isPlaying) return;
             SetFiltering(Soft ? HDShadowFilteringQuality.High : (HDShadowFilteringQuality?)null);
         }
@@ -128,7 +132,7 @@ namespace RTXMnesia.World
             if (hd != null)
             {
                 hd.useContactShadow.useOverride = true;
-                hd.useContactShadow.@override = Contact && shadowed && light.GetComponentInParent<AmnesiaEntity>(true) == null;
+                hd.useContactShadow.@override = Contact && shadowed && !light.handHeld && light.GetComponentInParent<AmnesiaEntity>(true) == null;
             }
         }
     }
