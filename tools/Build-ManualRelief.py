@@ -7,7 +7,7 @@ holes, dark spots become glossy). The original game files carry the shapes the a
           integrated into a height field, then segmented into stone / mortar.
   floor   castlebase_floor_nrm.dds alpha = HPL depth map of the paving joints (tiling).
   boards  cellarbase_wood_floor_height.tga: bed joints; the end joints are found in the albedo.
-  dungeon dungeonbase atlas: stone islands from dungeonbase_height.tga (no PBRify set: classic albedo).
+  dungeon dungeonbase atlas (PBRify x2, 4096): stone islands from dungeonbase_height.tga scaled x2.
 
 Stones get a clean profile from the distance to the joint: faces at the original plane, rounded
 shoulders, joints recessed behind them, so map decals stay visible. Boards are modelled as
@@ -20,6 +20,7 @@ Outputs go to sourceRTXRemix/<material>/manual-relief-v1/ (derived from game res
   height.png      L, metres = lo + value / 255 * (hi - lo), see relief.json (stones only)
   normal.png      RGB, Unity tangent space (G up)
   mask.png        RGBA, HDRP mask map: R metallic 0, G occlusion, B detail 1, A smoothness
+  specular.png    RGB, dungeon only: specular coverage, F0 = 0.04 x value (LitSpecular)
   relief.json     parameters and encodings (boards: rows / end joints in image coordinates)
   preview_*.png   inspection images
 
@@ -369,54 +370,148 @@ def boards(a, rng):
             'gap': a.gap, 'chamfer': a.chamfer, 'board_variation': 0.0008}
 
 
-# dungeonbase atlas (2048 px): stone islands as pixel boxes (x0, y0, x1, y1, image rows down) and the
-# metres per UV unit the dungeon modules give them (wall/default, default_short, corridor, welder_stone).
-# Wood (the beam strip under the rubble, the planks right of it) and the carved panels are left as they are.
+# dungeonbase atlas: stone islands as pixel boxes of the 2048 px original (x0, y0, x1, y1, image rows down), the metres per
+# UV unit the dungeon modules give them (wall/default, default_short, corridor, welder_stone), the joint depth, the
+# longest dead-end joint tail removed (small blobs and tails of the HPL depth map), the depth below which a pixel is stone
+# (share of the island's 99th percentile) and how much the faces follow the depth (rubble: rounded cobbles, m).
+# Wood (the beam strip under the rubble, the planks right of it) and the carved panels keep the PBRify shape.
 DUNGEON_ISLANDS = {
-    'rubble': (0, 0, 608, 608, 11.7),           # wall/default lower part
-    'ashlar': (612, 0, 1024, 728, 8.8),         # wall/default upper part, welder_stone
-    'band': (0, 728, 1024, 1024, 8.6),          # wide courses: wall tops, ceilings
-    'brick': (1024, 612, 1460, 1030, 7.9),
-    'lower': (0, 1028, 645, 1525, 11.7),        # corridor walls
-    'rubble2': (1024, 0, 1360, 608, 11.3),      # default_short, corridor
+    'rubble': (0, 0, 608, 608, 11.7, 0.026, 0.06, 0.45, 0.010),       # wall/default field
+    'ashlar': (612, 0, 1024, 728, 8.8, 0.020, 0.08, 0.3, 0.002),      # frame pillars (unwrapped: side, front, side)
+    'band': (0, 728, 1024, 1024, 8.6, 0.020, 0.08, 0.3, 0.002),       # wide courses: wall tops; pillars continue here
+    'brick': (1024, 612, 1460, 1030, 7.9, 0.020, 0.08, 0.3, 0.002),
+    'lower': (0, 1028, 645, 1525, 11.7, 0.024, 0.08, 0.3, 0.002),     # corridor walls
+    'rubble2': (1024, 0, 1360, 608, 11.3, 0.026, 0.06, 0.45, 0.010),  # default_short, corridor
 }
+DUNGEON_HEIGHT_RANGE = (-0.036, 0.004)
+# Columns of the 2048 atlas on the side faces of the frame pillars (wall/default, default_short: x 740-880 is the
+# pillar front), rows 0-1024 (ashlar and band). The depth map has blobs and broken joint ends there ("drops" on the
+# frame sides): its joints become straight courses across the strip, from the row profile.
+DUNGEON_PILLAR_SIDES = ((608, 740), (880, 1024))
+DUNGEON_PILLAR_ROWS = 1024
+
+
+def thin(image):
+    """Zhang-Suen thinning of a boolean image to 8-connected lines one pixel wide."""
+    img = np.pad(image, 1).astype(np.uint8)
+    while True:
+        changed = False
+        for step in (0, 1):
+            p2, p3, p4 = img[:-2, 1:-1], img[:-2, 2:], img[1:-1, 2:]
+            p5, p6, p7 = img[2:, 2:], img[2:, 1:-1], img[2:, :-2]
+            p8, p9 = img[1:-1, :-2], img[:-2, :-2]
+            ring = [p2, p3, p4, p5, p6, p7, p8, p9, p2]
+            b = sum(ring[:8])
+            a = sum(((ring[i] == 0) & (ring[i + 1] == 1)).astype(np.uint8) for i in range(8))
+            if step == 0:
+                c = (p2 * p4 * p6 == 0) & (p4 * p6 * p8 == 0)
+            else:
+                c = (p2 * p4 * p8 == 0) & (p2 * p6 * p8 == 0)
+            remove = (img[1:-1, 1:-1] == 1) & (b >= 2) & (b <= 6) & (a == 1) & c
+            if remove.any():
+                img[1:-1, 1:-1][remove] = 0
+                changed = True
+        if not changed:
+            return img[1:-1, 1:-1].astype(bool)
+
+
+def endpoints(line):
+    """Line pixels with a single run of neighbours around them (one or two adjacent ones) and isolated pixels."""
+    img = np.pad(line, 1).astype(np.uint8)
+    ring = [img[:-2, 1:-1], img[:-2, 2:], img[1:-1, 2:], img[2:, 2:], img[2:, 1:-1], img[2:, :-2], img[1:-1, :-2], img[:-2, :-2]]
+    ring.append(ring[0])
+    b = sum(ring[:8])
+    a = sum(((ring[i] == 0) & (ring[i + 1] == 1)).astype(np.uint8) for i in range(8))
+    return line & ((b == 0) | (a == 1) & (b <= 3))
+
+
+def prune_tails(joints, length_px):
+    """Joints without their dead-end tails shorter than length_px: the depth map's "drops" hanging from a joint into a
+    stone. Skeleton, endpoints removed length_px times, long branches grown back along the skeleton, then the joint
+    rebuilt around the kept skeleton with its own width. Returns the removed joint pixels."""
+    skeleton = thin(joints)
+    kept = skeleton.copy()
+    order = np.full(joints.shape, -1, np.int32)               # pruning step that removed a skeleton pixel
+    for step in range(length_px):
+        ends = endpoints(kept)
+        order[ends] = step
+        kept &= ~ends
+    # Branches still cut in the last step are longer than length_px: grow them back step by step in reverse order.
+    # A tail that vanished earlier is not on such a path.
+    front = order == length_px - 1
+    grown = front.copy()
+    for step in range(length_px - 2, -1, -1):
+        front = ndimage.binary_dilation(front, np.ones((3, 3), bool)) & (order == step)
+        grown |= front
+    kept |= grown
+    radius = ndimage.distance_transform_edt(joints)
+    distance, (iy, ix) = ndimage.distance_transform_edt(~kept, return_indices=True)
+    rebuilt = joints & (distance <= radius[iy, ix] + 1.5)
+    return joints & ~rebuilt
+
+
+def luminance(rgb):
+    return rgb[..., 0] * 0.2126 + rgb[..., 1] * 0.7152 + rgb[..., 2] * 0.0722
+
+
+def matte(rough, lum, radius_px):
+    """Roughness variation that does not follow albedo brightness (PBRify's does, ~0.9), and how much darker than its
+    surroundings a pixel is (dark spots and pits must not be glossier than the face)."""
+    z = (rough - rough.mean()) / (rough.std() + 1e-6)
+    zl = (lum - lum.mean()) / (lum.std() + 1e-6)
+    resid = z - np.mean(z * zl) * zl
+    resid = ndimage.gaussian_filter(resid / (resid.std() + 1e-6), 1.0)
+    mu = ndimage.gaussian_filter(lum, radius_px)
+    sd = np.sqrt(ndimage.gaussian_filter((lum - mu) ** 2, radius_px)) + 1e-3
+    dark = np.clip((mu - lum) / sd, 0, 2) / 2
+    return resid, dark
 
 
 def dungeon(a, rng):
-    """dungeonbase: no PBRify set (the atlas needed a 2x workflow). Stones from the original HPL depth
-    map (white = deeper joint), fine detail from the original normal map, albedo stays the classic one."""
-    imported = os.path.join(ROOT, 'UnityProj', 'UMnesiaRTX', 'Assets', 'AmnesiaImported', 'Textures', 'static_objects', 'dungeonbase')
-    albedo = load(os.path.join(imported, 'dungeonbase__albedo.png'), 'RGB')
+    """dungeonbase, the 4096 PBRify x2 set: albedo and fine normal detail from PBRify, stones and joints from the original
+    HPL depth map (white = deeper joint) scaled x2, roughness from our own matte range (PBRify's is not used directly)."""
+    name = 'dungeonbase'
+    albedo = load(os.path.join(a.pbrify, name + '__albedo.png'), 'RGB').astype(np.float32)
     size = albedo.shape[0]
+    scale = size / 2048
     depth = load(os.path.join(a.source, 'static_objects', 'dungeonbase', 'dungeonbase_height.tga'), 'L')
-    if depth.shape[0] != size:
-        depth = ndimage.zoom(depth, size / depth.shape[0], order=1)
-    # Imported normal: Unity tangent space (G up), as normal.png. Classic HDRP mask: A = smoothness.
-    original = load(os.path.join(imported, 'dungeonbase_nrm__normal.png'), 'RGB') * 2 - 1
-    classic_mask = load(os.path.join(imported, 'dungeonbase_spec__mask.png'), 'RGBA')
-    for name, image in (('normal', original), ('mask', classic_mask)):     # the spec map is 1024 px
-        if image.shape[0] != size:
-            image = ndimage.zoom(image, (size / image.shape[0], size / image.shape[1], 1), order=1)
-            if name == 'normal': original = image
-            else: classic_mask = image
-    oz = np.maximum(original[..., 2], 0.15)
-    sx, sy = original[..., 0] / oz, original[..., 1] / oz
+    depth = np.clip(ndimage.zoom(depth, size / depth.shape[0], order=3), 0, 1).astype(np.float32)
+    rows = int(DUNGEON_PILLAR_ROWS * scale)
+    for c0, c1 in DUNGEON_PILLAR_SIDES:
+        strip = depth[:rows, int(c0 * scale):int(c1 * scale)]
+        # A row is a joint where most of the strip is: joints crossing the side span it, blobs and tails vanish.
+        course = ndimage.gaussian_filter1d(np.median(strip, axis=1), 1.5 * scale)
+        strip[:] = course[:, None]
+    sx, sy = pbrify_slopes(a, name)                  # whole atlas: the enhanced normal outside the islands
+    sx, sy = sx.astype(np.float32), sy.astype(np.float32)
+    pbr_rough = load(os.path.join(a.pbrify, name + '__roughness.png'), 'RGB')[..., 0].astype(np.float32)
+    lum = luminance(albedo)
 
-    full_h = np.zeros((size, size))
-    full_mask = np.full((size, size), 0.5)
-    rough = 1 - classic_mask[..., 3]
-    occlusion = np.ones((size, size))
+    # Outside the islands (wood, carved panels): the PBRify shape, matte range 0.72-0.92.
+    resid, dark = matte(pbr_rough, lum, 0.02 / (8.8 / size))
+    rough = np.clip(0.81 + resid * 0.035 + dark * 0.05, 0.72, 0.92).astype(np.float32)
+    del resid, dark
+    occlusion = np.ones((size, size), np.float32)
+    # Specular coverage (F0 = 0.04 x value, LitSpecular): this stone is far darker than the castle wall, and at F0 0.04
+    # its rough sheen is as bright as the stone itself (a grey veil). Faces 0.45-0.6, joints 0.3; outside the islands 1.
+    reflectance = np.ones((size, size), np.float32)
+    full_h = np.zeros((size, size), np.float32)
+    full_mask = np.full((size, size), 0.5, np.float32)
     islands, stones_total = {}, 0
-    for key, (x0, y0, x1, y1, metres_per_uv) in DUNGEON_ISLANDS.items():
+    pbr_height = load(os.path.join(a.pbrify, name + '__height.png'), 'RGB')[..., 0].astype(np.float32)
+    for key, (x0, y0, x1, y1, metres_per_uv, joint_depth, tail, threshold, dome) in DUNGEON_ISLANDS.items():
+        threshold = a.threshold or threshold
+        x0, y0, x1, y1 = (int(round(v * scale)) for v in (x0, y0, x1, y1))
         isl = (slice(y0, y1), slice(x0, x1))
         mpp = metres_per_uv / size
         d = depth[isl]
         dn = np.clip(d / max(np.percentile(d, 99), 1e-3), 0, 1)
-        smooth = ndimage.gaussian_filter(dn, 1.5)
+        smooth = ndimage.gaussian_filter(dn, 1.5 * scale)
         if a.mask:
             mask = load(a.mask, 'L')[isl] > 0.75
+            labels, count = ndimage.label(mask)
         else:
-            mask = smooth < a.threshold
+            mask = smooth < threshold
             mask = ndimage.binary_opening(mask, disk(0.004 / mpp))
             mask = ndimage.binary_closing(mask, disk(0.0025 / mpp))
             labels, count = ndimage.label(mask)
@@ -433,26 +528,31 @@ def dungeon(a, rng):
             mask |= small[holes]
             # Faint joints merge neighbours: one core per stone from its deepest-free middle, every
             # stone pixel goes to its nearest core, a line between different stones becomes a joint.
-            core = ndimage.binary_erosion(smooth < a.threshold * 0.35, disk(0.012 / mpp)) & mask
+            core = ndimage.binary_erosion(smooth < threshold * 0.35, disk(0.012 / mpp)) & mask
             markers, _ = ndimage.label(core)
             nearest = ndimage.distance_transform_edt(markers == 0, return_distances=False, return_indices=True)
             grown = markers[nearest[0], nearest[1]]
             grown[~mask] = 0
+            del nearest
             cut = np.zeros_like(mask)
             for axis in (0, 1):
                 a_, b_ = np.take(grown, range(grown.shape[axis] - 1), axis), np.take(grown, range(1, grown.shape[axis]), axis)
                 diff = (a_ != b_) & (a_ > 0) & (b_ > 0)
                 pad = [(0, 0), (0, 0)]; pad[axis] = (0, 1)
                 cut |= np.pad(diff, pad)
-            cut &= smooth > a.threshold * 0.4               # only along a faint joint, not across the plain border
+            cut &= smooth > threshold * 0.4               # only along a faint joint, not across the plain border
             mask &= ~ndimage.binary_dilation(cut, disk(0.004 / mpp))
-        labels, count = ndimage.label(mask)
+            # Tails of the depth map hanging into a stone ("drops" on the frame sides) become stone.
+            tails = prune_tails(~mask, int(round(tail / mpp)))
+            mask |= tails
+            dangling = float(tails.mean())
+            labels, count = ndimage.label(mask)
         sizes = ndimage.sum(mask, labels, range(1, count + 1)) * mpp * mpp
         # The plain border of an island is one big "stone": it stays flat at the plane.
         plain = np.concatenate([[False], sizes > 0.35])
 
         # Faces at the original plane, rounded shoulders, recessed joints (as the castle wall).
-        shoulder = profile(ndimage.distance_transform_edt(mask) * mpp, a.bevel)
+        shoulder = profile(ndimage.distance_transform_edt(mask) * mpp, a.bevel).astype(np.float32)
         offsets = np.concatenate([[0], rng.uniform(-0.003, 0.001, count)])
         tilts = np.concatenate([[[0, 0]], rng.uniform(-0.012, 0.012, (count, 2))])
         offsets[plain] = 0
@@ -462,65 +562,80 @@ def dungeon(a, rng):
         cy = np.concatenate([[0], com[:, 0]])[labels]
         cx = np.concatenate([[0], com[:, 1]])[labels]
         tilt = (tilts[labels, 0] * (yy - cy) + tilts[labels, 1] * (xx - cx)) * mpp
-        face = offsets[labels] + tilt - smooth * 0.002                 # shallow pits where the depth map has them
-        joint = -a.joint_depth - (smooth - 0.5) * 0.003                # joints follow the original depth a little
+        pits = np.where(mask, smooth, 0)                                # shallow pits where the depth map has them
+        face = offsets[labels] + tilt - pits * dome
+        mortar = 0.006 if key.startswith('rubble') else 0.003            # rubble mortar is lumpy, cut joints are not
+        # Joints follow the original depth a little, plus the small lumps of the PBRify height (mortar grain).
+        grain = pbr_height[isl] - ndimage.gaussian_filter(pbr_height[isl], 0.01 / mpp)
+        grain = np.clip(grain / (grain.std() * 3 + 1e-6), -1, 1) * mortar * 0.5
+        joint = -joint_depth - (smooth - 0.5) * mortar + grain
         height = np.where(mask, joint + (face - joint) * shoulder, joint)
-        height = ndimage.gaussian_filter(height, 1.2)
-        height = np.clip(height, HEIGHT_RANGE[0], HEIGHT_RANGE[1])
+        height = ndimage.gaussian_filter(height, 1.2 * scale)
+        height = np.clip(height, DUNGEON_HEIGHT_RANGE[0], DUNGEON_HEIGHT_RANGE[1])
         # Stay at the plane along the island border: neighbouring islands share module edges.
         border = np.minimum.reduce([yy, xx, mask.shape[0] - 1 - yy, mask.shape[1] - 1 - xx]) * mpp
-        height *= np.clip(border / 0.01, 0, 1)
+        height = (height * np.clip(border / 0.01, 0, 1)).astype(np.float32)
+        del yy, xx, cy, cx, tilt
 
         gy, gx = np.gradient(height, mpp)                              # gy along rows (v down)
         radius = 0.006 / mpp
-        keep = np.where(mask, a.detail, a.detail * 0.6)
+        keep = np.where(mask, a.detail, a.detail * 0.8)
         sx[isl] = -gx + fine(sx[isl], radius) * keep                  # normal x = -dh/du
         sy[isl] = gy + fine(sy[isl], radius) * keep                   # normal y = -dh/dv, v up = -row
-        rv = rough[isl]
-        rv = (rv - rv.mean()) / (rv.std() + 1e-6)
-        rough[isl] = np.clip(0.84 + rv * 0.03, 0.76, 0.9) * shoulder + 0.94 * (1 - shoulder)
-        occlusion[isl] = 1 - 0.45 * np.clip(-height / a.joint_depth, 0, 1) ** 1.5
+        # Matte faces 0.77-0.92 (the approved castle wall: 0.76-0.9): variation not tied to brightness, dark spots and
+        # pits rougher; joints 0.95.
+        resid, dark = matte(pbr_rough[isl], lum[isl], 0.02 / mpp)
+        face_rough = np.clip(0.84 + resid * 0.025 + dark * 0.06 + np.clip(pits / threshold, 0, 1) * 0.03, 0.77, 0.92)
+        rough[isl] = face_rough * shoulder + 0.95 * (1 - shoulder)
+        reflectance[isl] = (0.6 - 0.15 * dark) * shoulder + 0.3 * (1 - shoulder)
+        occlusion[isl] = 1 - 0.45 * np.clip(-height / joint_depth, 0, 1) ** 1.5
         full_h[isl] = height
         full_mask[isl] = mask
-        islands[key] = {'uv_lo': [x0 / size, 1 - y1 / size], 'uv_hi': [x1 / size, 1 - y0 / size],
-                        'metres_per_uv': metres_per_uv, 'stones': int(count), 'stone_share': float(mask.mean())}
+        info = {'uv_lo': [x0 / size, 1 - y1 / size], 'uv_hi': [x1 / size, 1 - y0 / size], 'metres_per_uv': metres_per_uv,
+                'joint_depth': joint_depth, 'threshold': threshold, 'dome': dome, 'stones': int(count), 'stone_share': float(mask.mean()),
+                'face_roughness': [float(np.percentile(face_rough[mask], p)) for p in (5, 50, 95)]}
+        if not a.mask:
+            info.update({'tail_removed_up_to': tail, 'tails_share': dangling})
+        islands[key] = info
         stones_total += count
         previews_out = os.path.join(a.out, 'preview_' + key)
         os.makedirs(previews_out, exist_ok=True)
-        previews(previews_out, albedo[isl], mask, height, normal_from(sx[isl], sy[isl]), step=1)
+        previews(previews_out, albedo[isl], mask, height, normal_from(sx[isl], sy[isl]), step=2)
 
     normal = normal_from(sx, sy)
     maskmap = np.dstack([np.zeros_like(rough), occlusion, np.ones_like(rough), 1 - rough])
     save(a.out, 'stone_mask.png', full_mask, 'L')
-    save(a.out, 'height.png', encode_height(full_h), 'L')
+    save(a.out, 'height.png', (full_h - DUNGEON_HEIGHT_RANGE[0]) / (DUNGEON_HEIGHT_RANGE[1] - DUNGEON_HEIGHT_RANGE[0]), 'L')
     save(a.out, 'normal.png', normal * 0.5 + 0.5, 'RGB')
     save(a.out, 'mask.png', maskmap, 'RGBA')
-    previews(a.out, albedo, full_mask > 0.75, full_h, normal, step=2)
-    return {'islands': islands, 'stones': int(stones_total), 'threshold': a.threshold}
+    save(a.out, 'specular.png', np.dstack([reflectance] * 3), 'RGB')     # RGB: a one-channel PNG imports as R8 / Alpha8
+    previews(a.out, albedo, full_mask > 0.75, full_h, normal, step=4)
+    return {'height_encoding_metres': DUNGEON_HEIGHT_RANGE, 'size': size, 'islands': islands, 'stones': int(stones_total),
+            'pillar_sides_2048': DUNGEON_PILLAR_SIDES, 'pillar_rows_2048': DUNGEON_PILLAR_ROWS}
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('material', choices=sorted(MATERIALS))
     ap.add_argument('--source', default=os.path.join(ROOT, 'source'))
-    ap.add_argument('--pbrify', help='PBRify result folder (default: <material>/pbrify-x4-batch-v1)')
+    ap.add_argument('--pbrify', help='PBRify result folder (default: <material>/pbrify-x4-batch-v1, dungeon: pbrify-x2-batch-v1)')
     ap.add_argument('--out', help='output folder (default: <material>/manual-relief-v1)')
     ap.add_argument('--mask', help='edited stone_mask.png to use instead of the automatic one')
-    ap.add_argument('--joint-depth', type=float, help='joint depth behind the faces, m (wall 0.020, floor 0.014, boards 0.018)')
+    ap.add_argument('--joint-depth', type=float, help='joint depth behind the faces, m (wall 0.020, floor 0.014, boards 0.018; dungeon: per island)')
     ap.add_argument('--bevel', type=float, help='width of the rounded stone shoulder, m (wall 0.016, floor 0.018)')
     ap.add_argument('--detail', type=float, help='share of PBRify fine normal detail (stones 0.5, boards 0.6)')
-    ap.add_argument('--threshold', type=float, help='floor / dungeon: HPL depth below which a pixel is stone (floor 0.2, dungeon 0.3 of the island)')
+    ap.add_argument('--threshold', type=float, help='floor / dungeon: HPL depth below which a pixel is stone (floor 0.2; dungeon: per island, 0.3 / rubble 0.45 of the island)')
     ap.add_argument('--gap', type=float, default=0.006, help='boards: gap between planks, m')
     ap.add_argument('--chamfer', type=float, default=0.0025, help='boards: plank edge chamfer, m')
     ap.add_argument('--seed', type=int, default=7)
     a = ap.parse_args()
     defaults = {'wall': (0.020, 0.016, 0.5), 'floor': (0.014, 0.018, 0.5), 'boards': (0.018, 0.0, 0.6), 'dungeon': (0.020, 0.016, 0.5)}[a.material]
-    a.threshold = (0.3 if a.material == 'dungeon' else 0.2) if a.threshold is None else a.threshold
+    if a.threshold is None and a.material != 'dungeon': a.threshold = 0.2     # dungeon: per island
     a.joint_depth = defaults[0] if a.joint_depth is None else a.joint_depth
     a.bevel = defaults[1] if a.bevel is None else a.bevel
     a.detail = defaults[2] if a.detail is None else a.detail
     folder = os.path.join(ROOT, 'sourceRTXRemix', MATERIALS[a.material])
-    a.pbrify = a.pbrify or os.path.join(folder, 'pbrify-x4-batch-v1')
+    a.pbrify = a.pbrify or os.path.join(folder, 'pbrify-x2-batch-v1' if a.material == 'dungeon' else 'pbrify-x4-batch-v1')
     a.out = a.out or os.path.join(folder, 'manual-relief-v1')
     os.makedirs(a.out, exist_ok=True)
     info = {'material': MATERIALS[a.material] + '.mat', 'kind': a.material,

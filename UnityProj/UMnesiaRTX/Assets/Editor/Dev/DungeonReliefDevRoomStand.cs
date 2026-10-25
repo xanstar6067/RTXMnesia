@@ -14,17 +14,21 @@ using Object = UnityEngine.Object;
 
 namespace RTXMnesia.EditorDev
 {
-    /// <summary>dev_room samples of the dungeonbase atlas relief (tools/Build-ManualRelief.py dungeon): three real
+    /// <summary>dev_room samples of the dungeonbase atlas relief (tools/Build-ManualRelief.py dungeon): four real
     /// wall/default_short modules (2 × 4 m) against the front wall, left of the relief stand: 1 — classic, as in
-    /// the game; 2 — relief at the game's triangle budget; 3 — fine relief. Also removes the stand's first
-    /// samples (flat / old relief / solid blocks 1–3): their assets stay, the boards profile still reads them.</summary>
+    /// the game; 2 — enhanced textures without relief (the game's enhanced material, POM); 3 — relief at the game's
+    /// triangle budget; 4 — fine relief (1 cm). The relief samples use the material the game would make (a copy of the
+    /// enhanced one, POM off, manual normal and mask maps). Also removes the stand's first samples (flat / old relief /
+    /// solid blocks 1–3): their assets stay, the boards profile still reads them.</summary>
     public static class DungeonReliefDevRoomStand
     {
         public const string RootName = "Dungeon relief samples";
         const string Material = "static_objects/dungeonbase/dungeonbase";
         const string Module = AmnesiaPaths.ImportedAssetsRoot + "/Models/static_objects/dungeonbase/wall/default_short.prefab";
+        internal const string ModulePrefix = "dungeonbase default_short ";
+        internal static readonly string[] Files = { "classic", "enhanced", "game", "fine" };
         // The module's wall plane is its back: 5 cm off the room wall, behind it the recessed joints (to 3.2 cm).
-        const float FrontWall = .25f, FirstX = 9.6f, Step = 2.4f;
+        internal const float FrontWall = .25f, FirstX = 9.6f, Step = 2.4f;
         static string Renders => Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", "EnhancedRelief", "Dungeon", "DevRoom");
 
         [MenuItem("Tools/RTXMnesia/Dev Room/Add or update dungeon relief samples")]
@@ -40,7 +44,7 @@ namespace RTXMnesia.EditorDev
             RemoveFirstSamples(stand);
             Add(map.transform, stand);
             EditorSceneManager.SaveScene(scene);
-            Debug.Log("[dev_room dungeon relief] Installed: dungeonbase 1 classic / 2 game relief / 3 fine relief; stand samples 1–3 removed.");
+            Debug.Log("[dev_room dungeon relief] Installed: dungeonbase 1 classic / 2 enhanced / 3 game relief / 4 fine relief; stand samples 1–3 removed.");
         }
 
         public static void InstallAndRenderBatch()
@@ -84,30 +88,51 @@ namespace RTXMnesia.EditorDev
             var info = JsonUtility.FromJson<ManualWallReliefProbe.Info>(File.ReadAllText(Path.Combine(maps, "relief.json")));
             var normal = ManualReliefDevRoomStand.CopyTexture(maps, "dungeonbase", "normal.png", true);
             var mask = ManualReliefDevRoomStand.CopyTexture(maps, "dungeonbase", "mask.png", false);
+            // Specular coverage of the dark stone (F0 = 0.04 x map, LitSpecular), as the game's relief copy does.
+            var specular = File.Exists(Path.Combine(maps, "specular.png")) ? ManualReliefDevRoomStand.CopyTexture(maps, "dungeonbase", "specular.png", false) : null;
+            var enhancedMaterials = new Dictionary<Material, Material>();
             var reliefMaterials = new Dictionary<Material, Material>();
+            bool Atlas(Material m) => m != null && m.GetTexture("_BaseColorMap")?.name.StartsWith("dungeonbase__", StringComparison.Ordinal) == true;
+            // The game's enhanced material of a classic one: Resources/HplEnhancedMaterials/<same relative path>.
+            Material Enhanced(Material classic)
+            {
+                if (enhancedMaterials.TryGetValue(classic, out var found)) return found;
+                string path = AssetDatabase.GetAssetPath(classic);
+                const string classicRoot = AmnesiaPaths.ImportedAssetsRoot + "/Materials/";
+                if (!path.StartsWith(classicRoot, StringComparison.Ordinal)) throw new InvalidOperationException("Not a classic material: " + path);
+                string enhancedPath = AmnesiaPaths.ImportedAssetsRoot + "/Resources/HplEnhancedMaterials/" + path.Substring(classicRoot.Length);
+                return enhancedMaterials[classic] = AssetDatabase.LoadAssetAtPath<Material>(enhancedPath)
+                    ?? throw new InvalidOperationException("Import the enhanced dungeonbase set first: " + enhancedPath);
+            }
+            // As the game's relief copy (HplReliefSet): the enhanced material, POM off, the manual normal and mask maps.
             Material Relief(Material classic)
             {
                 if (reliefMaterials.TryGetValue(classic, out var found)) return found;
-                // Standard Lit with the classic albedo (the atlas has no PBRify set), the relief maps, no POM.
-                var material = new Material(Shader.Find("HDRP/Lit")) { name = classic.name + " manual relief" };
-                material.SetTexture("_BaseColorMap", classic.GetTexture("_BaseColorMap"));
-                material.SetColor("_BaseColor", classic.GetColor("_BaseColor"));
+                var material = new Material(Enhanced(classic)) { name = classic.name + " manual relief (POM off)" };
                 material.SetTexture("_NormalMap", normal); material.SetFloat("_NormalScale", 1);
                 material.SetTexture("_MaskMap", mask);
-                material.SetFloat("_MaterialID", 1); material.SetFloat("_DisplacementMode", 0);
+                material.SetFloat("_DisplacementMode", 0);
+                if (specular != null)
+                {
+                    material.SetFloat("_MaterialID", (float)MaterialId.LitSpecular);
+                    // Linear F0 0.04 (a Color property is read as sRGB), as HplReliefSet with Slot.specularF0.
+                    material.SetColor("_SpecularColor", new Color(.04f, .04f, .04f, 1).gamma);
+                    material.SetTexture("_SpecularColorMap", specular);
+                }
                 HDMaterial.ValidateMaterial(material);
                 return reliefMaterials[classic] = ManualReliefDevRoomStand.Save(material, ManualReliefDevRoomStand.Folder + "/" + classic.name.Replace(' ', '_') + "_manual.mat");
             }
 
             using var height = new ManualReliefDevRoomStand.HeightMap(Path.Combine(maps, "height.png"), info);
-            var samples = new[] { (0, "1 — КЛАССИКА\nкак в игре (POM)", "classic"), (120000, "2 — РЕЛЬЕФ ПО КАРТЕ ВЫСОТЫ HPL\nбюджет треугольников игры", "game"),
-                (600000, "3 — ТОТ ЖЕ РЕЛЬЕФ\nсетка 1 см", "fine") };
+            var samples = new[] { (-1, "1 — КЛАССИКА\nкак в игре (POM)"), (0, "2 — УЛУЧШЕННЫЕ ТЕКСТУРЫ\nбез рельефа (POM)"),
+                (120000, "3 — РЕЛЬЕФ ПО КАРТЕ ГЛУБИНЫ HPL\nбюджет треугольников игры"), (600000, "4 — ТОТ ЖЕ РЕЛЬЕФ\nсетка 1 см") };
             for (int i = 0; i < samples.Length; i++)
             {
-                var (budget, title, file) = samples[i];
+                var (budget, title) = samples[i];
+                string file = Files[i];
                 var module = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
                 PrefabUtility.UnpackPrefabInstance(module, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                module.name = "dungeonbase default_short " + file;
+                module.name = ModulePrefix + file;
                 module.transform.SetParent(root, false);
                 foreach (var collider in module.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(collider);
                 // Face the room (+Z): the module's area-weighted normal, turned about Y.
@@ -121,18 +146,18 @@ namespace RTXMnesia.EditorDev
                 module.transform.rotation = Quaternion.FromToRotation(facing.normalized, Vector3.forward) * module.transform.rotation;
                 var bounds = Bounds(module);
                 module.transform.position += new Vector3(FirstX + i * Step - bounds.center.x, -bounds.min.y, FrontWall - bounds.min.z);
-                if (budget > 0)
+                if (budget >= 0)
                     foreach (var filter in module.GetComponentsInChildren<MeshFilter>(true))
                     {
                         var renderer = filter.GetComponent<MeshRenderer>();
                         var classic = renderer.sharedMaterials;
-                        bool any = classic.Any(m => m != null && m.GetTexture("_BaseColorMap")?.name.StartsWith("dungeonbase__", StringComparison.Ordinal) == true);
-                        if (!any) continue;
+                        if (!classic.Any(Atlas)) continue;
+                        if (budget == 0) { renderer.sharedMaterials = classic.Select(m => Atlas(m) ? Enhanced(m) : m).ToArray(); continue; }
                         var surfaces = classic.Select(m => new HplReliefMeshBuilder.Surface { geometryNormals = false,
-                            heightMetres = m != null && m.GetTexture("_BaseColorMap")?.name.StartsWith("dungeonbase__", StringComparison.Ordinal) == true ? height.Metres : _ => 0 }).ToArray();
+                            heightMetres = Atlas(m) ? height.Metres : _ => 0 }).ToArray();
                         var mesh = Build(filter.sharedMesh, surfaces, filter.transform.lossyScale, .01f, budget);
                         filter.sharedMesh = ManualReliefDevRoomStand.SaveMesh(mesh, "dungeon_" + file + "_" + filter.name);
-                        renderer.sharedMaterials = classic.Select(m => m != null && m.GetTexture("_BaseColorMap")?.name.StartsWith("dungeonbase__", StringComparison.Ordinal) == true ? Relief(m) : m).ToArray();
+                        renderer.sharedMaterials = classic.Select(m => Atlas(m) ? Relief(m) : m).ToArray();
                         Debug.Log($"[dev_room dungeon relief] {module.name}/{filter.name}: {filter.sharedMesh.vertexCount} vertices, {filter.sharedMesh.triangles.Length / 3} triangles");
                     }
                 foreach (var renderer in module.GetComponentsInChildren<MeshRenderer>(true)) renderer.shadowCastingMode = ShadowCastingMode.TwoSided;
@@ -142,8 +167,8 @@ namespace RTXMnesia.EditorDev
             }
             var lamp = new GameObject("Dungeon relief raking light").AddComponent<Light>(); lamp.transform.SetParent(root, false);
             lamp.type = LightType.Spot; lamp.range = 14; lamp.spotAngle = 120;
-            lamp.transform.position = new Vector3(FirstX + Step * 3.6f, 3.4f, 2.4f);
-            lamp.transform.LookAt(new Vector3(FirstX + Step, 2, FrontWall));
+            lamp.transform.position = new Vector3(FirstX + Step * 4.6f, 3.4f, 2.4f);
+            lamp.transform.LookAt(new Vector3(FirstX + Step * 1.5f, 2, FrontWall));
             lamp.shadows = LightShadows.Soft; lamp.gameObject.AddComponent<HDAdditionalLightData>(); lamp.lightUnit = LightUnit.Candela; lamp.intensity = 100;
             lights.Add(lamp);
 
@@ -171,6 +196,10 @@ namespace RTXMnesia.EditorDev
             return bounds;
         }
 
+        /// <summary>Snapshots in Logs/EnhancedRelief/Dungeon/DevRoom: raster; with DXR also RT (reflections and RTGI
+        /// "Medium", as the game's settings) and path tracing (128 samples, no denoiser) of the overview and the low views.
+        /// The room's ambient is a box light (custom pass), which the path tracer does not see: path tracing gets a fill
+        /// point light in front of the stand instead.</summary>
         public static void RenderBatch()
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null) throw new InvalidOperationException("Rendering needs a GPU: run without -nographics.");
@@ -178,25 +207,62 @@ namespace RTXMnesia.EditorDev
             var scene = EditorSceneManager.OpenScene(DevRoomBuilder.ScenePath, OpenSceneMode.Single);
             var camera = new GameObject("Dungeon relief render").AddComponent<Camera>(); camera.tag = "MainCamera";
             camera.nearClipPlane = .02f; camera.farClipPlane = 80; camera.fieldOfView = 60;
-            camera.gameObject.AddComponent<HDAdditionalCameraData>().antialiasing = HDAdditionalCameraData.AntialiasingMode.None;
+            var data = camera.gameObject.AddComponent<HDAdditionalCameraData>();
+            data.antialiasing = HDAdditionalCameraData.AntialiasingMode.None;
+            var volumeObject = new GameObject("Dungeon relief render volume");
+            var fill = new GameObject("Dungeon relief path tracing fill").AddComponent<Light>();
+            fill.type = LightType.Point; fill.range = 15; fill.shadows = LightShadows.Soft;
+            fill.gameObject.AddComponent<HDAdditionalLightData>(); fill.lightUnit = LightUnit.Candela; fill.intensity = 300;
+            fill.transform.position = new Vector3(FirstX + Step * 1.5f, 3, 4);
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             try
             {
-                void Shot(string name, Vector3 position, Vector3 target)
+                var volume = volumeObject.AddComponent<Volume>(); volume.isGlobal = true; volume.priority = 3000; volume.sharedProfile = profile;
+                var reflection = profile.Add<ScreenSpaceReflection>(); reflection.SetAllOverridesTo(true);
+                reflection.enabled.Override(true); reflection.tracing.Override(RayCastingMode.RayTracing); reflection.mode.Override(RayTracingMode.Performance);
+                reflection.quality.Override(ScalableSettingLevelParameter.LevelCount);
+                reflection.minSmoothness = .45f; reflection.smoothnessFadeStart = .55f; reflection.rayLength = 25; reflection.fullResolution = true; reflection.denoise = true;
+                var gi = profile.Add<GlobalIllumination>(); gi.SetAllOverridesTo(true);
+                gi.enable.Override(true); gi.tracing.Override(RayCastingMode.RayTracing); gi.mode.Override(RayTracingMode.Performance);
+                gi.quality.Override(ScalableSettingLevelParameter.LevelCount);
+                gi.rayLength = 50; gi.denoise = true; gi.secondDenoiserPass = true; gi.denoiserRadius = .66f;
+                var pathTracing = profile.Add<UnityEngine.Rendering.HighDefinition.PathTracing>();
+                pathTracing.enable.Override(true); pathTracing.maximumSamples.Override(128); pathTracing.maximumDepth.Override(4); pathTracing.maximumIntensity.Override(10f);
+                data.customRenderingSettings = true;
+                void Frame(FrameSettingsField field, bool on)
+                {
+                    data.renderingPathCustomFrameSettingsOverrideMask.mask[(uint)field] = true;
+                    data.renderingPathCustomFrameSettings.SetEnabled(field, on);
+                }
+                void Shot(string name, Vector3 position, Vector3 target, int frames = 30)
                 {
                     camera.transform.position = position; camera.transform.LookAt(target);
-                    ImportMenu.RenderToFile(camera, Path.Combine(Renders, name + ".png"));
+                    ImportMenu.RenderToFile(camera, Path.Combine(Renders, name + ".png"), null, frames);
                 }
-                Shot("overview", new Vector3(FirstX + Step, 2.2f, 6.5f), new Vector3(FirstX + Step, 2, FrontWall));
-                for (int i = 0; i < 3; i++)
+                foreach (string mode in SystemInfo.supportsRayTracing ? new[] { "raster", "rt", "pt" } : new[] { "raster" })
                 {
-                    float x = FirstX + i * Step;
-                    Shot($"close_{i + 1}_low", new Vector3(x + .9f, .9f, FrontWall + 1.1f), new Vector3(x - .2f, .8f, FrontWall));
-                    Shot($"close_{i + 1}_high", new Vector3(x + .9f, 2.9f, FrontWall + 1.1f), new Vector3(x - .2f, 3f, FrontWall));
+                    Frame(FrameSettingsField.RayTracing, mode != "raster");
+                    Frame(FrameSettingsField.SSR, mode == "rt");
+                    Frame(FrameSettingsField.SSGI, mode == "rt");
+                    reflection.active = gi.active = mode == "rt";
+                    pathTracing.active = fill.enabled = mode == "pt";
+                    int frames = mode == "pt" ? 132 : 30;
+                    string suffix = mode == "raster" ? "" : "_" + mode;
+                    Shot("overview" + suffix, new Vector3(FirstX + Step * 1.5f, 2.2f, 7.5f), new Vector3(FirstX + Step * 1.5f, 2, FrontWall), frames);
+                    for (int i = 0; i < Files.Length; i++)
+                    {
+                        float x = FirstX + i * Step;
+                        Shot("close_" + (i + 1) + "_low" + suffix, new Vector3(x + .9f, .9f, FrontWall + 1.1f), new Vector3(x - .2f, .8f, FrontWall), frames);
+                        if (mode == "raster") Shot("close_" + (i + 1) + "_high", new Vector3(x + .9f, 2.9f, FrontWall + 1.1f), new Vector3(x - .2f, 3f, FrontWall));
+                    }
                 }
             }
             finally
             {
                 Object.DestroyImmediate(camera.gameObject);
+                Object.DestroyImmediate(volumeObject);
+                Object.DestroyImmediate(fill.gameObject);
+                Object.DestroyImmediate(profile);
                 EditorSceneManager.OpenScene(scene.path, OpenSceneMode.Single);
             }
         }

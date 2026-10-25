@@ -190,6 +190,7 @@ namespace RTXMnesia.Importer
                                 slots[i].normalResource = profile.approved.normal;
                                 slots[i].maskResource = profile.approved.mask;
                                 slots[i].specularResource = profile.approved.specular;
+                                slots[i].specularF0 = profile.approved.specularF0;
                             }
                             signature.Append("|" + profile.hash + ":" + F(profile.amplitude));
                             slots[i].displaced = true;

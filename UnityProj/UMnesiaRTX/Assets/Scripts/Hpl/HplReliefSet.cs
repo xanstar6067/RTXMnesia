@@ -16,6 +16,9 @@ namespace RTXMnesia.Hpl
             public Vector2 scale, offset;
             public bool displaced;
             public string normalResource, maskResource, specularResource;
+            /// <summary>Linear F0 of the specular coverage map; 0: the earlier profiles' value (Color 0.04, which Unity
+            /// reads as sRGB: linear ~0.003).</summary>
+            public float specularF0;
         }
         [Serializable] public sealed class Entry
         {
@@ -145,7 +148,7 @@ namespace RTXMnesia.Hpl
                 var source = SurfaceMaterial(materials[i]);
                 if (source == null || source.shader.name != "HDRP/Lit") continue;
                 var slot = state.entry.slots[i];
-                var materialKey = (source, slot.normalResource + "|" + slot.maskResource + "|" + slot.specularResource);
+                var materialKey = (source, slot.normalResource + "|" + slot.maskResource + "|" + slot.specularResource + "|" + slot.specularF0);
                 if (!s_copies.TryGetValue(materialKey, out var copy))
                 {
                     copy = new Material(source) { name = source.name + " (mesh relief)", hideFlags = HideFlags.HideAndDontSave };
@@ -163,7 +166,9 @@ namespace RTXMnesia.Hpl
                     if (!string.IsNullOrEmpty(slot.specularResource))
                     {
                         // Standard Lit ignores specular coverage. Preserve its dielectric F0 when enabling it.
-                        if (copy.GetFloat("_MaterialID") == (float)MaterialId.LitStandard)
+                        if (slot.specularF0 > 0)
+                            copy.SetColor("_SpecularColor", new Color(slot.specularF0, slot.specularF0, slot.specularF0, 1).gamma);
+                        else if (copy.GetFloat("_MaterialID") == (float)MaterialId.LitStandard)
                             copy.SetColor("_SpecularColor", new Color(.04f, .04f, .04f, 1));
                         copy.SetFloat("_MaterialID", (float)MaterialId.LitSpecular);
                     }

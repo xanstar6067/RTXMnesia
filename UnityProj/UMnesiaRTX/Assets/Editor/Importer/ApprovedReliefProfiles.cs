@@ -20,6 +20,8 @@ namespace RTXMnesia.Importer
         {
             public Func<Vector2, float> height;
             public string normal, mask, specular, signature;
+            /// <summary>Linear F0 of the specular map (HplReliefSet.Slot.specularF0); 0: the earlier profiles' value.</summary>
+            public float specularF0;
             public bool boards;
             /// <summary>The normal map carries the whole shape: vertex normals stay those of the plane.</summary>
             public bool mapNormals;
@@ -104,14 +106,17 @@ namespace RTXMnesia.Importer
         }
 
         // Wall and stone floor: shape from tools/Build-ManualRelief.py. Faces stay at the original plane,
-        // joints are recessed, so flat map decals remain visible. Standard F0 (no specular map).
+        // joints are recessed, so flat map decals remain visible. Standard F0, unless the maps have specular.png
+        // (dungeonbase: the dark stone's specular coverage, F0 = 0.04 x map with LitSpecular, HplReliefSet).
         static Data PrepareManual(string relative)
         {
             string stem = Path.GetFileNameWithoutExtension(relative), folder = ManualFolder(relative);
             var info = JsonUtility.FromJson<ManualInfo>(File.ReadAllText(Path.Combine(folder, "relief.json")));
             float lo = info.height_encoding_metres[0], hi = info.height_encoding_metres[1];
             string signature = "manual-v1";
-            foreach (string file in new[] { "relief.json", "height.png", "normal.png", "mask.png" })
+            bool hasSpecular = File.Exists(Path.Combine(folder, "specular.png"));
+            foreach (string file in hasSpecular ? new[] { "relief.json", "height.png", "normal.png", "mask.png", "specular.png" }
+                         : new[] { "relief.json", "height.png", "normal.png", "mask.png" })
                 signature += "|" + EnhancedReliefConverter.Hash(File.ReadAllBytes(Path.Combine(folder, file)));
             var heightPixels = Read(Path.Combine(folder, "height.png"), null, out int hw, out int hh);
             var metres = new float[heightPixels.Length];
@@ -122,7 +127,14 @@ namespace RTXMnesia.Importer
             if (mw != w || mh != h) throw new InvalidOperationException("Manual normal/mask dimensions differ: " + relative);
             // A specular coverage map of an earlier approved profile is no longer referenced.
             string oldSpecular = Root + "/" + stem + "_specular.png";
-            if (AssetDatabase.LoadAssetAtPath<Texture2D>(oldSpecular) != null) AssetDatabase.DeleteAsset(oldSpecular);
+            if (!hasSpecular && AssetDatabase.LoadAssetAtPath<Texture2D>(oldSpecular) != null) AssetDatabase.DeleteAsset(oldSpecular);
+            string specular = null;
+            if (hasSpecular)
+            {
+                var pixels = Read(Path.Combine(folder, "specular.png"), null, out int sw, out int sh);
+                if (sw != w || sh != h) throw new InvalidOperationException("Manual normal/specular dimensions differ: " + relative);
+                specular = Save(stem, "specular", pixels, w, h, false);
+            }
             return new Data
             {
                 signature = signature, mapNormals = true,
@@ -136,6 +148,7 @@ namespace RTXMnesia.Importer
                 },
                 normal = Save(stem, "normal", normal, w, h, true),
                 mask = Save(stem, "mask", mask, w, h, false),
+                specular = specular, specularF0 = specular != null ? .04f : 0,
             };
         }
 

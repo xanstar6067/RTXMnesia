@@ -8,7 +8,7 @@ namespace RTXMnesia.Importer
     /// <summary>Conforming subdivision and physical height displacement, performed only by the importer.</summary>
     public static class HplReliefMeshBuilder
     {
-        public const int Version = 2;
+        public const int Version = 3;
         public sealed class HeightField
         {
             public const int Size = 512;
@@ -92,6 +92,10 @@ namespace RTXMnesia.Importer
             for (int i = 0; i < channels.Length; i++) { channels[i] = new(); original.GetUVs(i, channels[i]); }
             var colors = original.colors;
             var vertices = new List<Vertex>();
+            // Displacement of each vertex, applied after all submeshes: coincident vertices (a UV or normal seam, a
+            // material border) then move together, so the relief has no cracks along seams.
+            var offsets = new List<Vector3>();
+            var displaced = new List<bool>();
             var indices = new List<int>[surfaces.Length];
             int totalTriangles = 0;
             for (int sub = 0; sub < surfaces.Length; sub++)
@@ -112,6 +116,7 @@ namespace RTXMnesia.Importer
                 var triangles = new List<int>();
                 foreach (int index in original.GetTriangles(sub)) triangles.Add(Local(index));
                 var surface = surfaces[sub];
+                var localOffsets = new Vector3[0];
                 if (surface != null)
                 {
                     if (surface.boards)
@@ -157,6 +162,7 @@ namespace RTXMnesia.Importer
                         if (next.Count / 3 + totalTriangles > triangleBudget) throw new InvalidOperationException("Relief triangle budget: " + original.name);
                         triangles = next;
                     }
+                    localOffsets = new Vector3[local.Count];
                     for (int i = 0; i < local.Count; i++)
                     {
                         var vertex = local[i];
@@ -173,30 +179,53 @@ namespace RTXMnesia.Importer
                         float height = (surface.heightMetres != null ? surface.heightMetres(textureUv) :
                             (surface.height.Sample(textureUv) - surface.reference) * surface.amplitude) * fade;
                         var direction = new Vector3(vertex.n.x / scale.x, vertex.n.y / scale.y, vertex.n.z / scale.z).normalized;
-                        vertex.p += new Vector3(direction.x / scale.x, direction.y / scale.y, direction.z / scale.z) * height;
                         // Keep the original tangent frame. The enhanced normal map already contains the large
                         // height slopes; recalculating this frame would apply those slopes a second time.
-                        local[i] = vertex;
-                    }
-                    if (surface.geometryNormals)
-                    {
-                        var accumulated = new Vector3[local.Count];
-                        for (int t = 0; t < triangles.Count; t += 3)
-                        {
-                            int a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
-                            var normal = Vector3.Cross(local[b].p - local[a].p, local[c].p - local[a].p);
-                            accumulated[a] += normal; accumulated[b] += normal; accumulated[c] += normal;
-                        }
-                        for (int i = 0; i < local.Count; i++)
-                        { var vertex = local[i]; if (accumulated[i].sqrMagnitude > 1e-16f) vertex.n = accumulated[i].normalized; local[i] = vertex; }
+                        localOffsets[i] = new Vector3(direction.x / scale.x, direction.y / scale.y, direction.z / scale.z) * height;
                     }
                     }
                 }
                 int offset = vertices.Count;
                 vertices.AddRange(local);
+                for (int i = 0; i < local.Count; i++)
+                {
+                    bool moved = i < localOffsets.Length;
+                    offsets.Add(moved ? localOffsets[i] : Vector3.zero);
+                    displaced.Add(moved);
+                }
                 indices[sub] = triangles;
                 for (int i = 0; i < triangles.Count; i++) triangles[i] += offset;
                 totalTriangles += triangles.Count / 3;
+            }
+            // Coincident displaced vertices share the mean displacement (seams stay closed).
+            var groups = new Dictionary<Vector3Int, (Vector3 sum, int count)>();
+            Vector3Int Key(Vector3 p) => Vector3Int.RoundToInt(p * 100000);
+            for (int i = 0; i < vertices.Count; i++)
+                if (displaced[i])
+                {
+                    var key = Key(vertices[i].p);
+                    groups.TryGetValue(key, out var group);
+                    groups[key] = (group.sum + offsets[i], group.count + 1);
+                }
+            for (int i = 0; i < vertices.Count; i++)
+                if (displaced[i])
+                {
+                    var group = groups[Key(vertices[i].p)];
+                    var vertex = vertices[i]; vertex.p += group.sum / group.count; vertices[i] = vertex;
+                }
+            for (int sub = 0; sub < surfaces.Length; sub++)
+            {
+                if (surfaces[sub] == null || surfaces[sub].boards || !surfaces[sub].geometryNormals) continue;
+                var triangles = indices[sub];
+                var accumulated = new Dictionary<int, Vector3>();
+                for (int t = 0; t < triangles.Count; t += 3)
+                {
+                    int a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
+                    var normal = Vector3.Cross(vertices[b].p - vertices[a].p, vertices[c].p - vertices[a].p);
+                    foreach (int v in new[] { a, b, c }) { accumulated.TryGetValue(v, out var sum); accumulated[v] = sum + normal; }
+                }
+                foreach (var (v, sum) in accumulated)
+                    if (sum.sqrMagnitude > 1e-16f) { var vertex = vertices[v]; vertex.n = sum.normalized; vertices[v] = vertex; }
             }
             var mesh = new Mesh { name = original.name + " relief", indexFormat = vertices.Count > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16 };
             var p = new List<Vector3>(); var n = new List<Vector3>(); var tan = new List<Vector4>(); var col = new List<Color>();

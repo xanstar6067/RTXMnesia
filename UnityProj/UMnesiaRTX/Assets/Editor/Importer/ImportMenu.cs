@@ -257,14 +257,14 @@ namespace RTXMnesia.Importer
             RenderToFile(camera, Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", $"{kind}Preview.png"));
         }
 
-        internal static void RenderToFile(Camera camera, string file, Action<Texture2D> compose = null)
+        internal static void RenderToFile(Camera camera, string file, Action<Texture2D> compose = null, int frames = 30)
         {
             UploadSceneTextures();
             var rt = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             camera.targetTexture = rt;
             // Several frames so HDRP history (exposure, TAA) settles; each one is finished before the next (no swap
             // chain submits the work in batch mode).
-            for (int i = 0; i < 30; i++)
+            for (int i = 0; i < frames; i++)
             {
                 camera.Render();
                 UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0, 0, 1, 0, 1, 0, 1).WaitForCompletion();
