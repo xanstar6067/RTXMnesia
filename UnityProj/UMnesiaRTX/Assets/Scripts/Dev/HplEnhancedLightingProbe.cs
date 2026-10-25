@@ -210,7 +210,12 @@ namespace RTXMnesia.Dev
                     var rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
                     camera.targetTexture = rt;
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-                    int frames = s.rtPathTracing > 0 ? 160 : 40;
+                    // "series": 120 frames from a still camera; each frame's mean brightness and which lights are ray
+                    // traced are reported when they change (light that comes and goes with the RT shadow selection).
+                    bool series = mode.Contains("series");
+                    int frames = s.rtPathTracing > 0 ? 160 : series ? 120 : 40;
+                    string lastTraced = null;
+                    var means = new List<float>();
                     // "moved": halfway, the shadow casting entity model nearest to the target moves 0.4 m sideways
                     // (the cached shadow maps around it must follow; compare with "moved_nocache").
                     Transform movedObject = null;
@@ -239,7 +244,35 @@ namespace RTXMnesia.Dev
                         yield return null;
                         redraws += HplShadowCache.Redraws;
                         camera.Render();
-                        AsyncGPUReadback.Request(rt, 0, 0, 1, 0, 1, 0, 1).WaitForCompletion();
+                        if (!series) { AsyncGPUReadback.Request(rt, 0, 0, 1, 0, 1, 0, 1).WaitForCompletion(); continue; }
+                        var frame = AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32);
+                        frame.WaitForCompletion();
+                        double frameSum = 0;
+                        var data = frame.GetData<Color32>();
+                        for (int p = 0; p < data.Length; p++) frameSum += (data[p].r + data[p].g + data[p].b) / 3.0;
+                        means.Add((float)(frameSum / data.Length));
+                        var traced = new List<string>();
+                        foreach (var l in FindObjectsByType<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(FindObjectsSortMode.None))
+                            if (l.useRayTracedShadows && l.isActiveAndEnabled) traced.Add(l.name);
+                        traced.Sort(StringComparer.Ordinal);
+                        string tracedNow = string.Join(",", traced);
+                        if (tracedNow != lastTraced || means.Count > 1 && Mathf.Abs(means[^1] - means[^2]) > 0.5f)
+                        {
+                            report.AppendLine($"    series frame {i}: mean {means[^1]:0.00}, traced [{tracedNow}]");
+                            // "series-name": the state of the lights whose name contains it.
+                            int at = mode.IndexOf("series-", StringComparison.Ordinal);
+                            if (at >= 0)
+                                foreach (var l in AmnesiaLight.All)
+                                    if (l != null && l.name.Contains(mode.Substring(at + 7)) && l.TryGetComponent<Light>(out var u))
+                                        report.AppendLine($"        {l.name}: importance {HplLightAnalysis.Importance(l):0.0000}, active {l.isActiveAndEnabled}, " +
+                                                          $"enabled {u.enabled}, intensity {u.intensity:0.###}, shadows {u.shadows}, castShadows {l.castShadows}");
+                        }
+                        lastTraced = tracedNow;
+                    }
+                    if (series && means.Count > 0)
+                    {
+                        means.Sort();
+                        report.AppendLine($"    series mean min {means[0]:0.00}, median {means[means.Count / 2]:0.00}, max {means[^1]:0.00}");
                     }
                     double ms = watch.Elapsed.TotalMilliseconds / frames;
                     if (movedObject != null) movedObject.position = movedFrom;

@@ -112,6 +112,14 @@ namespace RTXMnesia.Hpl
         const int MaxSlots = 16;
         /// <summary>A traced light keeps its slot against one up to this many times more important.</summary>
         const float TracedKeep = 1.25f;
+        /// <summary>
+        /// A traced light keeps its slot this long (s) after its importance last reached HplLightAnalysis.MinImportance:
+        /// a room seen far away through a narrow door is hit only by some of the 16 offsets of the analysis grid (0.2 s
+        /// apart), and its lights went in and out of the slots every few frames (the oven room of 00_rainy_hall: its
+        /// light came and went). The grid's whole cycle.
+        /// </summary>
+        const float TracedHold = 3.2f;
+        static readonly Dictionary<AmnesiaLight, float> s_seen = new();
         static readonly Dictionary<Light, float> s_radius = new();
         static int s_frame = -1;
 
@@ -247,8 +255,11 @@ namespace RTXMnesia.Hpl
         public static void Exclude(Renderer renderer)
         {
             if (renderer == null || renderer.rayTracingMode == UnityEngine.Experimental.Rendering.RayTracingMode.Off) return;
-            var size = renderer.bounds.size;
-            bool flat = Mathf.Min(size.x, Mathf.Min(size.y, size.z)) < FlatTransparentThickness;
+            // In the mesh's own axes: a trail tilted by 2° and scaled ×2 is 7 cm thick in world axes. A statically
+            // batched renderer no longer has its own mesh: the scene processor (RayTracingExclusionProcessor) decided before.
+            var size = Vector3.Scale(renderer.localBounds.size, renderer.transform.lossyScale);
+            bool flat = !renderer.isPartOfStaticBatch &&
+                        Mathf.Min(Mathf.Abs(size.x), Mathf.Min(Mathf.Abs(size.y), Mathf.Abs(size.z))) < FlatTransparentThickness;
             foreach (var material in renderer.sharedMaterials)
                 if (material != null && material.shader != null &&
                     (material.shader.name.StartsWith("RTXMnesia/", StringComparison.Ordinal) || material.FindPass("DBufferMesh") >= 0 ||
@@ -308,6 +319,7 @@ namespace RTXMnesia.Hpl
             s_frame = Time.frameCount;
             // Lights of an unloaded map.
             s_traced.RemoveWhere(l => l == null);
+            if (s_seen.Count > 256) s_seen.Clear();
             if (s_radius.Count > s_traced.Count)
             {
                 var gone = new List<Light>();
@@ -338,8 +350,10 @@ namespace RTXMnesia.Hpl
                 // Map shadows: the graphics tab's shadow setting (Off: none); the added ones only follow its Off.
                 if (light.castShadows ? unityLight.shadows == LightShadows.None : HplGraphics.Shadows == HplGraphics.ShadowsOff) continue;
                 float importance = HplLightAnalysis.Importance(light);
-                if (importance < HplLightAnalysis.MinImportance) continue;
-                if (s_traced.Contains(light)) importance *= TracedKeep;
+                bool traced = s_traced.Contains(light);
+                if (importance >= HplLightAnalysis.MinImportance) s_seen[light] = Time.unscaledTime;
+                else if (!traced || importance <= 0f || !s_seen.TryGetValue(light, out float seen) || Time.unscaledTime - seen > TracedHold) continue;
+                if (traced) importance *= TracedKeep;
                 s_candidates.Add((light, importance));
             }
             s_candidates.Sort((a, b) => b.score.CompareTo(a.score));
