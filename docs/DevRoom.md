@@ -53,8 +53,10 @@
   `tools/Build-ManualRelief.py dungeon`, см. «Атлас dungeonbase» в `EnhancedRelief.md`): четыре настоящих
   модуля `wall/default_short` (2 × 4 м) у передней стены левее стенда (x 9.6 / 12.0 / 14.4 / 16.8):
   **1 — классика** (материал игры, POM), **2 — улучшенные текстуры без рельефа** (улучшенный материал игры, POM),
-  **3 — рельеф при бюджете игры** (120 000 треугольников, 92 тыс.), **4 — сетка 1 см** (506 тыс.). Материал 3 / 4 — как
-  сделает игра: копия улучшенного, без POM, ручные нормаль и маска, `specular.png` (LitSpecular, линейный F0 0.04 × карта).
+  **3 — рельеф как в игре** (адаптивная сетка с допуском 2 мм, бюджет 120 000; 43 тыс. треугольников; выбран
+  пользователем 2026-10-25), **4 — равномерная сетка 1 см** (506 тыс., эталон). Материал 3 / 4 — как
+  сделает игра: копия улучшенного, без POM, ручные нормаль и маска, `specular.png` (LitSpecular, линейный F0 0.04 × карта),
+  рельеф через рёбра (`over_creases`).
   Свой скользящий свет в F4. Меню **Tools > RTXMnesia > Dev Room > Add or update dungeon relief samples**, batch
   `RTXMnesia.EditorDev.DungeonReliefDevRoomStand.InstallBatch` (`InstallAndRenderBatch` — снимки в
   `Logs/EnhancedRelief/Dungeon/DevRoom`, без `-nographics`: растр, с DXR ещё RT — отражения и RTGI «Среднее» — и path

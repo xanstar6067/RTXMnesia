@@ -39,6 +39,8 @@ namespace RTXMnesia.Importer
             ["static_objects/cellarbase/floor/cellarbase_wood_floor.mat"] = 0.008f,
             ["static_objects/mansionbase/floor/mansionbase_floor_boards.mat"] = 0.006f,
             ["static_objects/dungeonbase/floor/cobbled_stone.mat"] = 0.035f,
+            // Approved 2026-10-25 (tools/Build-ManualRelief.py dungeon; the amplitude is unused, the maps carry metres).
+            ["static_objects/dungeonbase/dungeonbase.mat"] = 0.036f,
         };
         sealed class Profile
         {
@@ -186,6 +188,8 @@ namespace RTXMnesia.Importer
                             {
                                 surfaces[i].heightMetres = profile.approved.height;
                                 surfaces[i].boards = profile.approved.boards;
+                                surfaces[i].fadeAtCreases = !profile.approved.overCreases;
+                                surfaces[i].tolerance = profile.approved.tolerance;
                                 surfaces[i].geometryNormals = !profile.approved.boards && !profile.approved.mapNormals;
                                 slots[i].normalResource = profile.approved.normal;
                                 slots[i].maskResource = profile.approved.mask;

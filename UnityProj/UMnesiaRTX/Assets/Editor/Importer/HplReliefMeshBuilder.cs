@@ -46,6 +46,13 @@ namespace RTXMnesia.Importer
             public HeightField height;
             public Func<Vector2, float> heightMetres;
             public bool geometryNormals, boards;
+            /// <summary>The relief fades out within 2.5 cm of geometric creases and UV seams too, not only of open edges.
+            /// Off: it continues over corners (coincident vertices move together), joints notch the corner edges.</summary>
+            public bool fadeAtCreases = true;
+            /// <summary>Adaptive (metres, 0: uniform): an edge longer than the spacing is split only where the height
+            /// along it leaves the straight line by more than this, or where it is longer than maxEdge. Triangles go
+            /// to joints and shoulders; flat faces stay coarse.</summary>
+            public float tolerance, maxEdge = 0.15f;
             public Vector2 uvScale = Vector2.one, uvOffset;
             public float amplitude = 0.04f, reference = 0.7f;
         }
@@ -126,13 +133,52 @@ namespace RTXMnesia.Importer
                     else
                     {
                     var borders = Borders(local, triangles, scale);
+                    float Height(Vector2 uv)
+                    {
+                        uv = Vector2.Scale(uv, surface.uvScale) + surface.uvOffset;
+                        return surface.heightMetres != null ? surface.heightMetres(uv) : (surface.height.Sample(uv) - surface.reference) * surface.amplitude;
+                    }
+                    // Adaptive: decided per geometric edge, so both sides of a UV seam split alike (no T-junctions);
+                    // an edge kept whole stays the same edge, its decision is reused in later passes.
+                    (Vector3Int, Vector3Int) Geometric(int a, int b)
+                    {
+                        Vector3Int x = Vector3Int.RoundToInt(local[a].p * 100000), y = Vector3Int.RoundToInt(local[b].p * 100000);
+                        return x.x < y.x || x.x == y.x && (x.y < y.y || x.y == y.y && x.z <= y.z) ? (x, y) : (y, x);
+                    }
+                    var split = new Dictionary<(Vector3Int, Vector3Int), bool>();
                     for (int iteration = 0; iteration < 20; iteration++)
                     {
                         var midpoints = new Dictionary<Edge, int>();
+                        if (surface.tolerance > 0)
+                        {
+                            void Decide(int a, int b)
+                            {
+                                float length = Vector3.Scale(local[a].p - local[b].p, scale).magnitude;
+                                if (length <= spacing) return;
+                                var key = Geometric(a, b);
+                                if (split.ContainsKey(key)) return;
+                                bool want = length > surface.maxEdge;
+                                if (!want)
+                                {
+                                    Vector2 ua = local[a].uv0, ub = local[b].uv0;
+                                    float ha = Height(ua), hb = Height(ub);
+                                    int steps = Mathf.Clamp(Mathf.CeilToInt(length / 0.003f), 2, 32);
+                                    for (int k = 1; k < steps && !want; k++)
+                                    {
+                                        float t = k / (float)steps;
+                                        want = Mathf.Abs(Height(Vector2.Lerp(ua, ub, t)) - Mathf.Lerp(ha, hb, t)) > surface.tolerance;
+                                    }
+                                }
+                                split[key] = want;
+                            }
+                            for (int t = 0; t < triangles.Count; t += 3)
+                            { Decide(triangles[t], triangles[t + 1]); Decide(triangles[t + 1], triangles[t + 2]); Decide(triangles[t + 2], triangles[t]); }
+                        }
                         void Mark(int a, int b)
                         {
                             var edge = new Edge(a, b);
                             if (midpoints.ContainsKey(edge) || Vector3.Scale(local[a].p - local[b].p, scale).sqrMagnitude <= spacing * spacing) return;
+                            if (surface.tolerance > 0 && (!split.TryGetValue(Geometric(a, b), out bool want) || !want)) return;
                             midpoints[edge] = local.Count;
                             local.Add(Vertex.Mid(local[a], local[b]));
                         }
@@ -170,6 +216,7 @@ namespace RTXMnesia.Importer
                         float distance = float.PositiveInfinity;
                         foreach (var border in borders)
                         {
+                            if (!surface.fadeAtCreases && border.count == 2) continue;
                             Vector3 edge = border.b - border.a;
                             float along = edge.sqrMagnitude < 1e-12f ? 0 : Mathf.Clamp01(Vector3.Dot(point - border.a, edge) / edge.sqrMagnitude);
                             distance = Mathf.Min(distance, (point - border.a - edge * along).magnitude);

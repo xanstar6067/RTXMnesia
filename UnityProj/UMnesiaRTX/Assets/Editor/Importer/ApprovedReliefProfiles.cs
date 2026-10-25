@@ -25,9 +25,13 @@ namespace RTXMnesia.Importer
             public bool boards;
             /// <summary>The normal map carries the whole shape: vertex normals stay those of the plane.</summary>
             public bool mapNormals;
+            /// <summary>The relief continues over corners and UV seams (relief.json over_creases, dungeonbase).</summary>
+            public bool overCreases;
+            /// <summary>Adaptive mesh tolerance, metres (HplReliefMeshBuilder.Surface.tolerance); 0: uniform spacing.</summary>
+            public float tolerance;
         }
 
-        [Serializable] class ManualInfo { public float[] height_encoding_metres; }
+        [Serializable] class ManualInfo { public float[] height_encoding_metres; public bool over_creases; public float mesh_tolerance_metres; }
 
         /// <summary>Maps of tools/Build-ManualRelief.py (shape from the original HPL normal / depth maps).</summary>
         public static string ManualFolder(string relative) => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(AmnesiaPaths.SourceRoot)),
@@ -137,7 +141,7 @@ namespace RTXMnesia.Importer
             }
             return new Data
             {
-                signature = signature, mapNormals = true,
+                signature = signature, mapNormals = true, overCreases = info.over_creases, tolerance = info.mesh_tolerance_metres,
                 // LoadImage rows start at the bottom, as UV v: sample directly, repeating like the material.
                 height = uv =>
                 {

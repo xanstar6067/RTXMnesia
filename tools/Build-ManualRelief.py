@@ -377,13 +377,13 @@ def boards(a, rng):
 # Wood (the beam strip under the rubble, the planks right of it) and the carved panels keep the PBRify shape.
 DUNGEON_ISLANDS = {
     'rubble': (0, 0, 608, 608, 11.7, 0.026, 0.06, 0.45, 0.010),       # wall/default field
-    'ashlar': (612, 0, 1024, 728, 8.8, 0.020, 0.08, 0.3, 0.002),      # frame pillars (unwrapped: side, front, side)
-    'band': (0, 728, 1024, 1024, 8.6, 0.020, 0.08, 0.3, 0.002),       # wide courses: wall tops; pillars continue here
-    'brick': (1024, 612, 1460, 1030, 7.9, 0.020, 0.08, 0.3, 0.002),
-    'lower': (0, 1028, 645, 1525, 11.7, 0.024, 0.08, 0.3, 0.002),     # corridor walls
+    'ashlar': (612, 0, 1024, 728, 8.8, 0.020, 0.08, 0.3, 0.006),      # frame pillars (unwrapped: side, front, side)
+    'band': (0, 728, 1024, 1024, 8.6, 0.020, 0.08, 0.3, 0.006),       # wide courses: wall tops; pillars continue here
+    'brick': (1024, 612, 1460, 1030, 7.9, 0.020, 0.08, 0.3, 0.006),
+    'lower': (0, 1028, 645, 1525, 11.7, 0.024, 0.08, 0.3, 0.006),     # corridor walls
     'rubble2': (1024, 0, 1360, 608, 11.3, 0.026, 0.06, 0.45, 0.010),  # default_short, corridor
 }
-DUNGEON_HEIGHT_RANGE = (-0.036, 0.004)
+DUNGEON_HEIGHT_RANGE = (-0.036, 0.008)
 # Columns of the 2048 atlas on the side faces of the frame pillars (wall/default, default_short: x 740-880 is the
 # pillar front), rows 0-1024 (ashlar and band). The depth map has blobs and broken joint ends there ("drops" on the
 # frame sides): its joints become straight courses across the strip, from the row profile.
@@ -493,7 +493,7 @@ def dungeon(a, rng):
     del resid, dark
     occlusion = np.ones((size, size), np.float32)
     # Specular coverage (F0 = 0.04 x value, LitSpecular): this stone is far darker than the castle wall, and at F0 0.04
-    # its rough sheen is as bright as the stone itself (a grey veil). Faces 0.45-0.6, joints 0.3; outside the islands 1.
+    # its rough sheen is as bright as the stone itself (a grey veil). Faces 0.22-0.3, joints 0.15; outside the islands 1.
     reflectance = np.ones((size, size), np.float32)
     full_h = np.zeros((size, size), np.float32)
     full_mask = np.full((size, size), 0.5, np.float32)
@@ -552,18 +552,30 @@ def dungeon(a, rng):
         plain = np.concatenate([[False], sizes > 0.35])
 
         # Faces at the original plane, rounded shoulders, recessed joints (as the castle wall).
-        shoulder = profile(ndimage.distance_transform_edt(mask) * mpp, a.bevel).astype(np.float32)
-        offsets = np.concatenate([[0], rng.uniform(-0.003, 0.001, count)])
-        tilts = np.concatenate([[[0, 0]], rng.uniform(-0.012, 0.012, (count, 2))])
+        inside = (ndimage.distance_transform_edt(mask) * mpp).astype(np.float32)
+        rubble = key.startswith('rubble')
+        # Wider shoulders than the castle wall (16 mm): with 20-26 mm joints a narrow steep bevel facing an overhead
+        # light drew a thin crisp light line along every joint.
+        shoulder = profile(inside, a.bevel * (1.5 if rubble else 1.25)).astype(np.float32)
+        # Cut stones: hewn faces, not tiles. A crown toward the middle (pillowed ashlar), more height and tilt between
+        # stones, and chiselled grain from the PBRify height (band 2-12 mm: a broad smooth undulation read as polished);
+        # everything about the original plane, so flat map decals stay visible.
+        offsets = np.concatenate([[0], rng.uniform(-0.003, 0.001, count) if rubble else rng.uniform(-0.004, 0.002, count)])
+        tilts = np.concatenate([[[0, 0]], rng.uniform(-0.012, 0.012, (count, 2)) if rubble else rng.uniform(-0.02, 0.02, (count, 2))])
         offsets[plain] = 0
         tilts[plain] = 0
+        stone_crown = np.where(plain, 0.0, 0.002 if rubble else 0.003)
+        crown = stone_crown[labels] * np.clip(inside / 0.05, 0, 1) ** 0.7 - (0 if rubble else 0.002) * ~plain[labels]
+        hewn = (ndimage.gaussian_filter(pbr_height[isl], 0.002 / mpp) - ndimage.gaussian_filter(pbr_height[isl], 0.012 / mpp))
+        hewn = np.clip(hewn / (hewn.std() * 2.5 + 1e-6), -1, 1) * 0.0015
         yy, xx = np.indices(mask.shape)
         com = np.array(ndimage.center_of_mass(mask, labels, range(1, count + 1))) if count else np.zeros((0, 2))
         cy = np.concatenate([[0], com[:, 0]])[labels]
         cx = np.concatenate([[0], com[:, 1]])[labels]
         tilt = (tilts[labels, 0] * (yy - cy) + tilts[labels, 1] * (xx - cx)) * mpp
         pits = np.where(mask, smooth, 0)                                # shallow pits where the depth map has them
-        face = offsets[labels] + tilt - pits * dome
+        face = offsets[labels] + tilt + crown + hewn - pits * dome
+        del inside, crown, hewn
         mortar = 0.006 if key.startswith('rubble') else 0.003            # rubble mortar is lumpy, cut joints are not
         # Joints follow the original depth a little, plus the small lumps of the PBRify height (mortar grain).
         grain = pbr_height[isl] - ndimage.gaussian_filter(pbr_height[isl], 0.01 / mpp)
@@ -578,16 +590,23 @@ def dungeon(a, rng):
         del yy, xx, cy, cx, tilt
 
         gy, gx = np.gradient(height, mpp)                              # gy along rows (v down)
+        # Softly limited slope (~42 deg): the shoulders reach 80+ deg, and under a light from above or a lantern their
+        # upper walls lit up as bright grey rims (the mortar colour of the albedo) along every joint. The mesh keeps the
+        # full depth; only the shading normal is gentler.
+        limit = 1 / np.sqrt(1 + (np.hypot(gx, gy) / 0.9) ** 2)
+        gx, gy = gx * limit, gy * limit
         radius = 0.006 / mpp
         keep = np.where(mask, a.detail, a.detail * 0.8)
         sx[isl] = -gx + fine(sx[isl], radius) * keep                  # normal x = -dh/du
         sy[isl] = gy + fine(sy[isl], radius) * keep                   # normal y = -dh/dv, v up = -row
         # Matte faces 0.77-0.92 (the approved castle wall: 0.76-0.9): variation not tied to brightness, dark spots and
-        # pits rougher; joints 0.95.
+        # pits rougher; joints 0.95. The shoulders turn matte early (weight shoulder^3): their steep normals caught
+        # the light as thin glassy lines along the joints.
         resid, dark = matte(pbr_rough[isl], lum[isl], 0.02 / mpp)
         face_rough = np.clip(0.84 + resid * 0.025 + dark * 0.06 + np.clip(pits / threshold, 0, 1) * 0.03, 0.77, 0.92)
-        rough[isl] = face_rough * shoulder + 0.95 * (1 - shoulder)
-        reflectance[isl] = (0.6 - 0.15 * dark) * shoulder + 0.3 * (1 - shoulder)
+        face_weight = shoulder ** 3
+        rough[isl] = face_rough * face_weight + 0.95 * (1 - face_weight)
+        reflectance[isl] = (0.3 - 0.08 * dark) * face_weight + 0.15 * (1 - face_weight)
         occlusion[isl] = 1 - 0.45 * np.clip(-height / joint_depth, 0, 1) ** 1.5
         full_h[isl] = height
         full_mask[isl] = mask
@@ -603,6 +622,14 @@ def dungeon(a, rng):
         previews(previews_out, albedo[isl], mask, height, normal_from(sx[isl], sy[isl]), step=2)
 
     normal = normal_from(sx, sy)
+    # Normal variance into roughness (Toksvig-like), on the islands: a normal that turns within a few texels sparkled as
+    # thin bright lines under a close light (HDRP's geometric specular AA sees only the flat vertex normals).
+    mean = np.dstack([ndimage.gaussian_filter(normal[..., i], 1.5 * scale) for i in range(3)])
+    spread = 1 - np.linalg.norm(mean, axis=2)
+    del mean
+    stone = full_mask != 0.5
+    rough[stone] = np.minimum(np.sqrt(rough[stone] ** 2 + 3 * spread[stone]), 1)
+    del spread
     maskmap = np.dstack([np.zeros_like(rough), occlusion, np.ones_like(rough), 1 - rough])
     save(a.out, 'stone_mask.png', full_mask, 'L')
     save(a.out, 'height.png', (full_h - DUNGEON_HEIGHT_RANGE[0]) / (DUNGEON_HEIGHT_RANGE[1] - DUNGEON_HEIGHT_RANGE[0]), 'L')
@@ -610,7 +637,12 @@ def dungeon(a, rng):
     save(a.out, 'mask.png', maskmap, 'RGBA')
     save(a.out, 'specular.png', np.dstack([reflectance] * 3), 'RGB')     # RGB: a one-channel PNG imports as R8 / Alpha8
     previews(a.out, albedo, full_mask > 0.75, full_h, normal, step=4)
+    # over_creases: the mesh relief continues over corners and UV seams (HplReliefMeshBuilder.Surface.fadeAtCreases off).
     return {'height_encoding_metres': DUNGEON_HEIGHT_RANGE, 'size': size, 'islands': islands, 'stones': int(stones_total),
+            'over_creases': True,
+            # Game mesh: adaptive subdivision, an edge splits where the height leaves the straight line by > 2 mm
+            # (HplReliefMeshBuilder.Surface.tolerance): 1 cm in joints, coarse faces, within the 120k budget.
+            'mesh_tolerance_metres': 0.002,
             'pillar_sides_2048': DUNGEON_PILLAR_SIDES, 'pillar_rows_2048': DUNGEON_PILLAR_ROWS}
 
 

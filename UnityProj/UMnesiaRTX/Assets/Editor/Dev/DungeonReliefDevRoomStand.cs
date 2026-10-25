@@ -153,7 +153,9 @@ namespace RTXMnesia.EditorDev
                         var classic = renderer.sharedMaterials;
                         if (!classic.Any(Atlas)) continue;
                         if (budget == 0) { renderer.sharedMaterials = classic.Select(m => Atlas(m) ? Enhanced(m) : m).ToArray(); continue; }
-                        var surfaces = classic.Select(m => new HplReliefMeshBuilder.Surface { geometryNormals = false,
+                        var surfaces = classic.Select(m => new HplReliefMeshBuilder.Surface { geometryNormals = false, fadeAtCreases = !info.over_creases,
+                            // 3 — the game's adaptive mesh; 4 — the uniform 1 cm reference.
+                            tolerance = i == 2 ? info.mesh_tolerance_metres : 0,
                             heightMetres = Atlas(m) ? height.Metres : _ => 0 }).ToArray();
                         var mesh = Build(filter.sharedMesh, surfaces, filter.transform.lossyScale, .01f, budget);
                         filter.sharedMesh = ManualReliefDevRoomStand.SaveMesh(mesh, "dungeon_" + file + "_" + filter.name);

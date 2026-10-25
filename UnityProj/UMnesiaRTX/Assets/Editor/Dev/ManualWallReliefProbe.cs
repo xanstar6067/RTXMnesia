@@ -28,6 +28,8 @@ namespace RTXMnesia.EditorDev
         {
             public float[] height_encoding_metres, rows_from_top, ends;
             public float gap, chamfer, joint_depth, board_variation, tile_metres;
+            public bool over_creases;
+            public float mesh_tolerance_metres;
         }
 
         public static void RunBatch()
