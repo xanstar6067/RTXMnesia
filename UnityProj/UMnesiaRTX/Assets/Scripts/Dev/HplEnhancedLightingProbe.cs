@@ -80,6 +80,16 @@ namespace RTXMnesia.Dev
                 if (map.GetEntityByName(lamp.Trim()) is Props.PropLamp p) p.SetLit(true, false);
                 else Debug.LogWarning("[EnhancedLighting] no lamp " + lamp);
             }
+            if (views == "scan")
+            {
+                var scan = Scan(map, user, report);
+                while (scan.MoveNext()) yield return scan.Current;
+                HplGraphics.Apply(user);
+                if (AudioListener.volume != 0f || HplUserSettings.ReadSaved().masterVolume != savedVolume)
+                    throw new InvalidOperationException("Silent preview changed saved volume or enabled audio output");
+                File.WriteAllText(Path.Combine(folder, mapName + "_scan.txt"), report.ToString());
+                yield break;
+            }
             // "nostress": capture ordinary setting changes without the synchronous verification cycles first.
             // Useful when checking whether a render artifact comes from the verification stress or normal switching.
             if (!defaultModes.Contains("nostress"))
@@ -4279,10 +4289,126 @@ namespace RTXMnesia.Dev
                 lights++;
                 wanted += l.type == LightType.Point ? 6 : 1;
             }
+            return $"shadow budget: {lights} shadowed lights reach the view, {wanted} maps wanted; HDRP reserved {ShadowManagerField("m_ShadowRequestCount")} of {ShadowManagerField("m_MaxShadowRequests")}";
+        }
+
+        static object ShadowManagerField(string name)
+        {
             var manager = Type.GetType("UnityEngine.Rendering.HighDefinition.HDShadowManager, Unity.RenderPipelines.HighDefinition.Runtime")
                 ?.GetProperty("instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?.GetValue(null);
-            object Field(string name) => manager?.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(manager);
-            return $"shadow budget: {lights} shadowed lights reach the view, {wanted} maps wanted; HDRP reserved {Field("m_ShadowRequestCount")} of {Field("m_MaxShadowRequests")}";
+            return manager?.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(manager);
+        }
+
+        /// <summary>
+        /// "scan" in place of the views: where the enhanced lighting (ray traced) could strobe on this map. Below every
+        /// lamp, looking four ways, the shadow maps the view would want are counted (as ShadowBudget, without rendering);
+        /// the densest places are then rendered for a few seconds from a still camera: what HDRP reserved against its
+        /// limit, how often the set of ray traced lights changed and how far the mean brightness jumped between frames.
+        /// </summary>
+        IEnumerator Scan(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            var player = map.player;
+            var s = user.Copy();
+            s.lightingSet = 1;
+            s.lighting = 1;
+            s.dlssMode = 0;
+            s.antialiasing = (int)HplAntialiasing.Taa;
+            s.rtPathTracing = 0;
+            s.rtGi = 2;
+            HplGraphics.Apply(s);
+            HplEnhancedRelief.SeparateSharedWalls();
+            map.effects.Fade.FadeIn(0f);
+            player.active = true;
+            yield return new WaitForSecondsRealtime(0.5f);
+            var camera = map.PlayerCamera;
+            var projection = Matrix4x4.Perspective(camera.fieldOfView, 16f / 9f, 0.05f, 1000f);
+            int limit = ((UnityEngine.Rendering.HighDefinition.HDRenderPipelineAsset)GraphicsSettings.currentRenderPipeline)
+                .currentPlatformRenderPipelineSettings.hdShadowInitParams.maxShadowRequests;
+            var shadowed = new List<Light>();
+            foreach (var l in FindObjectsByType<Light>(FindObjectsInactive.Exclude))
+                if (l.enabled && l.shadows != LightShadows.None && l.type != LightType.Directional) shadowed.Add(l);
+
+            // The densest view in each 2 m cell of the map.
+            var cells = new Dictionary<Vector3Int, (Vector3 feet, float yaw, int wanted, int lights, string lamp)>();
+            foreach (var light in AmnesiaLight.All)
+            {
+                if (light == null || light.handHeld || light.box || !light.TryGetComponent<Light>(out var own) || !own.enabled) continue;
+                if (!Physics.Raycast(light.transform.position, Vector3.down, out var hit, 6f, ~0, QueryTriggerInteraction.Ignore)) continue;
+                Vector3 eye = hit.point + Vector3.up * 1.6f;
+                int reach = 0;
+                foreach (var l in AmnesiaLight.All)
+                    if (l != null && !l.box && l.TryGetComponent<Light>(out var u) && u.enabled && Vector3.Distance(l.transform.position, eye) < u.range) reach++;
+                for (int k = 0; k < 4; k++)
+                {
+                    var view = Matrix4x4.Scale(new Vector3(1, 1, -1)) * Matrix4x4.TRS(eye, Quaternion.Euler(0, k * 90f, 0), Vector3.one).inverse;
+                    var planes = GeometryUtility.CalculateFrustumPlanes(projection * view);
+                    int wanted = 0;
+                    foreach (var l in shadowed)
+                        if (GeometryUtility.TestPlanesAABB(planes, new Bounds(l.transform.position, Vector3.one * (2 * l.range))))
+                            wanted += l.type == LightType.Point ? 6 : 1;
+                    var cell = Vector3Int.FloorToInt(hit.point / 2f);
+                    if (!cells.TryGetValue(cell, out var best) || wanted > best.wanted)
+                        cells[cell] = (hit.point, k * 90f * Mathf.Deg2Rad, wanted, reach, light.name);
+                }
+            }
+            var places = new List<(Vector3 feet, float yaw, int wanted, int lights, string lamp)>(cells.Values);
+            places.Sort((a, b) => b.wanted.CompareTo(a.wanted));
+            int over = places.FindAll(p => p.wanted > limit).Count, maxReach = 0;
+            foreach (var p in places) maxReach = Mathf.Max(maxReach, p.lights);
+            string summary = $"scan: {shadowed.Count} shadowed lights, {places.Count} places; most maps wanted {(places.Count > 0 ? places[0].wanted : 0)} " +
+                             $"of {limit} ({over} places over), most lights reaching one place {maxReach}";
+            report.AppendLine(summary);
+            Debug.Log("[EnhancedLighting] " + summary);
+
+            // The five densest places at least 6 m apart, rendered.
+            var chosen = new List<(Vector3 feet, float yaw, int wanted, int lights, string lamp)>();
+            foreach (var p in places)
+                if (chosen.Count < 5 && chosen.TrueForAll(c => Vector3.Distance(c.feet, p.feet) > 6f)) chosen.Add(p);
+            var rt = new RenderTexture(480, 270, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            camera.targetTexture = rt;
+            foreach (var p in chosen)
+            {
+                player.PlaceAt(p.feet, p.yaw);
+                yield return new WaitForSecondsRealtime(0.3f);
+                player.AddLook(Mathf.DeltaAngle(player.Yaw * Mathf.Rad2Deg, p.yaw * Mathf.Rad2Deg) * Mathf.Deg2Rad, -player.Pitch);
+                // A second to settle (shadow cache, light analysis), then four seconds watched.
+                float start = Time.unscaledTime;
+                int frames = 0, changes = 0, reserved = 0;
+                float lastMean = -1f, jump = 0f;
+                string lastTraced = null;
+                while (Time.unscaledTime - start < 5f)
+                {
+                    yield return null;
+                    camera.Render();
+                    var frame = AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32);
+                    frame.WaitForCompletion();
+                    if (Time.unscaledTime - start < 1f) continue;
+                    frames++;
+                    double sum = 0;
+                    var data = frame.GetData<Color32>();
+                    for (int i = 0; i < data.Length; i++) sum += (data[i].r + data[i].g + data[i].b) / 3.0;
+                    float mean = (float)(sum / data.Length);
+                    if (lastMean >= 0f) jump = Mathf.Max(jump, Mathf.Abs(mean - lastMean));
+                    lastMean = mean;
+                    reserved = Mathf.Max(reserved, ShadowManagerField("m_ShadowRequestCount") is int n ? n : 0);
+                    var traced = new List<string>();
+                    foreach (var l in FindObjectsByType<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(FindObjectsSortMode.None))
+                        if (l.useRayTracedShadows && l.isActiveAndEnabled) traced.Add(l.name);
+                    traced.Sort(StringComparer.Ordinal);
+                    string tracedNow = string.Join(",", traced);
+                    if (lastTraced != null && tracedNow != lastTraced) changes++;
+                    lastTraced = tracedNow;
+                }
+                bool suspect = reserved >= limit || changes > 2 || jump > 1.5f;
+                string line = $"{(suspect ? "SUSPECT " : "")}place below {p.lamp} hpl={HplSpace.Position(p.feet)} yaw {p.yaw * Mathf.Rad2Deg:0}: " +
+                              $"{p.wanted} maps wanted, {p.lights} lights reach; {frames} frames, HDRP reserved up to {reserved} of {limit}, " +
+                              $"traced set changed {changes} times, mean jump up to {jump:0.00}, mean {lastMean:0.0}";
+                report.AppendLine("    " + line);
+                Debug.Log("[EnhancedLighting] " + line);
+            }
+            camera.targetTexture = null;
+            rt.Release();
+            Destroy(rt);
         }
     }
 }
