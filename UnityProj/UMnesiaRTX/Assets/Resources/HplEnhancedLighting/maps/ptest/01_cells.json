@@ -1,0 +1,954 @@
+{
+  "lights": [
+    {
+      "name": "SpotLight_1",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_2",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_1",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_2",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_3",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_3",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_4",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_4",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_3",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_4",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_5",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_6",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_7",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_8",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_9",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_10",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_5",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_5",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_6",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_7",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_7",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_8",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_9",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_9",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_10",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_11",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_11",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_12",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_13",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_13",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_14",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_15",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_15",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_16",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_18",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_20",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "BoxLight_1",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_2",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_3",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_4",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_11",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_12",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_13",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_14",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_24",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_24",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_15",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_16",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_25",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_25",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_17",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_26",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_26",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_28",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_28",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_29",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_29",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_18",
+      "specular": "off",
+      "note": "Preserve authored cool grating shaft of the lower cage room, including original position, shadows, cone and legacy gameplay frustum. Diffuse aperture light has no specular glare."
+    },
+    {
+      "name": "PointLight_30",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small upper window / shaft niche glow. The new aperture source supplies direct shadowed light; preserve a little authored niche ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_31",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_31",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_33",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of the two dense no_light candle groups in the torture room. Only one candle on each side has owned light; removing this shared source would lose most authored candle illumination."
+    },
+    {
+      "name": "BoxLight_5",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_6",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "PointLight_34",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_34",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_19",
+      "intensity": "0",
+      "note": "Detached sky cone below the window or roof shaft is replaced by a shadowed area source at the measured aperture. Keep original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_36",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_36",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_37",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_37",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_39",
+      "note": "Retain authored candle-cluster / enclosed navigation / ritual accent. In particular the three no_light candles near point 41 have no owned source; point 58 is the flickering red prisoner mechanism switched off by the story."
+    },
+    {
+      "name": "PointLight_40",
+      "position": "82.46665 0.744814 1.7193",
+      "intensity": "4",
+      "range": "12",
+      "shadows": "on",
+      "sourceRadius": "0.15",
+      "note": "Actual stove fire: fire_place_1 has a smoke/fire particle but no owned light. Put its existing point at particle centre plus .15 flame lift, using the common stove source radius; preserve the original colour and legacy gameplay position. This is direct fire, not a GI fill."
+    },
+    {
+      "name": "PointLight_42",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_42",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_43",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_43",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_44",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_44",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_45",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_45",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_47",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_47",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_20",
+      "intensity": "0",
+      "note": "Detached warm lantern / fireplace cone is replaced by the actual entity flame. Keep the original shadow flag, colour, radius and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_41",
+      "note": "Retain authored candle-cluster / enclosed navigation / ritual accent. In particular the three no_light candles near point 41 have no owned source; point 58 is the flickering red prisoner mechanism switched off by the story."
+    },
+    {
+      "name": "BoxLight_7",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_48",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_48",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_49",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_49",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_50",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_50",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_51",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_51",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_52",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_52",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "BoxLight_8",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_9",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_10",
+      "note": "Retain authored cool enclosed-room / upper crawlspace ambient. The sky shafts do not replace ambient throughout these large closed regions; path tracing has no box custom pass."
+    },
+    {
+      "name": "PointLight_53",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_53",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_54",
+      "note": "Retain authored candle-cluster / enclosed navigation / ritual accent. In particular the three no_light candles near point 41 have no owned source; point 58 is the flickering red prisoner mechanism switched off by the story."
+    },
+    {
+      "name": "PointLight_55",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_55",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_56",
+      "note": "Retain authored candle-cluster / enclosed navigation / ritual accent. In particular the three no_light candles near point 41 have no owned source; point 58 is the flickering red prisoner mechanism switched off by the story."
+    },
+    {
+      "name": "PointLight_57",
+      "note": "Retain authored candle-cluster / enclosed navigation / ritual accent. In particular the three no_light candles near point 41 have no owned source; point 58 is the flickering red prisoner mechanism switched off by the story."
+    },
+    {
+      "name": "PointLight_58",
+      "note": "Retain authored candle-cluster / enclosed navigation / ritual accent. In particular the three no_light candles near point 41 have no owned source; point 58 is the flickering red prisoner mechanism switched off by the story."
+    },
+    {
+      "name": "PointLight_59",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_59",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / floor / lantern bounce is replaced by real entity flames and aperture light with GI. Keep weaker navigation fill without RTGI or SSGI; original colours, lamp connections and legacy HPL2 light remain."
+    }
+  ],
+  "add": [
+    {
+      "name": "Sky_ceiling_concave_window_1",
+      "type": "rect",
+      "position": "9.75000 6.81215 2.28945",
+      "target": "9.75000 4.12868 2.31066",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_3",
+      "type": "rect",
+      "position": "17.53945 6.81214 10.25000",
+      "target": "17.56065 4.12867 10.25000",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_4",
+      "type": "rect",
+      "position": "11.50000 6.81215 14.21055",
+      "target": "11.49999 4.12867 14.18935",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_5",
+      "type": "rect",
+      "position": "9.46055 6.81214 19.25000",
+      "target": "9.43935 4.12867 19.25000",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_6",
+      "type": "rect",
+      "position": "22.50000 6.81215 18.21055",
+      "target": "22.50001 4.12867 18.18935",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_7",
+      "type": "rect",
+      "position": "25.46055 6.81215 11.00000",
+      "target": "25.43933 4.12868 11.00000",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_8",
+      "type": "rect",
+      "position": "30.75000 6.81215 6.21055",
+      "target": "30.75001 4.12867 6.18935",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_9",
+      "type": "rect",
+      "position": "29.53945 6.81215 23.75000",
+      "target": "29.56066 4.12868 23.75000",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_ceiling_concave_window_11",
+      "type": "rect",
+      "position": "104.21055 6.81215 18.00000",
+      "target": "104.18934 4.12868 17.99999",
+      "size": "1.25 1.25",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just inside the measured lower mouth of the concave-window shaft, local (0,1.51,.45), below the grille at y1.02..2.205 / z-.238...973. Full authored XYZ rotation and .75 scale place it. The upper cap is four metres deeper; use the outgoing light of the inner aperture, casting room shadows without the old detached cone."
+    },
+    {
+      "name": "Sky_cell_shaft_37",
+      "type": "rect",
+      "position": "37 13.42 30.25",
+      "target": "37 1 30.25",
+      "size": "1.2 0.8",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "20",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just below the authored outside-fog cap at y13.5. Original round tube / grating (x37) or round ceiling shaft (x45) casts the shadows; no change to the classic source or gameplay light."
+    },
+    {
+      "name": "Sky_cell_shaft_45",
+      "type": "rect",
+      "position": "45 13.42 30.25",
+      "target": "45 1 30.25",
+      "size": "1.4 1.4",
+      "color": "0.55 0.65 0.78",
+      "intensity": "120",
+      "range": "20",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky just below the authored outside-fog cap at y13.5. Original round tube / grating (x37) or round ceiling shaft (x45) casts the shadows; no change to the classic source or gameplay light."
+    }
+  ]
+}

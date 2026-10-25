@@ -120,6 +120,7 @@ namespace RTXMnesia.Dev
                 VerifyChancelReduxLighting(map, user, report);
                 VerifyInnerSanctumLighting(map, user, report);
                 VerifyOrbChamberLighting(map, user, report);
+                VerifyJustineCellsLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -176,6 +177,7 @@ namespace RTXMnesia.Dev
                     ApplyChancelReduxLightingPreview(map, mode);
                     ApplyInnerSanctumLightingPreview(map, mode);
                     ApplyOrbChamberLightingPreview(map, mode);
+                    ApplyJustineCellsLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3683,6 +3685,104 @@ namespace RTXMnesia.Dev
                 Fade("PointLight_2", new Color(1f, 0f, .2f, 1f), 6f, 3f);
                 if (fades != 35) throw new InvalidOperationException("Orb chamber: incomplete fade coverage");
                 string line = "Orb chamber state PASS: 32 lamp states (24 with owned light, eight no_light torches), eight map sources moved to real flames with authored extinction, four live flickers and 35 continuing countdown/rod/portal/torch/red-slime fades across RTGI, RT no-GI, SSGI, raster no-GI and classic. All 25 later duplicate sources retain placement and intensity; five boxes and original RGBA/radii/visibility/legacy HPL2 light survive. Four window lights do not accumulate or enter legacy light. Light-only checks do not run endings or credits.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (l, data, _) in saved) l.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly HashSet<string> CellsNiches = new() { "PointLight_1", "PointLight_2", "PointLight_6", "PointLight_8", "PointLight_10", "PointLight_12", "PointLight_14", "PointLight_16", "PointLight_18", "PointLight_20", "PointLight_30" };
+        static readonly HashSet<string> CellsAccents = new() { "PointLight_39", "PointLight_41", "PointLight_54", "PointLight_56", "PointLight_57", "PointLight_58" };
+
+        static void ApplyJustineCellsLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/ptest/01_cells.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    lamp.SetLit(!mode.Contains("cellsalloff") && (mode.Contains("cellsalllit") || lamp.Component.GetVariable("Lit") != "false"), false);
+                    lamp.UpdateLogic(0f);
+                    foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.SetFlickerActive(false);
+                }
+            var signal = map.GetLight("PointLight_58"); signal.StopFading(); signal.SetFlickerActive(false);
+            signal.SetColor(signal.diffuseColor); signal.SetRadius(signal.radius); signal.SetVisible(!mode.Contains("cellslever"));
+        }
+
+        static void VerifyJustineCellsLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/ptest/01_cells.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data, bool active)>();
+            foreach (var l in map.GetComponentsInChildren<AmnesiaLight>(true)) if (!l.handHeld && !l.enhancedAdded) saved.Add((l, l.Save(), l.gameObject.activeSelf));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 70) throw new InvalidOperationException("Justine cells: expected 70 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, bool visible, bool flicker, Vector3 sample, float level, float intensity)>();
+                foreach (var (l, _, active) in saved)
+                {
+                    if (l.gameObject.activeSelf != active) throw new InvalidOperationException("Justine cells: active state changed " + l.name);
+                    Vector3 sample = l.transform.position + l.transform.forward * .3f;
+                    sources.Add((l, l.CurrentColor, l.CurrentRadius, l.Visible, l.FlickerActive, sample, l.LightLevelAt(sample, 0f),
+                        l.GetComponentInParent<AmnesiaEntity>() == null && l.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                    s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                    {
+                        string name = e.light.name;
+                        float factor = mode == 4 || e.light.box || CellsAccents.Contains(name) || name == "SpotLight_18" ? 1f :
+                            name.StartsWith("SpotLight_", StringComparison.Ordinal) ? 0f : name == "PointLight_40" ? 4f : CellsNiches.Contains(name) ? .3f : name == "PointLight_33" ? .7f : mode is 0 or 2 ? 0f : .6f;
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible || e.light.FlickerActive != e.flicker ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || e.light.box && e.light.enhancedIntensity != 1f ||
+                            e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity))
+                            throw new InvalidOperationException("Justine cells: source/visibility/fallback/legacy light changed " + name);
+                    }
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        int own = 0; float value = 0f;
+                        foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) if (l.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0) { noLight++; continue; }
+                        if (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f) throw new InvalidOperationException("Justine cells: lamp effects lost " + lamp.Name);
+                    }
+                    if (noLight != 44) throw new InvalidOperationException("Justine cells: expected 43 no_light candles and stove without owned light");
+                    int added = 0;
+                    foreach (var l in AmnesiaLight.All) if (l != null && l.enhancedAdded) { added++; if (l.LightLevelAt(l.transform.position, 0f) != 0f) throw new InvalidOperationException("Justine cells: sky affects legacy light"); }
+                    if (added != (mode == 4 ? 0 : 11)) throw new InvalidOperationException("Justine cells: aperture light accumulation");
+                }
+            }
+            void Advance(Props.PropLamp lamp, float dt) { lamp.UpdateLogic(dt); foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.UpdateLight(dt); }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true }) { foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); } VerifyModes(); }
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) lamp.SetLit(on, true);
+                    foreach (var (lamp, _) in lamps) Advance(lamp, .5f); VerifyModes();
+                    foreach (var (lamp, _) in lamps) Advance(lamp, .5f); VerifyModes();
+                }
+                var candle = (Props.PropLamp)map.GetEntityByName("candle_floor_6"); var connected = map.GetLight("PointLight_55");
+                foreach (bool on in new[] { false, true })
+                {
+                    candle.SetLit(on, false); candle.UpdateLogic(0f);
+                    if (on ? connected.CurrentColor == connected.diffuseColor : connected.CurrentColor != connected.diffuseColor) throw new InvalidOperationException("Justine cells: prisoner candle connection lost");
+                    VerifyModes();
+                }
+                var signal = map.GetLight("PointLight_58"); signal.SetFlickerActive(true); var colours = new HashSet<Color>();
+                for (int step = 0; step < 8; step++) { signal.UpdateLight(1f); colours.Add(signal.CurrentColor); VerifyModes(); }
+                if (colours.Count < 2) throw new InvalidOperationException("Justine cells: red mechanism flicker stopped");
+                foreach (bool visible in new[] { false, true }) { signal.SetVisible(visible); VerifyModes(); }
+                string line = "Justine cells state PASS: 70 lamps (26 with owned light, 43 no_light candles and stove without owned light; initially 68 on, two off), all-lamp shutdown/relight and effect fades, prisoner candle link to point 55, live red point 58 flicker and scripted visibility switch survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Original RGBA/radii/visibility/active states, ten boxes and legacy HPL2 light retained. Stove map point remains direct fire with GI. Eleven aperture lights do not accumulate or enter legacy light. Light-only checks do not execute prisoner harm, ladders, suitors, perma death or progression.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally
