@@ -118,6 +118,7 @@ namespace RTXMnesia.Dev
                 VerifyNaveReduxLighting(map, user, report);
                 VerifyZimmermanLighting(map, user, report);
                 VerifyChancelReduxLighting(map, user, report);
+                VerifyInnerSanctumLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -172,6 +173,7 @@ namespace RTXMnesia.Dev
                     ApplyNaveReduxLightingPreview(map, mode);
                     ApplyZimmermanLightingPreview(map, mode);
                     ApplyChancelReduxLightingPreview(map, mode);
+                    ApplyInnerSanctumLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3381,6 +3383,169 @@ namespace RTXMnesia.Dev
                 if (blown != 26 || orb.Lit) throw new InvalidOperationException("Chancel redux: expected four floor stands and 22 candles blown out, pedestal off");
                 VerifyModes(); Fade("OrbLight", new Color(.3f, .6f, 1f, 1f), 12f, .2f); Fade("OrbLight", Color.clear, 12f, 2f);
                 string line = "Chancel redux state PASS: 53 lamp states (31 with owned light, 22 no_light), nearby lantern link, pedestal ignition/extinguishing, eight live barrier flicker colour/radius states and ten continuing barrier/orb fades survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Four weak light objects remain inactive; the two missing spot 2 names remain absent. Twenty-six candles and pedestal extinguish; residual strong spot 1, original colours/radii/box/legacy HPL2 light are retained. No sky added; visible darkness checked per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data, _) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static bool InnerSanctumStoryLight(string name) => name.StartsWith("Altar_", StringComparison.Ordinal) ||
+            name.StartsWith("slime_entry_", StringComparison.Ordinal) || name is "PointLight_7" or "PointLight_11_slime";
+
+        // Light-only snapshots: do not run damage, knife interactions, door collapse or progression callbacks.
+        static void ApplyInnerSanctumLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/28_inner_sanctum.map", StringComparison.Ordinal)) return;
+            bool touch = mode.Contains("sanctouch"), ground = mode.Contains("sancground"), hint = mode.Contains("sanchint");
+            bool wall = mode.Contains("sancwall"), allOff = mode.Contains("sancalloff");
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = !allOff && !(lamp.Name.StartsWith("Altar_", StringComparison.Ordinal) && (touch || ground || hint || wall) &&
+                        (!lamp.Name.Contains("_Light2_") || ground || hint || wall));
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                    foreach (var light in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) light.SetFlickerActive(false);
+                }
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded && light.GetComponentInParent<AmnesiaEntity>() == null)
+                { light.SetFlickerActive(false); light.SetColor(light.diffuseColor); light.SetRadius(light.radius); }
+            void Set(string name, Color color) => map.GetLight(name).SetColor(color);
+            for (int i = 1; i <= 5; i++)
+            {
+                string name = $"slime_entry_{i}_4"; Set(name, new Color(.6f, .1f, 0f, map.GetLight(name).CurrentColor.a));
+                if (mode.Contains("sancslime")) { Set(name, new Color(.7f, 0f, .2f, 1f)); map.GetLight(name).SetRadius(4f); }
+            }
+            map.GetLight("PointLight_11_slime").SetRadius(mode.Contains("sanccollapse") ? 9f : 0f);
+            map.GetLight("PointLight_7").SetRadius(mode.Contains("sanccollapse") ? 0f : 9f);
+            for (int i = 1; i <= 2; i++)
+            {
+                string prefix = "Altar_" + i;
+                if (touch || ground || hint || wall)
+                {
+                    Set(prefix + "_AltarLight", new Color(.6f, 0f, 0f, 1f)); Set(prefix + "_GroundLight", new Color(.8f, 0f, 0f, 1f));
+                    foreach (int p in new[] { 1, 2 }) { var l = map.GetLight(prefix + "_LightPoint_" + p); l.SetColor(new Color(.15f, .05f, 0f, l.CurrentColor.a)); }
+                }
+                if (ground || hint || wall)
+                {
+                    Set(prefix + "_AltarLight", Color.clear); Set(prefix + "_GroundLight", new Color(.6f, 0f, 0f, 1f));
+                    Set(prefix + "_HintLight", new Color(hint ? .9f : .3f, 0f, 0f, 1f));
+                    var l = map.GetLight(prefix + "_LightPoint_3"); l.SetColor(new Color(.15f, .05f, 0f, l.CurrentColor.a));
+                }
+                if (wall)
+                {
+                    Set(prefix + "_WallLight", new Color(mode.Contains("sancwallout") ? 0f : .5f, 0f, 0f, 1f));
+                    Set(prefix + "_GroundLight", Color.clear); Set(prefix + "_HintLight", Color.clear);
+                }
+            }
+        }
+
+        static void VerifyInnerSanctumLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/28_inner_sanctum.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data, bool active)>();
+            foreach (var l in map.GetComponentsInChildren<AmnesiaLight>(true)) if (!l.handHeld && !l.enhancedAdded) saved.Add((l, l.Save(), l.gameObject.activeSelf));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 52) throw new InvalidOperationException("Inner sanctum: expected 52 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            int fades = 0, links = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity, bool flicker)>();
+                foreach (var (l, _, active) in saved)
+                {
+                    if (l.gameObject.activeSelf != active) throw new InvalidOperationException("Inner sanctum: active state changed " + l.name);
+                    Vector3 sample = l.transform.position + l.transform.forward * .3f;
+                    sources.Add((l, l.CurrentColor, l.CurrentRadius, sample, l.LightLevelAt(sample, 0f),
+                        l.GetComponentInParent<AmnesiaEntity>() == null && l.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f, l.FlickerActive));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                    s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                    {
+                        float factor = mode == 4 || InnerSanctumStoryLight(e.light.name) ? 1f : mode is 0 or 2 ? 0f : .6f;
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.FlickerActive != e.flicker ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || e.light.box && e.light.enhancedIntensity != 1f ||
+                            e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity))
+                            throw new InvalidOperationException("Inner sanctum: source/story/fallback/legacy light changed " + e.light.name);
+                    }
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int own = 0;
+                        foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) if (l.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0) { noLight++; continue; }
+                        if (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f) throw new InvalidOperationException("Inner sanctum: lamp effects lost " + lamp.Name);
+                    }
+                    if (noLight != 10) throw new InvalidOperationException("Inner sanctum: expected ten no_light candles");
+                    foreach (var l in AmnesiaLight.All) if (l != null && l.enhancedAdded) throw new InvalidOperationException("Inner sanctum: unexpected sky source");
+                }
+            }
+            void Advance(Props.PropLamp lamp, float dt)
+            { lamp.UpdateLogic(dt); foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.UpdateLight(dt); }
+            void Fade(string name, Color target, float radius, float duration)
+            {
+                var l = map.GetLight(name); l.SetFlickerActive(false); l.SetVisible(true); Color start = l.CurrentColor; float oldRadius = l.CurrentRadius;
+                l.FadeTo(target, radius, duration); l.UpdateLight(duration * .5f); VerifyModes();
+                if (l.CurrentColor == target && l.CurrentRadius == radius && (start != target || oldRadius != radius)) throw new InvalidOperationException("Inner sanctum: missing fade midpoint " + name);
+                l.UpdateLight(duration * .5f); VerifyModes();
+                if (l.CurrentColor != target || l.CurrentRadius != radius) throw new InvalidOperationException("Inner sanctum: fade interrupted " + name);
+                fades++;
+            }
+            void ColourFade(string name, float red, float green, float blue, float alpha, float duration)
+            { var l = map.GetLight(name); Fade(name, new Color(red, green, blue, alpha < 0f ? l.CurrentColor.a : alpha), l.CurrentRadius, duration); }
+            void Extinguish(string group)
+            {
+                foreach (var (lamp, _) in lamps) if (lamp.Name.StartsWith(group, StringComparison.Ordinal)) lamp.SetLit(false, true);
+                foreach (var (lamp, _) in lamps) if (lamp.Name.StartsWith(group, StringComparison.Ordinal)) Advance(lamp, .5f);
+                VerifyModes();
+                foreach (var (lamp, _) in lamps) if (lamp.Name.StartsWith(group, StringComparison.Ordinal)) Advance(lamp, .5f);
+                VerifyModes();
+            }
+            try
+            {
+                ApplyInnerSanctumLightingPreview(map, "initial");
+                VerifyModes();
+                foreach (bool on in new[] { false, true }) { foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); } VerifyModes(); }
+                foreach (var (lamp, _) in lamps)
+                {
+                    string name = lamp.Component.GetVariable("ConnectedLight");
+                    if (string.IsNullOrEmpty(name) || lamp.Component.GetComponentsInChildren<AmnesiaLight>(true).Length == 0) continue;
+                    var target = map.GetLight(name);
+                    foreach (bool on in new[] { false, true })
+                    {
+                        lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                        if (on ? target.CurrentColor == target.diffuseColor : target.CurrentColor != target.diffuseColor) throw new InvalidOperationException("Inner sanctum: broken lamp link " + lamp.Name);
+                        VerifyModes();
+                    }
+                    links++;
+                }
+                for (int i = 1; i <= 5; i++) ColourFade($"slime_entry_{i}_4", .7f, 0f, .2f, 1f, 1f);
+                Fade("PointLight_11_slime", map.GetLight("PointLight_11_slime").CurrentColor, 9f, 1f);
+                Fade("PointLight_7", map.GetLight("PointLight_7").CurrentColor, 0f, 1f);
+                for (int i = 1; i <= 2; i++)
+                {
+                    string prefix = "Altar_" + i;
+                    Extinguish(prefix + "_Light_");
+                    ColourFade(prefix + "_AltarLight", .6f, 0f, 0f, 1f, 1f); ColourFade(prefix + "_GroundLight", .8f, 0f, 0f, 1f, 1f);
+                    for (int p = 1; p <= 2; p++) ColourFade(prefix + "_LightPoint_" + p, .15f, .05f, 0f, -1f, 1f);
+                    Extinguish(prefix + "_Light2_");
+                    ColourFade(prefix + "_LightPoint_3", .15f, .05f, 0f, -1f, 1f);
+                    ColourFade(prefix + "_AltarLight", 0f, 0f, 0f, 0f, 1f); ColourFade(prefix + "_GroundLight", .6f, 0f, 0f, 1f, 1f);
+                    ColourFade(prefix + "_HintLight", .3f, 0f, 0f, 1f, .5f); ColourFade(prefix + "_HintLight", .9f, 0f, 0f, -1f, 2f);
+                    ColourFade(prefix + "_HintLight", .3f, 0f, 0f, -1f, .5f); ColourFade(prefix + "_WallLight", .5f, 0f, 0f, 1f, 2f);
+                    ColourFade(prefix + "_GroundLight", 0f, 0f, 0f, 0f, 2f); ColourFade(prefix + "_HintLight", 0f, 0f, 0f, 0f, 2f);
+                    ColourFade(prefix + "_WallLight", 0f, 0f, 0f, 1f, 2f);
+                }
+                if (fades != 35 || links != 10) throw new InvalidOperationException("Inner sanctum: incomplete fade/link coverage");
+                string line = "Inner sanctum state PASS: 52 lamps (42 with owned light, ten no_light), ten effective links to four altar fills, all-lamp shutdown/relight, altar lamp effect fades and 35 continuing colour/radius fades survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Slime entry, corridor swap, both altar/ground/hint pulses and wall boxes retain full authored state and legacy HPL2 light. No sky added; visible darkness checked per view. Light-only checks do not execute story progression.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally

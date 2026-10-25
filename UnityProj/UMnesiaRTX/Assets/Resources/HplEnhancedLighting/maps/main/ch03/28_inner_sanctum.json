@@ -1,0 +1,411 @@
+{
+  "lights": [
+    {
+      "name": "PointLight_1",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_1",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_7",
+      "note": "Keep the authored slime event and warm-to-pink corridor transition, including zero-to-nine / nine-to-zero radius fades. This is a story cue, not ordinary torch bounce."
+    },
+    {
+      "name": "PointLight_8",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_8",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "Altar_2_LightPoint_1",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_1_LightPoint_1",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "Altar_1_LightPoint_2",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "slime_entry_5_4",
+      "note": "Keep the authored slime event and warm-to-pink corridor transition, including zero-to-nine / nine-to-zero radius fades. This is a story cue, not ordinary torch bounce."
+    },
+    {
+      "name": "slime_entry_4_4",
+      "note": "Keep the authored slime event and warm-to-pink corridor transition, including zero-to-nine / nine-to-zero radius fades. This is a story cue, not ordinary torch bounce."
+    },
+    {
+      "name": "slime_entry_3_4",
+      "note": "Keep the authored slime event and warm-to-pink corridor transition, including zero-to-nine / nine-to-zero radius fades. This is a story cue, not ordinary torch bounce."
+    },
+    {
+      "name": "slime_entry_2_4",
+      "note": "Keep the authored slime event and warm-to-pink corridor transition, including zero-to-nine / nine-to-zero radius fades. This is a story cue, not ordinary torch bounce."
+    },
+    {
+      "name": "slime_entry_1_4",
+      "note": "Keep the authored slime event and warm-to-pink corridor transition, including zero-to-nine / nine-to-zero radius fades. This is a story cue, not ordinary torch bounce."
+    },
+    {
+      "name": "PointLight_30",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_30",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_3",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_3",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_31",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_31",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "Altar_2_LightPoint_3",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "Altar_1_LightPoint_3",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "PointLight_25",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_25",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "Altar_2_LightPoint_2",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "PointLight_18",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_18",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_36",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_36",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_39",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_39",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_40",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_40",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_41",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_41",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_42",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_42",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_43",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_43",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_44",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_44",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_45",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_45",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached warm hall / stair-entry torch bounce. Real torch and candle sources provide direct light and GI; retain weaker navigation fill without RTGI or SSGI. Preserve original source state and legacy HPL2 light."
+    },
+    {
+      "name": "PointLight_11_slime",
+      "note": "Keep the authored slime event and warm-to-pink corridor transition, including zero-to-nine / nine-to-zero radius fades. This is a story cue, not ordinary torch bounce."
+    },
+    {
+      "name": "Altar_2_AltarLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_2_GroundLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_2_WallLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_1_WallLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_1_GroundLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_1_AltarLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_1_HintLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    },
+    {
+      "name": "Altar_2_HintLight",
+      "note": "Keep the complete authored altar light and lamp connections: candle shutdown, red altar/ground/hint fades, hint pulse and wall-box completion/shutdown. Preserve colour including alpha, radius and legacy gameplay light."
+    }
+  ],
+  "add": []
+}
