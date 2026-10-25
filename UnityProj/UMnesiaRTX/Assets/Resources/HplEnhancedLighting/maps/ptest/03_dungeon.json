@@ -1,0 +1,547 @@
+{
+  "lights": [
+    {
+      "name": "SpotLight_1",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_1",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_1",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "SpotLight_2",
+      "note": "Retain authored reflected-water gobo and its original color, intensity, position and gameplay frustum. It is a water effect, not an outside window."
+    },
+    {
+      "name": "SpotLight_3",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_2",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "SpotLight_5",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_6",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_7",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_3",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "PointLight_4",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "PointLight_5",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "SpotLight_9",
+      "note": "Retain authored reflected-water gobo and its original color, intensity, position and gameplay frustum. It is a water effect, not an outside window."
+    },
+    {
+      "name": "SpotLight_11",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_14",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_6",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "SpotLight_15",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_16",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_7",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "SpotLight_17",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_8",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "SpotLight_18",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_9",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_10",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "SpotLight_19",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_11",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "SpotLight_20",
+      "note": "Retain authored reflected-water gobo and its original color, intensity, position and gameplay frustum. It is a water effect, not an outside window."
+    },
+    {
+      "name": "PointLight_12",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_13",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_14",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_15",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_16",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "SpotLight_21",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "BoxLight_1",
+      "note": "Retain authored blue enclosed dungeon ambience. Four round ceiling shafts over the cages are capped black and do not supply sky; path tracing has no box custom pass."
+    },
+    {
+      "name": "PointLight_17",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_18",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_20",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_20",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached room / sky bounce in areas with real owned candle light or a replacement roof aperture. Remove with RTGI or SSGI, retain weaker navigation fill without GI; original RGBA and legacy HPL2 light remain."
+    },
+    {
+      "name": "PointLight_24",
+      "note": "Retain small candle-cluster / warm navigation accent unchanged. Point 28 is authored inactive and must stay inactive; points 29/41/43 are the direct shared glow of no_light candle groups."
+    },
+    {
+      "name": "PointLight_25",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "SpotLight_4",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_26",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_27",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_28",
+      "note": "Retain small candle-cluster / warm navigation accent unchanged. Point 28 is authored inactive and must stay inactive; points 29/41/43 are the direct shared glow of no_light candle groups."
+    },
+    {
+      "name": "PointLight_29",
+      "note": "Retain small candle-cluster / warm navigation accent unchanged. Point 28 is authored inactive and must stay inactive; points 29/41/43 are the direct shared glow of no_light candle groups."
+    },
+    {
+      "name": "PointLight_30",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_31",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_32",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_34",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_35",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_36",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_33",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_37",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_38",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "SpotLight_12",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_39",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "PointLight_40",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken upper roof-shaft niche ambience. Transmitted sky at the real aperture supplies direct shadowed light; retain a little authored glow in all enhanced modes."
+    },
+    {
+      "name": "SpotLight_22",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_23",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_24",
+      "note": "Retain authored reflected-water gobo and its original color, intensity, position and gameplay frustum. It is a water effect, not an outside window."
+    },
+    {
+      "name": "SpotLight_27",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_28",
+      "intensity": "0",
+      "note": "Replace detached cool roof-hole cones with measured aperture light, or detached warm candle cones with actual candle flames and retained no_light cluster illumination. Keep original shadow flag, cookie and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_41",
+      "note": "Retain small candle-cluster / warm navigation accent unchanged. Point 28 is authored inactive and must stay inactive; points 29/41/43 are the direct shared glow of no_light candle groups."
+    },
+    {
+      "name": "PointLight_42",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared illumination of mixed candle clusters containing no_light candles. Ninety candles have no owned source and no lamp links; removing all shared illumination with GI would lose their authored contribution."
+    },
+    {
+      "name": "PointLight_43",
+      "note": "Retain small candle-cluster / warm navigation accent unchanged. Point 28 is authored inactive and must stay inactive; points 29/41/43 are the direct shared glow of no_light candle groups."
+    }
+  ],
+  "add": [
+    {
+      "name": "Sky_ceiling_default_hole_1",
+      "type": "rect",
+      "position": "21.75000 4.65000 50.50000",
+      "target": "21.75000 -3.35000 50.50000",
+      "size": ".8 .8",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky at the measured inner roof-hole mouth, local (0,.15,0), inside the open shaft. Five downward rays clear the aperture at the centre and corners. Full authored rotation and scale place it; far fog cap is represented by outgoing aperture light."
+    },
+    {
+      "name": "Sky_ceiling_default_broken02_1",
+      "type": "rect",
+      "position": "4.25000 4.22000 32.05000",
+      "target": "4.25000 -3.78000 32.05000",
+      "size": ".4 .4",
+      "color": ".55 .65 .78",
+      "intensity": "480",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured broken roof-hole mouth at local (.2,-.28,0), .4 square, 480 nits. Represents outgoing light just below the inner ceiling face. Five rays through the authored aperture clear; no broad area source hidden inside solid stone."
+    },
+    {
+      "name": "Sky_ceiling_default_cracked_2",
+      "type": "rect",
+      "position": "0.25000 4.22000 25.47000",
+      "target": "0.25000 -3.78000 25.47000",
+      "size": ".5 .04",
+      "color": ".55 .65 .78",
+      "intensity": "1200",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured narrow crack: local (-.03,-.28,-.4), .04m across and .4m long (.5 with scale1.25), 1200 nits. Five downward rays through the opening clear at the top face; the source represents transmitted light just below the inner ceiling face at y-.25, so stones cannot falsely block it."
+    },
+    {
+      "name": "Sky_ceiling_default_broken_1",
+      "type": "rect",
+      "position": "-4.75000 4.65000 32.25000",
+      "target": "-4.75000 -3.35000 32.25000",
+      "size": "1.2 1.2",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky at the measured inner roof-hole mouth, local (0,.15,0), inside the open shaft. Five downward rays clear the aperture at the centre and corners. Full authored rotation and scale place it; far fog cap is represented by outgoing aperture light."
+    },
+    {
+      "name": "Sky_ceiling_default_cracked_3",
+      "type": "rect",
+      "position": "-0.65000 5.97000 18.53000",
+      "target": "-0.65000 -2.03000 18.53000",
+      "size": ".4 .04",
+      "color": ".55 .65 .78",
+      "intensity": "1200",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured narrow crack: local (-.03,-.28,-.4), .04m across and .4m long (.5 with scale1.25), 1200 nits. Five downward rays through the opening clear at the top face; the source represents transmitted light just below the inner ceiling face at y-.25, so stones cannot falsely block it."
+    },
+    {
+      "name": "Sky_ceiling_default_broken02_2",
+      "type": "rect",
+      "position": "4.25000 4.22000 66.55000",
+      "target": "4.25000 -3.78000 66.55000",
+      "size": ".4 .4",
+      "color": ".55 .65 .78",
+      "intensity": "480",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured broken roof-hole mouth at local (.2,-.28,0), .4 square, 480 nits. Represents outgoing light just below the inner ceiling face. Five rays through the authored aperture clear; no broad area source hidden inside solid stone."
+    },
+    {
+      "name": "Sky_ceiling_default_cracked_4",
+      "type": "rect",
+      "position": "-4.35000 4.22000 66.72000",
+      "target": "-4.35000 -3.78000 66.72000",
+      "size": ".4 .04",
+      "color": ".55 .65 .78",
+      "intensity": "1200",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured narrow crack: local (-.03,-.28,-.4), .04m across and .4m long (.5 with scale1.25), 1200 nits. Five downward rays through the opening clear at the top face; the source represents transmitted light just below the inner ceiling face at y-.25, so stones cannot falsely block it."
+    },
+    {
+      "name": "Sky_ceiling_default_broken_2",
+      "type": "rect",
+      "position": "-0.25000 4.65000 62.75000",
+      "target": "-0.25000 -3.35000 62.75000",
+      "size": "1.2 1.2",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted sky at the measured inner roof-hole mouth, local (0,.15,0), inside the open shaft. Five downward rays clear the aperture at the centre and corners. Full authored rotation and scale place it; far fog cap is represented by outgoing aperture light."
+    },
+    {
+      "name": "Sky_concave_Plane_41",
+      "type": "rect",
+      "position": "7.89010 4.20122 26.00000",
+      "target": "6 0 26",
+      "size": "1 1",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Sky just inside the measured inclined outside-fog cap of a broken concave ceiling. Cap centre is transformed with full authored XYZ rotation; offset .12m inward so the cap cannot block its outgoing light."
+    },
+    {
+      "name": "Sky_concave_Plane_43",
+      "type": "rect",
+      "position": "-4.00575 4.21164 22.12819",
+      "target": "-4.25 0 25",
+      "size": "1 1",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Sky just inside the measured inclined outside-fog cap of a broken concave ceiling. Cap centre is transformed with full authored XYZ rotation; offset .12m inward so the cap cannot block its outgoing light."
+    }
+  ]
+}

@@ -122,6 +122,7 @@ namespace RTXMnesia.Dev
                 VerifyOrbChamberLighting(map, user, report);
                 VerifyJustineCellsLighting(map, user, report);
                 VerifyJustineLibraryLighting(map, user, report);
+                VerifyJustineDungeonLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -180,6 +181,7 @@ namespace RTXMnesia.Dev
                     ApplyOrbChamberLightingPreview(map, mode);
                     ApplyJustineCellsLightingPreview(map, mode);
                     ApplyJustineLibraryLightingPreview(map, mode);
+                    ApplyJustineDungeonLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3917,6 +3919,106 @@ namespace RTXMnesia.Dev
                 }
                 Fade(map.GetLight("PointLight_44"), Color.clear, 0f, 4f);
                 string line = "Justine library state PASS: 57 lamps (56 with owned light, empty light-box lamp; initially 30 on, 27 off), all-lamp shutdown/relight and effect fades, all 14 effective lamp connections and three scripted wind-extinguished torches survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Projector three auxiliary and five stencil/no-stencil lights preserve cookies/frusta/RGBA/radii through live fade midpoints/endpoints; enhanced blue wash is scaled to .15 (point 9) / .3 (spot 2) without scaling the five projections; shelf point 44 four-second fade to zero radius survives switching. Original active/visibility states, nine boxes and legacy HPL2 light retained. Two aperture lights do not accumulate or enter legacy light; prisoner hatch is enclosed, not sky. Light-only checks do not execute stencil inventory, lever choices, prisoner harm, enemy chase, perma death or progression.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (l, data, _) in saved) l.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly HashSet<string> DungeonShared = new() { "PointLight_2", "PointLight_6", "PointLight_7", "PointLight_8", "PointLight_9", "PointLight_10", "PointLight_12", "PointLight_13", "PointLight_14", "PointLight_15", "PointLight_16", "PointLight_17", "PointLight_18", "PointLight_26", "PointLight_27", "PointLight_30", "PointLight_31", "PointLight_32", "PointLight_33", "PointLight_34", "PointLight_35", "PointLight_36", "PointLight_37", "PointLight_42" };
+        static readonly HashSet<string> DungeonNiches = new() { "PointLight_3", "PointLight_4", "PointLight_5", "PointLight_11", "PointLight_25", "PointLight_38", "PointLight_39", "PointLight_40" };
+        static readonly HashSet<string> DungeonAccents = new() { "PointLight_24", "PointLight_28", "PointLight_29", "PointLight_41", "PointLight_43" };
+        static readonly HashSet<string> DungeonWater = new() { "SpotLight_2", "SpotLight_9", "SpotLight_20", "SpotLight_24" };
+
+        static void ApplyJustineDungeonLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/ptest/03_dungeon.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    lamp.SetLit(!mode.Contains("dungeonalloff") && (mode.Contains("dungeonalllit") || lamp.Component.GetVariable("Lit") != "false"), false);
+                    lamp.UpdateLogic(0f);
+                    foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.SetFlickerActive(false);
+                }
+        }
+
+        static void VerifyJustineDungeonLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/ptest/03_dungeon.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data, bool active)>();
+            foreach (var l in map.GetComponentsInChildren<AmnesiaLight>(true)) if (!l.handHeld && !l.enhancedAdded) saved.Add((l, l.Save(), l.gameObject.activeSelf));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 201) throw new InvalidOperationException("Justine dungeon: expected 201 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, bool visible, bool flicker, Vector3 sample, float level, float intensity, Texture cookie, float fov, float aspect, bool shadows)>();
+                foreach (var (l, _, active) in saved)
+                {
+                    if (l.gameObject.activeSelf != active) throw new InvalidOperationException("Justine dungeon: active state changed " + l.name);
+                    Vector3 sample = l.transform.position + l.transform.forward * .3f;
+                    l.TryGetComponent<Light>(out var rendered);
+                    sources.Add((l, l.CurrentColor, l.CurrentRadius, l.Visible, l.FlickerActive, sample, l.LightLevelAt(sample, 0f),
+                        l.GetComponentInParent<AmnesiaEntity>() == null && rendered != null ? rendered.intensity : -1f,
+                        rendered != null ? rendered.cookie : null, l.spotFov, l.spotAspect, l.castShadows));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                    s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                    {
+                        string name = e.light.name;
+                        float factor = mode == 4 || e.light.box || DungeonAccents.Contains(name) || DungeonWater.Contains(name) ? 1f :
+                            name.StartsWith("SpotLight_", StringComparison.Ordinal) ? 0f : DungeonNiches.Contains(name) ? .3f :
+                            DungeonShared.Contains(name) ? .7f : mode is 0 or 2 ? 0f : .6f;
+                        e.light.TryGetComponent<Light>(out var rendered);
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible || e.light.FlickerActive != e.flicker ||
+                            e.light.spotFov != e.fov || e.light.spotAspect != e.aspect || e.intensity >= 0f && e.light.castShadows != e.shadows || rendered != null && rendered.cookie != e.cookie ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || e.light.box && e.light.enhancedIntensity != 1f ||
+                            e.intensity >= 0f && Mathf.Abs(rendered.intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity))
+                            throw new InvalidOperationException("Justine dungeon: source/cookie/fallback/legacy light changed " + name);
+                    }
+                    int empty = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        int own = 0; float value = 0f;
+                        foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) if (l.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0) { empty++; continue; }
+                        if (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f) throw new InvalidOperationException("Justine dungeon: lamp effects lost " + lamp.Name);
+                    }
+                    if (empty != 90) throw new InvalidOperationException("Justine dungeon: expected 90 no_light candles");
+                    int added = 0;
+                    foreach (var l in AmnesiaLight.All) if (l != null && l.enhancedAdded) { added++; if (l.LightLevelAt(l.transform.position, 0f) != 0f) throw new InvalidOperationException("Justine dungeon: sky affects legacy light"); }
+                    if (added != (mode == 4 ? 0 : 10)) throw new InvalidOperationException("Justine dungeon: aperture accumulation");
+                }
+            }
+            void Advance(Props.PropLamp lamp, float dt) { lamp.UpdateLogic(dt); foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.UpdateLight(dt); }
+            try
+            {
+                int initiallyOff = 0;
+                foreach (var (lamp, on) in lamps) { if (!on) initiallyOff++; if (!string.IsNullOrEmpty(lamp.Component.GetVariable("ConnectedLight"))) throw new InvalidOperationException("Justine dungeon: unexpected lamp link"); }
+                if (initiallyOff != 34 || map.GetLight("PointLight_28").gameObject.activeSelf) throw new InvalidOperationException("Justine dungeon: authored inactive / unlit state changed");
+                VerifyModes();
+                foreach (bool on in new[] { false, true }) { foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); } VerifyModes(); }
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) lamp.SetLit(on, true);
+                    foreach (var (lamp, _) in lamps) Advance(lamp, .5f); VerifyModes();
+                    foreach (var (lamp, _) in lamps) Advance(lamp, .5f); VerifyModes();
+                }
+                foreach (string name in DungeonWater)
+                {
+                    var l = map.GetLight(name);
+                    foreach (bool visible in new[] { false, true }) { l.SetVisible(visible); VerifyModes(); }
+                }
+                string line = "Justine dungeon state PASS: 201 lamps (111 owned-light candles, 90 no_light candles; initially 167 on, 34 off), no lamp links, all-lamp shutdown/relight and effect fade midpoints/endpoints survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Four reflected-water gobos preserve cookies, original shadows/frusta/RGBA/radii and visibility switches. Authored inactive point 28 remains inactive, all original active/visibility states and legacy HPL2 light retained. Shared no_light cluster light is retained at .7, eight roof niches at .3, six GI fills use 0/.6. One blue box retained; ten aperture lights do not accumulate or affect legacy light. Four black-capped cage shafts receive no new sky. The map script has no direct lamp/light commands. Light-only checks do not execute gates, cog puzzle, flooding, prisoner harm, enemy chase, perma death or progression.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally

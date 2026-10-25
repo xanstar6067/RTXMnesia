@@ -10,7 +10,7 @@
 `ch02/24_torture_choir_west`, `ch02/24_torture_choir_east`, `ch03/25_cell_tunnels`
 и `ch03/26_torture_nave_redux`, `ch03/26_zimmerman_vision`,
 `ch03/27_torture_chancel_redux`, `ch03/28_inner_sanctum`, `ch03/29_orb_chamber`,
-а также Justine `ptest/01_cells` и `ptest/02_library` — первичная настройка.
+а также Justine `ptest/01_cells`, `ptest/02_library` и `ptest/03_dungeon` — первичная настройка.
 Точный статус и журнал карт — [maps.md](maps.md).
 
 ## Зачем это
