@@ -121,6 +121,7 @@ namespace RTXMnesia.Dev
                 VerifyInnerSanctumLighting(map, user, report);
                 VerifyOrbChamberLighting(map, user, report);
                 VerifyJustineCellsLighting(map, user, report);
+                VerifyJustineLibraryLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -178,6 +179,7 @@ namespace RTXMnesia.Dev
                     ApplyInnerSanctumLightingPreview(map, mode);
                     ApplyOrbChamberLightingPreview(map, mode);
                     ApplyJustineCellsLightingPreview(map, mode);
+                    ApplyJustineLibraryLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3783,6 +3785,138 @@ namespace RTXMnesia.Dev
                 if (colours.Count < 2) throw new InvalidOperationException("Justine cells: red mechanism flicker stopped");
                 foreach (bool visible in new[] { false, true }) { signal.SetVisible(visible); VerifyModes(); }
                 string line = "Justine cells state PASS: 70 lamps (26 with owned light, 43 no_light candles and stove without owned light; initially 68 on, two off), all-lamp shutdown/relight and effect fades, prisoner candle link to point 55, live red point 58 flicker and scripted visibility switch survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Original RGBA/radii/visibility/active states, ten boxes and legacy HPL2 light retained. Stove map point remains direct fire with GI. Eleven aperture lights do not accumulate or enter legacy light. Light-only checks do not execute prisoner harm, ladders, suitors, perma death or progression.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (l, data, _) in saved) l.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly HashSet<string> LibraryProtected = new() { "PointLight_3", "SpotLight_4", "PointLight_2", "PointLight_9", "PointLight_43", "PointLight_44", "SpotLight_2", "SpotLight_no_stencil", "SpotLight_stencil01", "SpotLight_stencil02", "SpotLight_stencil03", "SpotLight_stencil04" };
+
+        static void ApplyJustineLibraryLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/ptest/02_library.map", StringComparison.Ordinal)) return;
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool wind = mode.Contains("libwind") && (lamp.Name == "torch_static01_4" || lamp.Name == "torch_static01_6" || lamp.Name == "torch_static01_8");
+                    lamp.SetLit(!wind && !mode.Contains("liballoff") && (mode.Contains("liballlit") || lamp.Component.GetVariable("Lit") != "false" || mode.Contains("libbox") && lamp.Name == "light_box_1"), false);
+                    lamp.UpdateLogic(0f);
+                    foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.SetFlickerActive(false);
+                }
+            foreach (string name in LibraryProtected)
+            {
+                var l = map.GetLight(name); l.StopFading(); l.SetFlickerActive(false); l.SetColor(l.diffuseColor); l.SetRadius(l.radius);
+                if (mode.Contains("libshelf") && name == "PointLight_44") { l.SetColor(Color.clear); l.SetRadius(0f); }
+                if (!mode.Contains("libbox")) continue;
+                if (name is "PointLight_2" or "PointLight_9" or "SpotLight_2") l.SetColor(mode.Contains("libauxoff") ? Color.clear : new Color(.3f, .3f, 1f, .4f));
+                if (name.StartsWith("SpotLight_", StringComparison.Ordinal) && name != "SpotLight_2" &&
+                    name == (mode.Contains("libbox1") ? "SpotLight_stencil01" : mode.Contains("libbox2") ? "SpotLight_stencil02" : mode.Contains("libbox3") ? "SpotLight_stencil03" : mode.Contains("libbox4") ? "SpotLight_stencil04" : "SpotLight_no_stencil"))
+                    l.SetColor(new Color(.5f, .6f, .9f, .5f));
+            }
+        }
+
+        static void VerifyJustineLibraryLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/ptest/02_library.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data, bool active)>();
+            foreach (var l in map.GetComponentsInChildren<AmnesiaLight>(true)) if (!l.handHeld && !l.enhancedAdded) saved.Add((l, l.Save(), l.gameObject.activeSelf));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 57) throw new InvalidOperationException("Justine library: expected 57 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, bool visible, bool flicker, Vector3 sample, float level, float intensity, Texture cookie, float fov, float aspect, bool shadows)>();
+                foreach (var (l, _, active) in saved)
+                {
+                    if (l.gameObject.activeSelf != active) throw new InvalidOperationException("Justine library: active state changed " + l.name);
+                    Vector3 sample = l.transform.position + l.transform.forward * .3f;
+                    l.TryGetComponent<Light>(out var rendered);
+                    sources.Add((l, l.CurrentColor, l.CurrentRadius, l.Visible, l.FlickerActive, sample, l.LightLevelAt(sample, 0f),
+                        l.GetComponentInParent<AmnesiaEntity>() == null && rendered != null ? rendered.intensity : -1f,
+                        rendered != null ? rendered.cookie : null, l.spotFov, l.spotAspect, l.castShadows));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                    s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(s);
+                    foreach (var e in sources)
+                    {
+                        string name = e.light.name;
+                        float factor = mode == 4 ? 1f : name == "PointLight_9" ? .15f : name == "SpotLight_2" ? .3f : e.light.box || LibraryProtected.Contains(name) ? 1f :
+                            name.StartsWith("SpotLight_", StringComparison.Ordinal) ? 0f : name is "PointLight_34" or "PointLight_36" ? .3f :
+                            name is "PointLight_15" or "PointLight_16" ? .7f : mode is 0 or 2 ? 0f : .6f;
+                        e.light.TryGetComponent<Light>(out var rendered);
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible || e.light.FlickerActive != e.flicker ||
+                            e.light.spotFov != e.fov || e.light.spotAspect != e.aspect || e.intensity >= 0f && e.light.castShadows != e.shadows || rendered != null && rendered.cookie != e.cookie ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || e.light.box && e.light.enhancedIntensity != 1f ||
+                            e.intensity >= 0f && Mathf.Abs(rendered.intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity))
+                            throw new InvalidOperationException("Justine library: source/cookie/fallback/legacy light changed " + name);
+                    }
+                    int empty = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        int own = 0; float value = 0f;
+                        foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) if (l.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0) { empty++; if (lamp.Name != "light_box_1") throw new InvalidOperationException("Justine library: unexpected empty lamp"); continue; }
+                        if (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f) throw new InvalidOperationException("Justine library: lamp effects lost " + lamp.Name);
+                    }
+                    if (empty != 1) throw new InvalidOperationException("Justine library: expected one empty projector lamp");
+                    int added = 0;
+                    foreach (var l in AmnesiaLight.All) if (l != null && l.enhancedAdded) { added++; if (l.LightLevelAt(l.transform.position, 0f) != 0f) throw new InvalidOperationException("Justine library: sky affects legacy light"); }
+                    if (added != (mode == 4 ? 0 : 2)) throw new InvalidOperationException("Justine library: aperture accumulation");
+                }
+            }
+            void Advance(Props.PropLamp lamp, float dt) { lamp.UpdateLogic(dt); foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.UpdateLight(dt); }
+            void Fade(AmnesiaLight l, Color target, float radius, float seconds)
+            {
+                Color start = l.CurrentColor; float from = l.CurrentRadius; l.FadeTo(target, radius, seconds); l.UpdateLight(seconds * .5f);
+                Color half = Color.Lerp(start, target, .5f); float halfRadius = Mathf.Lerp(from, radius, .5f);
+                VerifyModes();
+                if ((new Vector4(l.CurrentColor.r-half.r,l.CurrentColor.g-half.g,l.CurrentColor.b-half.b,l.CurrentColor.a-half.a)).sqrMagnitude > 1e-6f || Mathf.Abs(l.CurrentRadius-halfRadius) > .001f) throw new InvalidOperationException("Justine library: live fade midpoint lost " + l.name);
+                l.UpdateLight(seconds * .5f); VerifyModes();
+                if (l.CurrentColor != target || Mathf.Abs(l.CurrentRadius-radius) > .001f) throw new InvalidOperationException("Justine library: live fade endpoint lost " + l.name);
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true }) { foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); } VerifyModes(); }
+                foreach (bool on in new[] { false, true })
+                {
+                    foreach (var (lamp, _) in lamps) lamp.SetLit(on, true);
+                    foreach (var (lamp, _) in lamps) Advance(lamp, .5f); VerifyModes();
+                    foreach (var (lamp, _) in lamps) Advance(lamp, .5f); VerifyModes();
+                }
+                int links = 0;
+                foreach (var (lamp, _) in lamps)
+                {
+                    string name = lamp.Component.GetVariable("ConnectedLight"); if (string.IsNullOrEmpty(name)) continue;
+                    links++; var l = map.GetLight(name);
+                    foreach (bool on in new[] { false, true })
+                    {
+                        lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                        if (on ? l.CurrentColor == l.diffuseColor : l.CurrentColor != l.diffuseColor) throw new InvalidOperationException("Justine library: lamp connection lost " + lamp.Name);
+                        VerifyModes();
+                    }
+                }
+                if (links != 14) throw new InvalidOperationException("Justine library: expected 14 lamp links");
+                foreach (string name in new[] { "torch_static01_6", "torch_static01_4", "torch_static01_8" })
+                {
+                    var lamp = (Props.PropLamp)map.GetEntityByName(name); lamp.SetLit(false, true); Advance(lamp, .5f); VerifyModes(); Advance(lamp, .5f); VerifyModes();
+                }
+                foreach (string name in new[] { "PointLight_2", "PointLight_9", "SpotLight_2", "SpotLight_no_stencil", "SpotLight_stencil01", "SpotLight_stencil02", "SpotLight_stencil03", "SpotLight_stencil04" })
+                {
+                    var l = map.GetLight(name); Color target = name is "PointLight_2" or "PointLight_9" or "SpotLight_2" ? new Color(.3f,.3f,1f,.4f) : new Color(.5f,.6f,.9f,.5f);
+                    Fade(l, target, l.CurrentRadius, 1f); Fade(l, Color.clear, l.CurrentRadius, 1f);
+                }
+                Fade(map.GetLight("PointLight_44"), Color.clear, 0f, 4f);
+                string line = "Justine library state PASS: 57 lamps (56 with owned light, empty light-box lamp; initially 30 on, 27 off), all-lamp shutdown/relight and effect fades, all 14 effective lamp connections and three scripted wind-extinguished torches survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Projector three auxiliary and five stencil/no-stencil lights preserve cookies/frusta/RGBA/radii through live fade midpoints/endpoints; enhanced blue wash is scaled to .15 (point 9) / .3 (spot 2) without scaling the five projections; shelf point 44 four-second fade to zero radius survives switching. Original active/visibility states, nine boxes and legacy HPL2 light retained. Two aperture lights do not accumulate or enter legacy light; prisoner hatch is enclosed, not sky. Light-only checks do not execute stencil inventory, lever choices, prisoner harm, enemy chase, perma death or progression.";
                 report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
             }
             finally

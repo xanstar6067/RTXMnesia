@@ -1,0 +1,670 @@
+{
+  "lights": [
+    {
+      "name": "SpotLight_no_stencil",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "BoxLight_3",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "PointLight_2",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "SpotLight_2",
+      "intensity": "0.3",
+      "note": "Weaken the scripted blue auxiliary wash only in enhanced rendering: preserve RGBA/radius fades and classic values, while keeping all five original projector cookies and their intensity unchanged. Full auxiliary blue wash hides the silhouette."
+    },
+    {
+      "name": "PointLight_3",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "SpotLight_4",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "PointLight_4",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_4",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_5",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_5",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_6",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_6",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "BoxLight_4",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_5",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_6",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_7",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_8",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_9",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_10",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "BoxLight_11",
+      "note": "Retain authored enclosed library and cellar ambience. Sky shafts do not replace these whole sealed rooms; path tracing has no box custom pass."
+    },
+    {
+      "name": "PointLight_7",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_7",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_8",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_8",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_9",
+      "intensity": "0.15",
+      "note": "Weaken the scripted blue auxiliary wash only in enhanced rendering: preserve RGBA/radius fades and classic values, while keeping all five original projector cookies and their intensity unchanged. Full auxiliary blue wash hides the silhouette."
+    },
+    {
+      "name": "PointLight_1",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_1",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_10",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_10",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_11",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_11",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_12",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_12",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_13",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_13",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_14",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_14",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "SpotLight_5",
+      "intensity": "0",
+      "note": "Replace the two upper grating cones (5/6) with area sources at the measured openings. Keep original shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_15",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker authored dim cellar navigation beneath the skylight shafts. Do not add daylight to the sealed chase corridors."
+    },
+    {
+      "name": "PointLight_16",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker authored dim cellar navigation beneath the skylight shafts. Do not add daylight to the sealed chase corridors."
+    },
+    {
+      "name": "PointLight_34",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small warm grating niche accent; the area light supplies direct shadowed light from the shaft. Retain a little niche glow in every enhanced mode."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_36",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Weaken the small warm grating niche accent; the area light supplies direct shadowed light from the shaft. Retain a little niche glow in every enhanced mode."
+    },
+    {
+      "name": "PointLight_37",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_37",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_18",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_18",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_22",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_24",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_24",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_25",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_25",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_26",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_26",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_28",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_28",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_29",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_29",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_30",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_30",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_20",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_20",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_31",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_31",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_33",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_33",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_39",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_39",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_40",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_40",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_41",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_41",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "SpotLight_6",
+      "intensity": "0",
+      "note": "Replace the two upper grating cones (5/6) with area sources at the measured openings. Keep original shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_42",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_42",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "SpotLight_stencil01",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "SpotLight_stencil02",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "SpotLight_stencil03",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "SpotLight_stencil04",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "PointLight_43",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "PointLight_44",
+      "note": "Preserve projector puzzle RGBA, cookie, frustum and scripted fades, secret shelf fade (point 44), or the enclosed prisoner-hatch room / niche accents (point 3/43 and spot 4), which are not an outside window. Never replace or scale these lights."
+    },
+    {
+      "name": "PointLight_45",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_45",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
+    }
+  ],
+  "add": [
+    {
+      "name": "Sky_cellar_shaft_west",
+      "type": "rect",
+      "position": "26.4475 5.8 35.0105",
+      "target": "26.4475 -3 35.0105",
+      "size": "2 2",
+      "color": ".78 .68 .56",
+      "intensity": "100",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted warm sky below the authored black shaft cap at y6 (Plane30/31). Existing four sloping shaft walls and sewer grate at y2 shape its shadows; original sky cone is disabled only for enhanced rendering."
+    },
+    {
+      "name": "Sky_cellar_shaft_east",
+      "type": "rect",
+      "position": "32.5022 5.8 37.9555",
+      "target": "32.5022 -3 37.9555",
+      "size": "2 2",
+      "color": ".78 .68 .56",
+      "intensity": "100",
+      "range": "16",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Transmitted warm sky below the authored black shaft cap at y6 (Plane30/31). Existing four sloping shaft walls and sewer grate at y2 shape its shadows; original sky cone is disabled only for enhanced rendering."
+    }
+  ]
+}
