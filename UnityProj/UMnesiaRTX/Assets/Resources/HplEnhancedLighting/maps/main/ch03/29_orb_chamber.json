@@ -1,0 +1,533 @@
+{
+  "lights": [
+    {
+      "name": "PointLight_2",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_8",
+      "position": "-11.25000 1.25611 8.08546",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_2: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_9",
+      "position": "-9.18408 1.25611 1.46892",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_1: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_10",
+      "position": "-9.00000 1.25611 14.75000",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_3: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_11",
+      "position": "-4.25000 1.25611 18.25000",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_4: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_12",
+      "position": "4.50000 1.25611 18.25000",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_5: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_14",
+      "position": "11.21520 1.25611 7.92475",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_7: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_15",
+      "position": "9.42947 1.25611 1.85908",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_8: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_20",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_20",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_21",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_23",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_18",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_26",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_16",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_16",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_17",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_19",
+      "position": "9.00000 1.25611 14.69120",
+      "range": "12",
+      "intensity": "4",
+      "shadows": "on",
+      "sourceRadius": "0.06",
+      "note": "Actual flame of torch_floor_no_light_6: this lamp has particles but no owned light. Place its existing authored map light at particle height 1.10611 plus flame lift .15; retain the original colour and one-second scripted extinction. First source only; ending duplicates do not move."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "BoxLight_1",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_28",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_29",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_30",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_31",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_3",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_35",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_4",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_5",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_33",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_38",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_40",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_36",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_37",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_39",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_41",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_42",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_43",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_44",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_45",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_32",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_1",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "BoxLight_4",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "BoxLight_5",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_57",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_57",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_63",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_63",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_71",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_71",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_99",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_99",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_72",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_72",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_73",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_73",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "BoxLight_2",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_22",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "SpotLight_2",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "SpotLight_14",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "SpotLight_18",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_34",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_13",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "SpotLight_25",
+      "intensity": "0",
+      "note": "Detached sewer-window cone in the Daniel ending is replaced by a shadowed area light at the measured window mouth. Keep the original shadow flag, colour, radius and legacy spot frustum; do not move the original gameplay light."
+    },
+    {
+      "name": "SpotLight_28",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "SpotLight_1",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "BoxLight_3",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_74",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_74",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_64",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_64",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_6",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_7",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_24",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_25",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_46",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_47",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_48",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_48",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached overhead orb-chamber / ending corridor bounce. Real local flames and magical sources provide direct light and GI; keep weaker navigation fill without RTGI or SSGI. Name lookup selects the first original occurrence only; later ending duplicates remain untouched."
+    },
+    {
+      "name": "PointLight_49",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_50",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_51",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    },
+    {
+      "name": "PointLight_52",
+      "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
+    }
+  ],
+  "add": [
+    {
+      "name": "Ending_window_sky_1",
+      "type": "rect",
+      "position": "55.0911 4.46 71.3154",
+      "target": "55.0911 4.46 77",
+      "size": "2.3 5.1",
+      "color": "0.55 0.65 0.78",
+      "intensity": "100",
+      "range": "15",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Daniel ending castle entrance: measured blue glass at local z=-.999, x=-1.245..1.257, y=1.75..7.177. Sky just inside glass, directed into the room; bars and masonry cast shadows. Existing duplicate-named window lights remain unchanged."
+    },
+    {
+      "name": "Ending_window_sky_2",
+      "type": "rect",
+      "position": "47.0911 4.46 71.3154",
+      "target": "47.0911 4.46 77",
+      "size": "2.3 5.1",
+      "color": "0.55 0.65 0.78",
+      "intensity": "100",
+      "range": "15",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Daniel ending castle entrance: measured blue glass at local z=-.999, x=-1.245..1.257, y=1.75..7.177. Sky just inside glass, directed into the room; bars and masonry cast shadows. Existing duplicate-named window lights remain unchanged."
+    },
+    {
+      "name": "Ending_window_sky_3",
+      "type": "rect",
+      "position": "63.0911 4.46 71.3154",
+      "target": "63.0911 4.46 77",
+      "size": "2.3 5.1",
+      "color": "0.55 0.65 0.78",
+      "intensity": "100",
+      "range": "15",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Daniel ending castle entrance: measured blue glass at local z=-.999, x=-1.245..1.257, y=1.75..7.177. Sky just inside glass, directed into the room; bars and masonry cast shadows. Existing duplicate-named window lights remain unchanged."
+    },
+    {
+      "name": "Ending_sewer_window_sky",
+      "type": "rect",
+      "position": "49.4655 5.14 24.2402",
+      "target": "47.2 2 24.2402",
+      "size": "1.3 0.6",
+      "color": "0.7 0.6 0.38",
+      "intensity": "120",
+      "range": "12",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Daniel ending sewer: transmitted sky at the measured inner mouth, local z=-.2 and y=1.14 (mouth y=.795..1.502), rotated -90 degrees around Y. The farther upper opening is occluded by the bent shaft. Preserve the authored warm montage palette; illuminate from the aperture instead of the old cone inside the room."
+    }
+  ]
+}

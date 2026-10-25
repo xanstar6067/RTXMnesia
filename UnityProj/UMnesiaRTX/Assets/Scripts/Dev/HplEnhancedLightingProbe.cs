@@ -119,6 +119,7 @@ namespace RTXMnesia.Dev
                 VerifyZimmermanLighting(map, user, report);
                 VerifyChancelReduxLighting(map, user, report);
                 VerifyInnerSanctumLighting(map, user, report);
+                VerifyOrbChamberLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -174,6 +175,7 @@ namespace RTXMnesia.Dev
                     ApplyZimmermanLightingPreview(map, mode);
                     ApplyChancelReduxLightingPreview(map, mode);
                     ApplyInnerSanctumLightingPreview(map, mode);
+                    ApplyOrbChamberLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3552,6 +3554,141 @@ namespace RTXMnesia.Dev
             {
                 foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
                 foreach (var (light, data, _) in saved) light.Restore(data);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly string[] OrbChamberTorches = { "PointLight_9", "PointLight_8", "PointLight_10", "PointLight_11", "PointLight_12", "PointLight_19", "PointLight_14", "PointLight_15" };
+        static readonly string[] OrbChamberBeams = { "PointLight_28", "PointLight_29", "PointLight_30", "PointLight_33", "PointLight_38", "PointLight_40" };
+        static readonly HashSet<string> OrbChamberFills = new() { "PointLight_16", "PointLight_17", "PointLight_20", "PointLight_21", "PointLight_23", "PointLight_27", "PointLight_48", "PointLight_57", "PointLight_63", "PointLight_64", "PointLight_71", "PointLight_72", "PointLight_73", "PointLight_74", "PointLight_99" };
+
+        static void ApplyOrbChamberLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/29_orb_chamber.map", StringComparison.Ordinal)) return;
+            bool slime = mode.Contains("orbslime"), torchOut = slime || mode.Contains("orbtorchout");
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = mode.Contains("orballlit") || lamp.Component.GetVariable("Lit") != "false";
+                    if (mode.Contains("orballoff") || torchOut && lamp.Name.StartsWith("torch_floor_", StringComparison.Ordinal)) on = false;
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                    foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) l.SetFlickerActive(false);
+                }
+            foreach (var l in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!l.handHeld && !l.enhancedAdded && l.GetComponentInParent<AmnesiaEntity>() == null)
+                { l.StopFading(); l.SetFlickerActive(false); l.SetColor(l.diffuseColor); l.SetRadius(l.radius); }
+            if (mode.Contains("orbflash")) map.GetLight("PointLight_47").SetColor(new Color(.2f, .2f, 1f, 1f));
+            if (mode.Contains("orbrodsout") || mode.Contains("orbportal")) foreach (string name in OrbChamberBeams) map.GetLight(name).SetColor(Color.clear);
+            if (mode.Contains("orbportal")) map.GetLight("PointLight_32").SetColor(mode.Contains("orbportalout") ? Color.clear : new Color(.3f, .8f, 1f, 1f));
+            if (torchOut) foreach (string name in OrbChamberTorches) map.GetLight(name).SetColor(Color.clear);
+            if (slime)
+            {
+                foreach (string name in new[] { "PointLight_18", "PointLight_2" }) { map.GetLight(name).SetColor(new Color(1f, 0f, .2f, 1f)); map.GetLight(name).SetRadius(6f); }
+                map.GetLight("PointLight_32").SetColor(new Color(1f, 0f, .2f, 1f));
+                foreach (string name in new[] { "PointLight_28", "PointLight_29" }) map.GetLight(name).SetColor(new Color(1f, 0f, .2f, .7f));
+            }
+        }
+
+        static void VerifyOrbChamberLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/29_orb_chamber.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data, bool active)>();
+            foreach (var l in map.GetComponentsInChildren<AmnesiaLight>(true)) if (!l.handHeld && !l.enhancedAdded) saved.Add((l, l.Save(), l.gameObject.activeSelf));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 32) throw new InvalidOperationException("Orb chamber: expected 32 lamps");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            int fades = 0;
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, bool visible, bool flicker, Vector3 position, Vector3 sample, float level, float intensity)>();
+                foreach (var (l, _, active) in saved)
+                {
+                    if (l.gameObject.activeSelf != active) throw new InvalidOperationException("Orb chamber: active state changed " + l.name);
+                    Vector3 sample = l.transform.position + l.transform.forward * .3f;
+                    sources.Add((l, l.CurrentColor, l.CurrentRadius, l.Visible, l.FlickerActive, l.transform.position, sample, l.LightLevelAt(sample, 0f),
+                        l.GetComponentInParent<AmnesiaEntity>() == null && l.TryGetComponent<Light>(out var rendered) ? rendered.intensity : -1f));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var s = classic.Copy(); s.lightingSet = mode == 4 ? 0 : 1; s.lighting = mode < 2 ? 1 : 0;
+                    s.rtGi = mode == 0 ? 2 : 0; s.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(s);
+                    int duplicates = 0;
+                    foreach (var e in sources)
+                    {
+                        bool selected = map.GetLight(e.light.name) == e.light;
+                        int torch = selected ? Array.IndexOf(OrbChamberTorches, e.light.name) : -1;
+                        float factor = mode == 4 || !selected ? 1f : torch >= 0 ? 4f : e.light.name == "SpotLight_25" ? 0f : OrbChamberFills.Contains(e.light.name) ? (mode is 0 or 2 ? 0f : .6f) : 1f;
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible || e.light.FlickerActive != e.flicker ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || e.light.box && e.light.enhancedIntensity != 1f ||
+                            e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * factor) > 1e-4f * Mathf.Max(1f, e.intensity))
+                            throw new InvalidOperationException("Orb chamber: source/fade/fallback/legacy light changed " + e.light.name);
+                        if (e.intensity >= 0f)
+                        {
+                            Vector3 expected = mode != 4 && torch >= 0 ? ((Props.PropLamp)map.GetEntityByName("torch_floor_no_light_" + (torch + 1))).Component.transform.position + Vector3.up * 1.25611f : e.position;
+                            if ((e.light.transform.position - expected).sqrMagnitude > 1e-7f) throw new InvalidOperationException("Orb chamber: torch/duplicate placement changed " + e.light.name);
+                            if (!selected) duplicates++;
+                        }
+                    }
+                    if (duplicates != 25) throw new InvalidOperationException("Orb chamber: expected 25 later duplicate sources");
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        int own = 0; float value = 0f;
+                        foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) if (l.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0) { noLight++; continue; }
+                        if (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f) throw new InvalidOperationException("Orb chamber: lamp effects lost " + lamp.Name);
+                    }
+                    if (noLight != 8) throw new InvalidOperationException("Orb chamber: expected eight no_light torches");
+                    int added = 0;
+                    foreach (var l in AmnesiaLight.All) if (l != null && l.enhancedAdded) { added++; if (l.LightLevelAt(l.transform.position, 0f) != 0f) throw new InvalidOperationException("Orb chamber: sky affects legacy gameplay light"); }
+                    if (added != (mode == 4 ? 0 : 4)) throw new InvalidOperationException("Orb chamber: window light accumulation / visibility");
+                }
+            }
+            void Fade(string name, Color target, float radius, float duration)
+            {
+                var l = map.GetLight(name); l.SetFlickerActive(false); l.SetVisible(true); Color start = l.CurrentColor; float oldRadius = l.CurrentRadius;
+                l.FadeTo(target, radius, duration); l.UpdateLight(duration * .5f); VerifyModes();
+                if (l.CurrentColor == target && l.CurrentRadius == radius && (start != target || oldRadius != radius)) throw new InvalidOperationException("Orb chamber: missing midpoint " + name);
+                l.UpdateLight(duration * .5f); VerifyModes();
+                if (l.CurrentColor != target || l.CurrentRadius != radius) throw new InvalidOperationException("Orb chamber: fade interrupted " + name);
+                fades++;
+            }
+            void ColourFade(string name, Color color, float duration) => Fade(name, color, map.GetLight(name).CurrentRadius, duration);
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true }) { foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); } VerifyModes(); }
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (float speed in new[] { 1f, 1.5f, 2f, 4f })
+                { ColourFade("PointLight_47", new Color(.2f, .2f, 1f, 1f), 1f / speed); ColourFade("PointLight_47", Color.clear, 1f / speed); }
+                foreach (string name in new[] { "PointLight_26", "PointLight_32", "BoxLight_2", "BoxLight_3" })
+                {
+                    var l = map.GetLight(name); l.SetFlickerActive(true); var colours = new HashSet<Color>();
+                    for (int step = 0; step < 8; step++) { l.UpdateLight(.2f); colours.Add(l.CurrentColor); VerifyModes(); }
+                    if (colours.Count < 2) throw new InvalidOperationException("Orb chamber: live flicker stopped " + name);
+                    l.SetFlickerActive(false); l.StopFading(); l.SetColor(l.diffuseColor); l.SetRadius(l.radius);
+                }
+                // Rod order differs from the portal's list: all three two-light groups still extinguish.
+                foreach (string name in new[] { "PointLight_29", "PointLight_40", "PointLight_38", "PointLight_28", "PointLight_33", "PointLight_30" }) ColourFade(name, Color.clear, 1f);
+                foreach (string name in OrbChamberBeams) { var l = map.GetLight(name); l.SetColor(l.diffuseColor); ColourFade(name, Color.clear, 1f); }
+                ColourFade("PointLight_32", new Color(.3f, .8f, 1f, 1f), 3f); ColourFade("PointLight_32", Color.clear, 2f);
+                foreach (var (lamp, _) in lamps) if (lamp.Name.StartsWith("torch_floor_", StringComparison.Ordinal)) { lamp.SetLit(false, true); lamp.UpdateLogic(.5f); }
+                VerifyModes();
+                foreach (var (lamp, _) in lamps) if (lamp.Name.StartsWith("torch_floor_", StringComparison.Ordinal)) lamp.UpdateLogic(.5f);
+                foreach (string name in OrbChamberTorches) ColourFade(name, Color.clear, 1f);
+                Fade("PointLight_18", new Color(1f, 0f, .2f, 1f), 6f, 3f); ColourFade("PointLight_32", new Color(1f, 0f, .2f, 1f), 3f);
+                foreach (string name in new[] { "PointLight_28", "PointLight_29" }) ColourFade(name, new Color(1f, 0f, .2f, .7f), 3f);
+                Fade("PointLight_2", new Color(1f, 0f, .2f, 1f), 6f, 3f);
+                if (fades != 35) throw new InvalidOperationException("Orb chamber: incomplete fade coverage");
+                string line = "Orb chamber state PASS: 32 lamp states (24 with owned light, eight no_light torches), eight map sources moved to real flames with authored extinction, four live flickers and 35 continuing countdown/rod/portal/torch/red-slime fades across RTGI, RT no-GI, SSGI, raster no-GI and classic. All 25 later duplicate sources retain placement and intensity; five boxes and original RGBA/radii/visibility/legacy HPL2 light survive. Four window lights do not accumulate or enter legacy light. Light-only checks do not run endings or credits.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (l, data, _) in saved) l.Restore(data);
                 HplGraphics.Apply(user);
             }
         }
