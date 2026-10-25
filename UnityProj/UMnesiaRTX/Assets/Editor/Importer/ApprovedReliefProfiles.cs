@@ -49,7 +49,7 @@ namespace RTXMnesia.Importer
             string stand = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief/" + stem;
             var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(stand + "_solid.asset");
             if (mesh == null) throw new InvalidOperationException("Build the approved relief stand first: " + stem);
-            var data = new Data { boards = boards, signature = (boards ? "approved-v1|" : "approved-v3|") + AssetDatabase.GetAssetDependencyHash(stand + "_solid.asset") + "|" + prepared.sourceSignature };
+            var data = new Data { boards = boards, signature = (boards ? "approved-v2|" : "approved-v3|") + AssetDatabase.GetAssetDependencyHash(stand + "_solid.asset") + "|" + prepared.sourceSignature };
             var positions = mesh.vertices;
             int size = boards ? 0 : Mathf.RoundToInt(Mathf.Sqrt(mesh.GetSubMesh(0).vertexCount));
             var lo = new Vector2(.025f, .66f); var hi = new Vector2(.68f, .975f);

@@ -233,18 +233,26 @@ namespace RTXMnesia.Hpl
             s_gi.denoiserRadius = 0.66f;
         }
 
+        /// <summary>A transparent mesh thinner than this (m) in some axis is a decal laid on a surface.</summary>
+        const float FlatTransparentThickness = 0.02f;
+
         /// <summary>
         /// Renderers of the HPL shaders (RTXMnesia/*: particles, halos, Mul decals, water) and mesh decals (HDRP/Decal)
         /// have no ray tracing pass: in the acceleration structure the path tracer drew them black (it takes transparent
         /// materials too; the dirt decals covered the floors). They are transparent or decals, so the raster RT
-        /// effects never needed them either.
+        /// effects never needed them either. So are flat transparent meshes laid on a surface (the blood trails
+        /// trail_amnesia_floor, a centimetre above the floor): the rays took the whole quad as solid, and its traced
+        /// shadow and occlusion drew a black square on the floor under the blood.
         /// </summary>
         public static void Exclude(Renderer renderer)
         {
             if (renderer == null || renderer.rayTracingMode == UnityEngine.Experimental.Rendering.RayTracingMode.Off) return;
+            var size = renderer.bounds.size;
+            bool flat = Mathf.Min(size.x, Mathf.Min(size.y, size.z)) < FlatTransparentThickness;
             foreach (var material in renderer.sharedMaterials)
                 if (material != null && material.shader != null &&
-                    (material.shader.name.StartsWith("RTXMnesia/", StringComparison.Ordinal) || material.FindPass("DBufferMesh") >= 0))
+                    (material.shader.name.StartsWith("RTXMnesia/", StringComparison.Ordinal) || material.FindPass("DBufferMesh") >= 0 ||
+                     flat && material.HasProperty("_SurfaceType") && material.GetFloat("_SurfaceType") == 1f))
                 {
                     renderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
                     return;

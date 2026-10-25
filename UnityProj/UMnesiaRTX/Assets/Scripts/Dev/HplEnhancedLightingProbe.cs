@@ -392,6 +392,7 @@ namespace RTXMnesia.Dev
                                   $"RT={HplRayTracing.Active} SSGI={HplRayTracing.ScreenGi} shadow cache={HplShadowCache.CachedLights} (redraws {redraws}, no room {HplShadowCache.Fallbacks}) traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
                     report.AppendLine(line);
                     report.AppendLine($"    camera hpl={HplSpace.Position(camera.transform.position)}; silent volume={AudioListener.volume:0.00}");
+                    report.AppendLine("    " + ShadowBudget(camera));
                     Debug.Log("[EnhancedLighting] " + line);
                     // Whose shadows show in this view (HplLightAnalysis; the raster modes do not run it, so it runs here,
                     // a few estimates to settle the smoothing).
@@ -4227,6 +4228,28 @@ namespace RTXMnesia.Dev
         {
             UnityEditor.SessionState.SetInt(ExitCodeKey, code);
             UnityEditor.EditorApplication.isPlaying = false;
+        }
+
+        /// <summary>
+        /// The shadow maps this view wants (enabled lights with shadows whose range reaches the frustum: a point light six
+        /// maps, others one) against what HDRP reserved in its last frame and its limit (maxShadowRequests): past the
+        /// limit HDRP silently drops the rest, and those lights shine through walls.
+        /// </summary>
+        static string ShadowBudget(Camera camera)
+        {
+            var planes = GeometryUtility.CalculateFrustumPlanes(camera);
+            int wanted = 0, lights = 0;
+            foreach (var l in FindObjectsByType<Light>(FindObjectsInactive.Exclude))
+            {
+                if (!l.enabled || l.shadows == LightShadows.None || l.type == LightType.Directional) continue;
+                if (!GeometryUtility.TestPlanesAABB(planes, new Bounds(l.transform.position, Vector3.one * (2 * l.range)))) continue;
+                lights++;
+                wanted += l.type == LightType.Point ? 6 : 1;
+            }
+            var manager = Type.GetType("UnityEngine.Rendering.HighDefinition.HDShadowManager, Unity.RenderPipelines.HighDefinition.Runtime")
+                ?.GetProperty("instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?.GetValue(null);
+            object Field(string name) => manager?.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(manager);
+            return $"shadow budget: {lights} shadowed lights reach the view, {wanted} maps wanted; HDRP reserved {Field("m_ShadowRequestCount")} of {Field("m_MaxShadowRequests")}";
         }
     }
 }

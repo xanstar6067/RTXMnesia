@@ -14,7 +14,7 @@ namespace RTXMnesia.World
     /// or changes its range. What can move are the entities of the map (props, doors, enemies, critters, NPCs; static
     /// objects never move) and the copies of dissolving entities. The lantern in the hand and area lights keep their
     /// shadow maps every frame.
-    /// The atlas (4096², ConfigureHDRP) holds about 15 lamps at 512 (a point light is six maps), fewer than a map has;
+    /// The atlas (8192², ConfigureHDRP) holds about 150 lamps at 256 or 40 at 512 (a point light is six maps), fewer than a map has;
     /// the other lights render every frame, which costs nothing while they are out of view. So the places go to the
     /// lights nearest to the camera, chosen again twice a second (the cached ones a little longer, so that two lights
     /// at about the same distance do not swap); a light HDRP still cannot place renders every frame.

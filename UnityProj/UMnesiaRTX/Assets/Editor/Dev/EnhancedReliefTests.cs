@@ -176,7 +176,7 @@ namespace RTXMnesia.EditorDev
                 {
                     Check(boards.vertexCount > 100 && boards.vertexCount < 20000, "UV-clipped planks support mirrored, offset and repeated UVs without dense tessellation");
                     Check(boards.normals.Any(n => Mathf.Abs(n.z) < .1f) && boards.normals.Any(n => n.z > .99f), "planks have real hard vertical sides and flat faces");
-                    Check(boards.vertices.All(v => float.IsFinite(v.x) && float.IsFinite(v.y) && v.z * 3 > -.0061f && v.z * 3 < .0106f), "plank thickness stays in metres under nonuniform scale");
+                    Check(boards.vertices.All(v => float.IsFinite(v.x) && float.IsFinite(v.y) && v.z * 3 > -.0166f && v.z * 3 < .0001f), "plank thickness stays in metres under nonuniform scale");
                     Check(boards.tangents.All(t => float.IsFinite(t.x) && float.IsFinite(t.y) && float.IsFinite(t.z)), "plank face and side tangent frames remain finite");
                 }
                 finally { Object.DestroyImmediate(boards); }

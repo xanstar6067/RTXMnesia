@@ -296,7 +296,9 @@ namespace RTXMnesia.Importer
         {
             float[] rows = { 0, .130f, .255f, .382f, .505f, .632f, .757f, .882f, 1 };
             float[] ends = { .151f, .976f, .475f, .980f, .305f, .882f, .624f, .125f };
-            const float gap = .002f / 2.2f, bottom = -.006f;
+            // Plank faces at most at the original plane (0 to -3 mm), gaps 15 mm deeper: carpets and decals of the map lie
+            // a few millimetres above the floor, and planks raised above it (+7.5 to +10.5 mm) cut through them.
+            const float gap = .002f / 2.2f, bottom = -.0165f;
             var output = new List<Vertex>(); var indices = new List<int>();
             Vector2 Uv(Vertex v) => Vector2.Scale((Vector2)v.uv0, surface.uvScale) + surface.uvOffset;
             Vertex Blend(Vertex a, Vertex b, float t) => new Vertex {
@@ -346,7 +348,7 @@ namespace RTXMnesia.Importer
                     float y0 = ty + 1 - rows[row + 1] + gap, y1 = ty + 1 - rows[row] - gap;
                     var polygon = Clip(Clip(Clip(Clip(original, 0, x0, true), 0, x1, false), 1, y0, true), 1, y1, false);
                     if (polygon.Count < 3) continue;
-                    float height = .009f + Mathf.Sin(row * 3.7f + piece) * .0015f;
+                    float height = -.0015f + Mathf.Sin(row * 3.7f + piece) * .0015f;
                     Face(polygon, height);
                     for (int j = 0; j < polygon.Count; j++)
                     {
