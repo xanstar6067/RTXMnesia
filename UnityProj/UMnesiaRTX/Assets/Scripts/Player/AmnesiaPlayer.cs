@@ -264,7 +264,7 @@ namespace RTXMnesia.Player
             PlaceAt(save.feet, save.yaw);
             _pitch = Mathf.Clamp(save.pitch, _pitchMin, _pitchMax);
             Save.HplFieldBag.RestoreNamed(this, save.fields);
-            UpdateCameraTransform(1f);
+            SnapCamera();
         }
 
         /// <summary>cLuxPlayer::DoAction: the state first; if it lets the action through, the lantern key toggles the lantern.</summary>
@@ -304,6 +304,9 @@ namespace RTXMnesia.Player
         float _aspectMul = 1f, _aspectMulGoal = 1f, _aspectMulSpeed;
         float _roll, _rollGoal, _rollSpeedMul, _rollMaxSpeed;
         float _leanRoll, _leanRollGoal, _leanRollSpeedMul, _leanRollMaxSpeed;
+        float _previousCameraRoll;
+        Quaternion _requestedCameraRotation, _appliedCameraRotation;
+        bool _hasCameraRotation;
 
         int _maxSmoothMousePos = 7;
         float _prevSmoothMousePosMul = 0.7f;
@@ -465,7 +468,7 @@ namespace RTXMnesia.Player
             Body.Yaw = _yaw;
             Body.Step(0.001f);
             Body.SetFeetPosition(Body.FeetPosition);
-            UpdateCameraTransform(1f);
+            SnapCamera();
         }
 
         // ------------------------------------------------------------------ update
@@ -584,6 +587,7 @@ namespace RTXMnesia.Player
         public void StepLogic(float dt, Action collideCallbacks = null)
         {
             if (_freeCameraActive) return;
+            _previousCameraRoll = Roll;
 
             if (active)
             {
@@ -717,18 +721,33 @@ namespace RTXMnesia.Player
         }
 
         /// <summary>Put the camera at the latest step (no interpolation).</summary>
-        public void SnapCamera() => UpdateCameraTransform(1f);
+        public void SnapCamera()
+        {
+            _previousCameraRoll = Roll;
+            UpdateCameraTransform(1f);
+        }
 
         void UpdateCameraTransform(float alpha)
         {
             if (playerCamera == null) return;
             Vector3 position = Body.InterpolatedCameraPosition(alpha);
-            var rotation = Quaternion.Euler(_pitch * Mathf.Rad2Deg, _yaw * Mathf.Rad2Deg, (_roll + _leanRoll) * Mathf.Rad2Deg);
+            float roll = Mathf.LerpUnclamped(_previousCameraRoll, Roll, alpha);
+            var rotation = Quaternion.Euler(_pitch * Mathf.Rad2Deg, _yaw * Mathf.Rad2Deg, roll * Mathf.Rad2Deg);
             // A standing player keeps the exact camera: the body's sub-millimetre noise between steps would change the
             // view matrix every frame, and HDRP's path tracer starts its accumulation again on any change.
             var t = playerCamera.transform;
-            if ((t.position - position).sqrMagnitude > 1e-8f || Quaternion.Angle(t.rotation, rotation) > 0.001f)
-                t.SetPositionAndRotation(position, rotation);
+            if ((t.position - position).sqrMagnitude > 1e-8f) t.position = position;
+            // Quaternion.Angle (and operator ==) rounds small rotations to zero. Slow scripted sway would
+            // accumulate into visible jumps while standing; walking used to bypass that comparison.
+            // Compare requested components exactly, caching the applied rotation too so transform round-off
+            // cannot keep a truly stationary camera updating and resetting path tracing accumulation.
+            if (!_hasCameraRotation || !_requestedCameraRotation.Equals(rotation) || !_appliedCameraRotation.Equals(t.rotation))
+            {
+                t.rotation = rotation;
+                _requestedCameraRotation = rotation;
+                _appliedCameraRotation = t.rotation;
+                _hasCameraRotation = true;
+            }
             // FOV is vertical in both engines; the aspect multiplier squeezes the view (FadePlayerAspectMulTo).
             float fov = _fov * _fovMul;
             if (Mathf.Abs(playerCamera.fieldOfView - fov) > 1e-4f) playerCamera.fieldOfView = fov;
@@ -877,7 +896,11 @@ namespace RTXMnesia.Player
             _rollMaxSpeed = maxSpeed;
         }
 
-        public void SetRoll(float roll) => _roll = _rollGoal = roll;
+        public void SetRoll(float roll)
+        {
+            _roll = _rollGoal = roll;
+            _previousCameraRoll = Roll;
+        }
 
         public void FadeFOVMulTo(float mul, float speed)
         {
@@ -1101,7 +1124,7 @@ namespace RTXMnesia.Player
             if (_freeCamera == null) return;
             _freeCameraActive = active;
             _freeCamera.enabled = active;
-            if (!active) UpdateCameraTransform(1f);
+            if (!active) SnapCamera();
         }
 
         public static void LockCursor(bool locked)
