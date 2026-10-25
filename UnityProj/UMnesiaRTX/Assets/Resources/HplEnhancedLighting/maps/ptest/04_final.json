@@ -1,0 +1,786 @@
+{
+  "lights": [
+    {
+      "name": "PointLight_10",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_10",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_12",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_13",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_13",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_14",
+      "note": "Retain small authored no_light candle / phonograph / hanging-doll accent unchanged. No invented lamp link; original visibility, RGBA and radius remain."
+    },
+    {
+      "name": "BoxLight_1",
+      "note": "Retain authored enclosed graveyard, passage, stairs and mansion ambience. No outside sky is invented above the solid graveyard roof. Path tracing has no box-light custom pass."
+    },
+    {
+      "name": "BoxLight_2",
+      "note": "Retain authored enclosed graveyard, passage, stairs and mansion ambience. No outside sky is invented above the solid graveyard roof. Path tracing has no box-light custom pass."
+    },
+    {
+      "name": "BoxLight_3",
+      "note": "Retain authored enclosed graveyard, passage, stairs and mansion ambience. No outside sky is invented above the solid graveyard roof. Path tracing has no box-light custom pass."
+    },
+    {
+      "name": "BoxLight_4",
+      "note": "Retain authored enclosed graveyard, passage, stairs and mansion ambience. No outside sky is invented above the solid graveyard roof. Path tracing has no box-light custom pass."
+    },
+    {
+      "name": "PointLight_15",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_15",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_18",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_18",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "SpotLight_5",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_39",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "SpotLight_6",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_40",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "BoxLight_5",
+      "note": "Retain authored enclosed graveyard, passage, stairs and mansion ambience. No outside sky is invented above the solid graveyard roof. Path tracing has no box-light custom pass."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_19",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "SpotLight_7",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_41",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "SpotLight_8",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_42",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "SpotLight_9",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_43",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "SpotLight_10",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_44",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "SpotLight_11",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_45",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_26",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_26",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_27",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_28",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_28",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_29",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_29",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "SpotLight_3",
+      "when": "gi",
+      "intensity": "0",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "SpotLight_3",
+      "when": "nogi",
+      "intensity": "0.6",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_4",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_4",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_6",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_6",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_7",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_7",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_8",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_8",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_9",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_9",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_16",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_30",
+      "note": "Retain small authored no_light candle / phonograph / hanging-doll accent unchanged. No invented lamp link; original visibility, RGBA and radius remain."
+    },
+    {
+      "name": "PointLight_31",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_32",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_33",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_33",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_34",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_34",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_35",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_36",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_36",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_37",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_37",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_38",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_46",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_47",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_47",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_48",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_48",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_49",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_49",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_50",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_50",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_5",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_51",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_52",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "SpotLight_15",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_13",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_17",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_12",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_16",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_2",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_14",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "SpotLight_4",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_11",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_53",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "SpotLight_18",
+      "intensity": "0",
+      "note": "Replace detached mansion-window or crushing-room shaft cones with measured aperture lights. Preserve original cookie, RGBA, radius, shadow flag and legacy gameplay frustum."
+    },
+    {
+      "name": "PointLight_54",
+      "intensity": "0.3",
+      "shadows": "off",
+      "note": "Reduce local window / upper shaft niche glow. Shadowed light from the measured opening supplies direct illumination; retain a little authored ambience in every enhanced mode."
+    },
+    {
+      "name": "PointLight_56",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_57",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_58",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_59",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_60",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker shared no_light candle glow or navigation light in the unlit crushing chamber. Five grave candles have no owned lights or links. Do not remove these contributions just because GI is enabled."
+    },
+    {
+      "name": "PointLight_61",
+      "when": "gi",
+      "intensity": "0",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_61",
+      "when": "nogi",
+      "intensity": "0.6",
+      "shadows": "off",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_17",
+      "note": "Retain small authored no_light candle / phonograph / hanging-doll accent unchanged. No invented lamp link; original visibility, RGBA and radius remain."
+    },
+    {
+      "name": "SpotLight_1",
+      "when": "gi",
+      "intensity": "0",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "SpotLight_1",
+      "when": "nogi",
+      "intensity": "0.6",
+      "note": "Detached fill / warm accent is replaced by actual torch and candle flames or measured window sky. Remove with RTGI / SSGI; retain weaker authored fill without GI. Original source and classic gameplay light remain."
+    },
+    {
+      "name": "PointLight_62",
+      "note": "Retain small authored no_light candle / phonograph / hanging-doll accent unchanged. No invented lamp link; original visibility, RGBA and radius remain."
+    },
+    {
+      "name": "PointLight_55",
+      "intensity": "0.7",
+      "shadows": "off",
+      "note": "Retain weaker authored broad crushing-room navigation and hanging-doll accent in every enhanced mode. Shadowed shaft light through the ornate grates does not replace this underside fill; removing it with GI hides the important doll."
+    }
+  ],
+  "add": [
+    {
+      "name": "Sky_wall_window02_blue_1",
+      "type": "rect",
+      "position": "44.60019 14.42600 -87.74950",
+      "target": "40.75019 14.42598 -87.74949",
+      "size": "1.8 1.6",
+      "color": ".55 .65 .78",
+      "intensity": "90",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured blue glass bounds local x +/-1.092, y1.455..3.397, z-.284. Outgoing sky at local (0,2.426,.15), just inward of the frame maximum z.117; five forward rays through centre and corners clear the model. Full authored XYZ rotation applied; not a point floating in the hall."
+    },
+    {
+      "name": "Sky_wall_window02_blue_2",
+      "type": "rect",
+      "position": "44.60019 14.42600 -81.74950",
+      "target": "40.75019 14.42598 -81.74949",
+      "size": "1.8 1.6",
+      "color": ".55 .65 .78",
+      "intensity": "90",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured blue glass bounds local x +/-1.092, y1.455..3.397, z-.284. Outgoing sky at local (0,2.426,.15), just inward of the frame maximum z.117; five forward rays through centre and corners clear the model. Full authored XYZ rotation applied; not a point floating in the hall."
+    },
+    {
+      "name": "Sky_wall_window02_blue_3",
+      "type": "rect",
+      "position": "43.35021 14.42600 -75.49950",
+      "target": "39.50021 14.42602 -75.49951",
+      "size": "1.8 1.6",
+      "color": ".55 .65 .78",
+      "intensity": "90",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured blue glass bounds local x +/-1.092, y1.455..3.397, z-.284. Outgoing sky at local (0,2.426,.15), just inward of the frame maximum z.117; five forward rays through centre and corners clear the model. Full authored XYZ rotation applied; not a point floating in the hall."
+    },
+    {
+      "name": "Sky_wall_window02_blue_4",
+      "type": "rect",
+      "position": "43.35019 14.42600 -67.49950",
+      "target": "39.50019 14.42598 -67.49949",
+      "size": "1.8 1.6",
+      "color": ".55 .65 .78",
+      "intensity": "90",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured blue glass bounds local x +/-1.092, y1.455..3.397, z-.284. Outgoing sky at local (0,2.426,.15), just inward of the frame maximum z.117; five forward rays through centre and corners clear the model. Full authored XYZ rotation applied; not a point floating in the hall."
+    },
+    {
+      "name": "Sky_wall_window02_blue_5",
+      "type": "rect",
+      "position": "43.35019 14.42600 -59.49950",
+      "target": "39.50019 14.42598 -59.49951",
+      "size": "1.8 1.6",
+      "color": ".55 .65 .78",
+      "intensity": "90",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured blue glass bounds local x +/-1.092, y1.455..3.397, z-.284. Outgoing sky at local (0,2.426,.15), just inward of the frame maximum z.117; five forward rays through centre and corners clear the model. Full authored XYZ rotation applied; not a point floating in the hall."
+    },
+    {
+      "name": "Sky_wall_window02_blue_6",
+      "type": "rect",
+      "position": "38.15021 14.42600 -63.49950",
+      "target": "42.00021 14.42598 -63.49951",
+      "size": "1.8 1.6",
+      "color": ".55 .65 .78",
+      "intensity": "90",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured blue glass bounds local x +/-1.092, y1.455..3.397, z-.284. Outgoing sky at local (0,2.426,.15), just inward of the frame maximum z.117; five forward rays through centre and corners clear the model. Full authored XYZ rotation applied; not a point floating in the hall."
+    },
+    {
+      "name": "Sky_wall_window02_blue_7",
+      "type": "rect",
+      "position": "38.15020 14.42600 -71.49950",
+      "target": "42.00020 14.42600 -71.49949",
+      "size": "1.8 1.6",
+      "color": ".55 .65 .78",
+      "intensity": "90",
+      "range": "14",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured blue glass bounds local x +/-1.092, y1.455..3.397, z-.284. Outgoing sky at local (0,2.426,.15), just inward of the frame maximum z.117; five forward rays through centre and corners clear the model. Full authored XYZ rotation applied; not a point floating in the hall."
+    },
+    {
+      "name": "Sky_ceiling_window_high_2",
+      "type": "rect",
+      "position": "-7.00000 10.60000 -72.75000",
+      "target": "-7.00000 6.25000 -72.75000",
+      "size": "1.8 1.8",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "18",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured upper shaft: sky cap local y4.955, light y4.7 below it; authored half-height scale places sky at world y10.6. Five downward rays through the 1.8m aperture clear the shaft walls. Keep hanging doll and original gobo sources as scene objects, not as new outside openings."
+    },
+    {
+      "name": "Sky_ceiling_window_high_3",
+      "type": "rect",
+      "position": "-2.52372 10.60000 -72.75000",
+      "target": "-2.52372 6.25000 -72.75000",
+      "size": "1.8 1.8",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "18",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured upper shaft: sky cap local y4.955, light y4.7 below it; authored half-height scale places sky at world y10.6. Five downward rays through the 1.8m aperture clear the shaft walls. Keep hanging doll and original gobo sources as scene objects, not as new outside openings."
+    },
+    {
+      "name": "Sky_ceiling_window_high_4",
+      "type": "rect",
+      "position": "2.00036 10.60000 -72.75000",
+      "target": "2.00036 6.25000 -72.75000",
+      "size": "1.8 1.8",
+      "color": ".55 .65 .78",
+      "intensity": "120",
+      "range": "18",
+      "shadows": "on",
+      "specular": "off",
+      "note": "Measured upper shaft: sky cap local y4.955, light y4.7 below it; authored half-height scale places sky at world y10.6. Five downward rays through the 1.8m aperture clear the shaft walls. Keep hanging doll and original gobo sources as scene objects, not as new outside openings."
+    }
+  ]
+}
