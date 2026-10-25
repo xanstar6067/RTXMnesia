@@ -117,6 +117,7 @@ namespace RTXMnesia.Dev
                 VerifyCellTunnelsLighting(map, user, report);
                 VerifyNaveReduxLighting(map, user, report);
                 VerifyZimmermanLighting(map, user, report);
+                VerifyChancelReduxLighting(map, user, report);
             }
             else report.AppendLine("Snapshot diagnostic: synchronous switching stress checks skipped; normal view modes still switch settings.");
             bool previewFog = map.FogActive;
@@ -170,6 +171,7 @@ namespace RTXMnesia.Dev
                     ApplyCellTunnelsLightingPreview(map, mode);
                     ApplyNaveReduxLightingPreview(map, mode);
                     ApplyZimmermanLightingPreview(map, mode);
+                    ApplyChancelReduxLightingPreview(map, mode);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -3238,6 +3240,153 @@ namespace RTXMnesia.Dev
             {
                 map.effects.Sepia.FadeTo(sepia, 100f); map.effects.Sepia.Update(1f);
                 map.effects.RadialBlur.FadeTo(blur, 100f); map.effects.RadialBlur.Update(1f); map.effects.RadialBlur.SetBlurStartDist(startDist);
+                HplGraphics.Apply(user);
+            }
+        }
+
+        static readonly string[] ChancelReduxBarrierLights = {
+            "barrier_pointlight_1", "barrier_pointlight_2", "barrier_pointlight_3", "barrier_spotlight_1",
+            "barrier_pointlight_weak_1", "barrier_pointlight_weak_2", "barrier_pointlight_weak_3", "barrier_spotlight_weak_1"
+        };
+
+        static bool ChancelReduxExplosionCandle(Props.PropLamp lamp) => lamp.Name.StartsWith("candlestick_floor", StringComparison.Ordinal) || lamp.Name.StartsWith("candle_floor_", StringComparison.Ordinal);
+
+        static void ApplyChancelReduxLightingPreview(HplMap map, string mode)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/27_torture_chancel_redux.map", StringComparison.Ordinal)) return;
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded && light.GetComponentInParent<AmnesiaEntity>() == null)
+                { light.SetFlickerActive(false); light.SetColor(light.diffuseColor); light.SetRadius(light.radius); }
+            bool blown = mode.Contains("reduxburst") || mode.Contains("reduxafterburst");
+            foreach (var entity in map.Entities)
+                if (entity is Props.PropLamp lamp)
+                {
+                    bool on = mode.Contains("reduxalllit") || lamp.Component.GetVariable("Lit") != "false";
+                    if (mode.Contains("reduxorb") && lamp.Name == "orb_pedestal_1") on = true;
+                    if (mode.Contains("reduxwestlit") && lamp.Name == "hanging_lantern_ceiling_3") on = true;
+                    if (mode.Contains("reduxalloff") || blown && (ChancelReduxExplosionCandle(lamp) || lamp.Name == "orb_pedestal_1")) on = false;
+                    lamp.SetLit(on, false); lamp.UpdateLogic(0f);
+                    foreach (var own in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) own.SetFlickerActive(false);
+                }
+            if (mode.Contains("reduxlow"))
+                foreach (string name in ChancelReduxBarrierLights)
+                { var l = map.GetLight(name); l.SetColor(l.flickerOffColor); l.SetRadius(l.flickerOffRadius); }
+            if (mode.Contains("reduxweak") || mode.Contains("reduxbarrierout"))
+            {
+                for (int i = 1; i <= 3; i++) { var l = map.GetLight("barrier_pointlight_" + i); l.SetColor(Color.clear); l.SetRadius(0f); }
+                var spot = map.GetLight("barrier_spotlight_1"); spot.SetColor(new Color(.4f, .4f, .6f, spot.CurrentColor.a)); spot.SetRadius(8f);
+            }
+            if (mode.Contains("reduxbarrierout"))
+                foreach (string name in new[] { "barrier_pointlight_weak_1", "barrier_pointlight_weak_2", "barrier_pointlight_weak_3", "barrier_spotlight_weak_1" })
+                { var l = map.GetLight(name); l.SetColor(Color.clear); l.SetRadius(0f); }
+            if (blown)
+            {
+                var orb = map.GetLight("OrbLight"); orb.SetColor(mode.Contains("reduxafterburst") ? Color.clear : new Color(.3f, .6f, 1f, 1f)); orb.SetRadius(12f);
+            }
+            // Light endpoints only: preserve original weak-light GameObject inactivity, meshes, collision, timers and puzzle progression.
+        }
+
+        static void VerifyChancelReduxLighting(HplMap map, HplUserSettings user, StringBuilder report)
+        {
+            if (!map.mapFile.Replace('\\', '/').EndsWith("/27_torture_chancel_redux.map", StringComparison.Ordinal)) return;
+            var saved = new List<(AmnesiaLight light, AmnesiaLight.SaveData data, bool active)>();
+            foreach (var light in map.GetComponentsInChildren<AmnesiaLight>(true))
+                if (!light.handHeld && !light.enhancedAdded) saved.Add((light, light.Save(), light.gameObject.activeSelf));
+            var lamps = new List<(Props.PropLamp lamp, bool lit)>();
+            foreach (var entity in map.Entities) if (entity is Props.PropLamp lamp) lamps.Add((lamp, lamp.Lit));
+            if (lamps.Count != 53) throw new InvalidOperationException("Chancel redux: expected 53 lamps");
+            if (map.GetLight("barrier_spotlight_2") != null || map.GetLight("barrier_spotlight_weak_2") != null)
+                throw new InvalidOperationException("Chancel redux: authored missing spots unexpectedly appeared");
+            var classic = user.Copy(); classic.lightingSet = 0; classic.ssgi = 0;
+            float Factor(string name, int mode)
+            {
+                if (mode == 4 || name.StartsWith("barrier_", StringComparison.Ordinal) || name is "BoxLight_1" or "OrbLight" or "PointLight_2" or "PointLight_16") return 1f;
+                if (name is "SpotLight_2" or "SpotLight_3") return 0f;
+                if (name is "PointLight_1" or "PointLight_7" or "PointLight_21") return mode is 0 or 2 ? 0f : .6f;
+                return 1f;
+            }
+            void VerifyModes()
+            {
+                HplGraphics.Apply(classic);
+                var sources = new List<(AmnesiaLight light, Color color, float radius, Vector3 sample, float level, float intensity, bool flicker)>();
+                // Include the four initially inactive weak lights: setting changes must not activate or mutate them.
+                foreach (var (light, _, active) in saved)
+                {
+                    if (light.gameObject.activeSelf != active) throw new InvalidOperationException("Chancel redux: original inactive object activated " + light.name);
+                    Vector3 sample = light.transform.position + light.transform.forward * .3f;
+                    sources.Add((light, light.CurrentColor, light.CurrentRadius, sample, light.LightLevelAt(sample, 0f),
+                        light.GetComponentInParent<AmnesiaEntity>() == null && light.TryGetComponent<Light>(out var l) ? l.intensity : -1f, light.FlickerActive));
+                }
+                for (int mode = 0; mode < 5; mode++)
+                {
+                    var settings = classic.Copy(); settings.lightingSet = mode == 4 ? 0 : 1; settings.lighting = mode < 2 ? 1 : 0;
+                    settings.rtGi = mode == 0 ? 2 : 0; settings.ssgi = mode == 2 ? 2 : 0; HplGraphics.Apply(settings);
+                    foreach (var e in sources)
+                        if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.FlickerActive != e.flicker ||
+                            Mathf.Abs(e.light.LightLevelAt(e.sample, 0f) - e.level) > 1e-5f || e.light.box && e.light.enhancedIntensity != 1f ||
+                            e.intensity >= 0f && Mathf.Abs(e.light.GetComponent<Light>().intensity - e.intensity * Factor(e.light.name, mode)) > 1e-4f * Mathf.Max(1f, e.intensity))
+                            throw new InvalidOperationException("Chancel redux: original state/barrier/fallback/legacy light changed " + e.light.name);
+                    int noLight = 0;
+                    foreach (var (lamp, _) in lamps)
+                    {
+                        float value = 0f; int own = 0;
+                        foreach (var l in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) if (l.TryGetComponent<Light>(out var rendered)) { own++; value += rendered.intensity; }
+                        if (own == 0) { noLight++; continue; }
+                        if (lamp.EffectsAlpha > 0f ? value <= 0f : value > .001f) throw new InvalidOperationException("Chancel redux: lamp effects lost " + lamp.Name);
+                    }
+                    if (noLight != 22) throw new InvalidOperationException("Chancel redux: expected 22 no_light candles");
+                    foreach (var l in AmnesiaLight.All) if (l != null && l.enhancedAdded) throw new InvalidOperationException("Chancel redux: unexpected sky source");
+                }
+            }
+            void Advance(Props.PropLamp lamp, float step)
+            {
+                lamp.UpdateLogic(step); foreach (var light in lamp.Component.GetComponentsInChildren<AmnesiaLight>(true)) light.UpdateLight(step);
+            }
+            void Fade(string name, Color target, float radius, float duration)
+            {
+                var l = map.GetLight(name); l.SetFlickerActive(false); l.SetVisible(true); Color start = l.CurrentColor; float oldRadius = l.CurrentRadius;
+                l.FadeTo(target, radius, duration); l.UpdateLight(duration * .5f); VerifyModes();
+                if (l.CurrentColor == target && l.CurrentRadius == radius && (start != target || oldRadius != radius)) throw new InvalidOperationException("Chancel redux: missing fade midpoint " + name);
+                l.UpdateLight(duration * .5f); VerifyModes();
+                if (l.CurrentColor != target || l.CurrentRadius != radius) throw new InvalidOperationException("Chancel redux: fade interrupted " + name);
+            }
+            try
+            {
+                VerifyModes();
+                foreach (bool on in new[] { false, true }) { foreach (var (lamp, _) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); } VerifyModes(); }
+                var linked = (Props.PropLamp)map.GetEntityByName("hanging_lantern_ceiling_3"); var fill = map.GetLight("PointLight_7");
+                foreach (bool on in new[] { false, true })
+                {
+                    linked.SetLit(on, false); linked.UpdateLogic(0f);
+                    if (on ? fill.CurrentColor == fill.diffuseColor : fill.CurrentColor != fill.diffuseColor) throw new InvalidOperationException("Chancel redux: broken ceiling-lantern link");
+                    VerifyModes();
+                }
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                var orb = (Props.PropLamp)map.GetEntityByName("orb_pedestal_1");
+                orb.SetLit(true, true); Advance(orb, .5f); VerifyModes(); Advance(orb, .5f); VerifyModes();
+                orb.SetLit(false, true); Advance(orb, .5f); VerifyModes(); Advance(orb, .5f); VerifyModes();
+                foreach (string name in ChancelReduxBarrierLights)
+                {
+                    var l = map.GetLight(name); l.SetFlickerActive(true); var colours = new HashSet<Color>(); var radii = new HashSet<float>();
+                    for (int step = 0; step < 4; step++) { l.UpdateLight(1f); colours.Add(l.CurrentColor); radii.Add(l.CurrentRadius); VerifyModes(); }
+                    if (colours.Count < 2 || name.StartsWith("barrier_spotlight", StringComparison.Ordinal) && radii.Count < 2) throw new InvalidOperationException("Chancel redux: barrier flicker stopped " + name);
+                    l.SetFlickerActive(false);
+                }
+                for (int i = 1; i <= 3; i++) Fade("barrier_pointlight_" + i, Color.clear, 0f, .5f);
+                var strong = map.GetLight("barrier_spotlight_1"); Fade(strong.name, new Color(.4f, .4f, .6f, strong.CurrentColor.a), 8f, .5f);
+                for (int i = 1; i <= 3; i++) Fade("barrier_pointlight_weak_" + i, Color.clear, 0f, .5f);
+                Fade("barrier_spotlight_weak_1", Color.clear, 0f, .5f);
+                int blown = 0;
+                foreach (var (lamp, _) in lamps) if (ChancelReduxExplosionCandle(lamp)) { blown++; lamp.SetLit(false, false); lamp.UpdateLogic(0f); }
+                if (blown != 26 || orb.Lit) throw new InvalidOperationException("Chancel redux: expected four floor stands and 22 candles blown out, pedestal off");
+                VerifyModes(); Fade("OrbLight", new Color(.3f, .6f, 1f, 1f), 12f, .2f); Fade("OrbLight", Color.clear, 12f, 2f);
+                string line = "Chancel redux state PASS: 53 lamp states (31 with owned light, 22 no_light), nearby lantern link, pedestal ignition/extinguishing, eight live barrier flicker colour/radius states and ten continuing barrier/orb fades survive RTGI, RT no-GI, SSGI, raster no-GI and classic. Four weak light objects remain inactive; the two missing spot 2 names remain absent. Twenty-six candles and pedestal extinguish; residual strong spot 1, original colours/radii/box/legacy HPL2 light are retained. No sky added; visible darkness checked per view.";
+                report.AppendLine(line); Debug.Log("[EnhancedLighting] " + line);
+            }
+            finally
+            {
+                foreach (var (lamp, on) in lamps) { lamp.SetLit(on, false); lamp.UpdateLogic(0f); }
+                foreach (var (light, data, _) in saved) light.Restore(data);
                 HplGraphics.Apply(user);
             }
         }
