@@ -116,9 +116,11 @@ namespace RTXMnesia.Hpl
         /// A traced light keeps its slot this long (s) after its importance last reached HplLightAnalysis.MinImportance:
         /// a room seen far away through a narrow door is hit only by some of the 16 offsets of the analysis grid (0.2 s
         /// apart), and its lights went in and out of the slots every few frames (the oven room of 00_rainy_hall: its
-        /// light came and went). The grid's whole cycle.
+        /// light came and went). Two of the grid's whole cycles, even when the importance fell to nothing in between: far
+        /// candles of 09_back_hall were hit once a cycle and went every 0.7 s with the slots half free. A held light that
+        /// no longer shows ranks last, so it only keeps a slot nobody else wants.
         /// </summary>
-        const float TracedHold = 3.2f;
+        const float TracedHold = 6.4f;
         static readonly Dictionary<AmnesiaLight, float> s_seen = new();
         static readonly Dictionary<Light, float> s_radius = new();
         static int s_frame = -1;
@@ -352,7 +354,7 @@ namespace RTXMnesia.Hpl
                 float importance = HplLightAnalysis.Importance(light);
                 bool traced = s_traced.Contains(light);
                 if (importance >= HplLightAnalysis.MinImportance) s_seen[light] = Time.unscaledTime;
-                else if (!traced || importance <= 0f || !s_seen.TryGetValue(light, out float seen) || Time.unscaledTime - seen > TracedHold) continue;
+                else if (!traced || !s_seen.TryGetValue(light, out float seen) || Time.unscaledTime - seen > TracedHold) continue;
                 if (traced) importance *= TracedKeep;
                 s_candidates.Add((light, importance));
             }

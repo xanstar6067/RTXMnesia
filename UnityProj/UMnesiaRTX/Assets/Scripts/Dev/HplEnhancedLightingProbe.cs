@@ -63,6 +63,9 @@ namespace RTXMnesia.Dev
             var map = HplMap.Current;
             if (map == null || map.player == null) throw new InvalidOperationException("no map");
             var player = map.player;
+            // A view placed in a flashback area would start the flashback (white flash, sepia, blur decaying over seconds)
+            // and make the first frames of the run "hazy"; the lighting probe compares light, not the flashback effect.
+            player.Flashback.Disabled = true;
             player.readDevices = false;
             if (map.GameUi != null && map.GameUi.IsPaused) map.GameUi.Resume();
             var user = HplUserSettings.ReadSaved();
@@ -268,7 +271,8 @@ namespace RTXMnesia.Dev
                         string tracedNow = string.Join(",", traced);
                         if (tracedNow != lastTraced || means.Count > 1 && Mathf.Abs(means[^1] - means[^2]) > 0.5f)
                         {
-                            report.AppendLine($"    series frame {i}: mean {means[^1]:0.00}, traced [{tracedNow}]");
+                            var fx = map.effects;
+                            report.AppendLine($"    series frame {i}: mean {means[^1]:0.00}, traced [{tracedNow}] fx fade {fx.Fade.Alpha:0.00} flash {fx.Flash.Alpha:0.00} gain {fx.SanityGainFlash.Alpha:0.00} trail {fx.ImageTrail.Amount:0.00} sepia {fx.Sepia.Amount:0.00} blur {fx.RadialBlur.Size:0.00} t {Time.realtimeSinceStartup:0.0}s");
                             // "series-name": the state of the lights whose name contains it.
                             int at = mode.IndexOf("series-", StringComparison.Ordinal);
                             if (at >= 0)
