@@ -75,6 +75,21 @@ def integrate(p, q):
     return fft.idctn(d, norm='ortho')
 
 
+def integrate_periodic(p, q):
+    """Least-squares height from slopes of a tiling texture (FFT Poisson, wrapped borders): the Neumann solution of
+    integrate() piles the slope of a tile seam up into a broad slope along the edges."""
+    h, w = p.shape
+    div = (p - np.roll(p, 1, 1)) + (q - np.roll(q, 1, 0))
+    d = np.fft.fft2(div)
+    ky = np.fft.fftfreq(h)[:, None]
+    kx = np.fft.fftfreq(w)[None, :]
+    denom = (2 * np.cos(2 * np.pi * kx) - 2) + (2 * np.cos(2 * np.pi * ky) - 2)
+    denom[0, 0] = 1
+    d /= denom
+    d[0, 0] = 0
+    return np.real(np.fft.ifft2(d))
+
+
 def residual(z, p, q):
     gx = np.zeros_like(z); gx[:, :-1] = z[:, 1:] - z[:, :-1]
     gy = np.zeros_like(z); gy[:-1, :] = z[1:, :] - z[:-1, :]
@@ -646,9 +661,230 @@ def dungeon(a, rng):
             'pillar_sides_2048': DUNGEON_PILLAR_SIDES, 'pillar_rows_2048': DUNGEON_PILLAR_ROWS}
 
 
+# The other stone walls and floors of chapters 2-3 and Justine (area ranking 2026-10-24), one generic recipe: the shape
+# from the original HPL depth (its height map, else the alpha of its normal map, else its normal map integrated), no
+# stone segmentation (atlases mix stone, wood and metal; the depth map already holds what the artists' POM showed).
+# Faces stay at the plane, the deep part of the depth map becomes recessed joints, matte faces and dimmed specular as
+# the approved dungeonbase. Values: material (static_objects/...), depth source ('height', 'alpha' or 'normal'), metres
+# per UV unit (median of the modules, planes 1 / TileAmount), joint depth (m), the kind and optionally the stem of the
+# original textures when the .mat takes another material's:
+#   stone  plateau faces, joints from the deep part (walls, paving, pillars)
+#   rock   continuous depth without plateau (cave-ins, rock, earth)
+GENERIC = {
+    'torture_chancel': ('static_objects/dungeonbase/special/torture_chancel', 'height', 26.3, 0.030, 'stone'),
+    'stone_round': ('static_objects/dungeonbase/pillar/stone_round', 'height', 7.4, 0.028, 'stone'),
+    'gigantic': ('static_objects/dungeonbase/pillar/gigantic', 'height', 8.2, 0.030, 'stone'),
+    'castlebase_wall_extension': ('static_objects/castlebase/wall/castlebase_wall_extension', 'alpha', 5.6, 0.020, 'stone'),
+    'castlebase_wall_worn': ('static_objects/castlebase/wall/castlebase_wall_worn', 'alpha', 4.2, 0.018, 'stone'),
+    'castlebase_wall_welder_convex': ('static_objects/castlebase/wall/castlebase_wall_welder_convex', 'normal', 3.7, 0.018, 'stone'),
+    'castlebase_wall_door_straight': ('static_objects/castlebase/wall/castlebase_wall_door_straight', 'normal', 4.9, 0.018, 'stone'),
+    'tall_stone': ('static_objects/castlebase/pillar/tall_stone', 'alpha', 5.2, 0.018, 'stone'),
+    'murky_castlebase': ('static_objects/murky_castlebase/murky_castlebase', 'height', 5.4, 0.020, 'stone'),
+    'cellarbase': ('static_objects/cellarbase/cellarbase', 'height', 9.5, 0.018, 'stone'),
+    'dungeonbase_lab_wall': ('static_objects/dungeonbase/dungeonbase_lab_wall', 'height', 2.5, 0.035, 'stone'),
+    # Its .mat takes the normal map (with a depth alpha) of cisternentr_wall_tile.
+    'dungeon_wall_variant': ('static_objects/dungeonbase/wall/dungeon_wall_variant', 'alpha', 2.0, 0.025, 'stone',
+                             'static_objects/castlebase/special/cisternentr_wall_tile'),
+    'welder_sewer_stone': ('static_objects/dungeonbase/special/welder_sewer_stone', 'normal', 3.1, 0.030, 'stone'),
+    'cistern_stone': ('static_objects/cisternbase/pillars/cistern_stone', 'height', 6.5, 0.030, 'stone'),
+    'stone_arched': ('static_objects/cisternbase/ceiling/stone_arched', 'normal', 5.4, 0.030, 'stone'),
+    'dungeonbase_wall_tileable': ('static_objects/dungeonbase/dungeonbase_wall_tileable', 'height', 2.5, 0.030, 'stone'),
+    'cobbled_stone': ('static_objects/dungeonbase/floor/cobbled_stone', 'height', 4.0, 0.022, 'stone'),
+    'dungeonbase_floor': ('static_objects/dungeonbase/dungeonbase_floor', 'height', 2.0, 0.018, 'stone'),
+    'gigantic_stones': ('static_objects/dungeonbase/floor/gigantic_stones', 'height', 13.3, 0.030, 'stone'),
+    'cisternbase': ('static_objects/cisternbase/cisternbase', 'normal', 13.4, 0.025, 'stone'),
+    'stone_dirty': ('static_objects/cisternbase/floor/stone_dirty', 'normal', 1.33, 0.020, 'stone'),
+    'church_floor': ('static_objects/castlebase/church_wall/church_floor', 'alpha', 5.0, 0.014, 'stone'),
+    'cellarbase_details': ('static_objects/cellarbase/cellarbase_details', 'normal', 2.5, 0.015, 'stone'),
+    'dungeon_cave_in': ('static_objects/debris/dungeon_cave_in/dungeon_cave_in', 'normal', 3.8, 0.040, 'rock'),
+    'rock_tileable': ('static_objects/sanctumbase/rock_tileable', 'normal', 4.0, 0.035, 'rock'),
+    'dirt_mould': ('static_objects/dungeonbase/floor/dirt_mould', 'normal', 4.0, 0.020, 'rock'),
+}
+# Dark stone dims its specular (dungeonbase: linear albedo luminance 0.039, coverage 0.3 of F0 0.04); stone as light as the
+# approved castle wall (0.064) keeps the full F0 0.04.
+DARK_LUM, DARK_COVERAGE, LIGHT_LUM = 0.039, 0.3, 0.064
+# Second pass 2026-10-27 (user: "deeper joints, crisper stone edges"): the table depths x1.5 (classic POM shows 5-15 cm),
+# a narrower face -> joint transition, less smoothing, a steeper shading limit.
+DEPTH_GAIN = 1.5
+
+
+def hpl_texture(a, rel, suffix, mode):
+    """An original texture of the material (<name><suffix>.tga|.dds|.png) as float32, or None."""
+    for ext in ('.tga', '.dds', '.png', '.jpg'):
+        path = os.path.join(a.source, rel + suffix + ext)
+        if os.path.exists(path):
+            return np.asarray(Image.open(path).convert(mode), dtype=np.float32) / 255.0
+    return None
+
+
+def seam_fade(depth, axis):
+    """Tiling HPL depth maps fade to 0 over the last few texels of each edge (cobbled_stone: 5 of 512): the tile seam
+    would become a flat ridge across the joints. The faded rows of both edges are bridged by a linear blend between the
+    first interior rows across the seam. Returns the bridged width (texels)."""
+    d = np.moveaxis(depth, axis, 0)
+    n = d.shape[0]
+    interior = d[n // 10: n - n // 10].mean()
+    means = d.mean(axis=1)
+    limit = max(2, n * 4 // 100)
+    top = next((i for i in range(limit) if means[i] >= 0.9 * interior), limit)
+    bottom = next((i for i in range(limit) if means[n - 1 - i] >= 0.9 * interior), limit)
+    # A fade on one edge only, or one that does not end within the limit, is a plain part of an atlas, not a tile seam.
+    if top == 0 or bottom == 0 or top >= limit or bottom >= limit:
+        return 0
+    first, last = d[top].copy(), d[n - 1 - bottom].copy()
+    gap = top + bottom
+    for k in range(gap):
+        row = (n - bottom + k) % n
+        d[row] = last + (first - last) * (k + 1) / (gap + 1)
+    return gap
+
+
+def generic(a, rng):
+    rel, source_kind, metres_per_uv, joint_depth, kind = GENERIC[a.material][:5]
+    original = GENERIC[a.material][5] if len(GENERIC[a.material]) > 5 else rel
+    joint_depth = a.joint_depth_override or joint_depth * DEPTH_GAIN
+    name = os.path.basename(rel)
+    albedo = load(os.path.join(a.pbrify, name + '__albedo.png'), 'RGB').astype(np.float32)
+    rows, cols = albedo.shape[:2]
+    mpp = metres_per_uv / cols
+    zoom = lambda img: np.clip(ndimage.zoom(img, (rows / img.shape[0], cols / img.shape[1]), order=3, mode='grid-wrap'), 0, 1).astype(np.float32)
+
+    # 1. Original depth, white = deeper (HPL relief convention).
+    if source_kind == 'height':
+        depth = hpl_texture(a, original, '_height', 'L')
+    elif source_kind == 'alpha':
+        depth = hpl_texture(a, original, '_nrm', 'RGBA')[..., 3]
+    else:
+        depth = None
+    # Only along an axis where the texture tiles (the albedo continues across the opposite edges); atlas borders are
+    # plain parts, not seams.
+    shape = depth.shape if depth is not None else hpl_texture(a, original, '_nrm', 'L').shape
+    small = ndimage.zoom(luminance(albedo), (shape[0] / rows, shape[1] / cols), order=1)
+    def tiles(axis):
+        img = np.moveaxis(small, axis, 0)
+        across = np.abs(img[0] - img[-1]).mean()
+        inside = np.median([np.abs(img[k] - img[k + 1]).mean() for k in range(1, img.shape[0] - 1, max(1, img.shape[0] // 64))])
+        return across < 2.5 * inside
+    tiling = tiles(0) and tiles(1)
+    if depth is None:
+        nrm = hpl_texture(a, original, '_nrm', 'RGB') * 2 - 1
+        nz = np.maximum(nrm[..., 2], 0.2)
+        p = -nrm[..., 0] / nz
+        best = None
+        for sign in (1, -1):    # G convention verified numerically, as for the castle wall
+            q = sign * -nrm[..., 1] / nz
+            z = integrate_periodic(p, q) if tiling else integrate(p, q)
+            err = residual(z, p, q)
+            if best is None or err < best[0]:
+                best = (err, z)
+        z = best[1]
+        # Broad drift of the integration goes (sigma 6 cm; 12 cm left 4 cm deep troughs along atlas borders and tilted
+        # whole slabs of stone_dirty), reflected at atlas borders, wrapped only for a tiling texture.
+        z = z - ndimage.gaussian_filter(z, 0.06 / (metres_per_uv / nrm.shape[1]), mode='wrap' if tiling else 'reflect')
+        depth = -z
+        if not tiling:
+            # The rest of the drift at atlas borders (a dark line along the edge = a groove on modules there): faded to
+            # the face level (30th percentile of the depth) within 1.5 % of each edge.
+            yy, xx = np.indices(depth.shape)
+            edge = np.minimum.reduce([yy, xx, depth.shape[0] - 1 - yy, depth.shape[1] - 1 - xx]) / (0.015 * max(depth.shape))
+            face_level = np.percentile(depth, 30)
+            depth = face_level + (depth - face_level) * np.clip(edge, 0, 1)
+    depth = depth.astype(np.float32)
+    # The deep part is darker in the albedo (all 16 HPL depth maps: correlation -0.26...-0.73). The integration's sign
+    # is not fixed by the residual (stone_dirty came out inverted): orient it by the albedo.
+    flipped = False
+    if source_kind == 'normal':
+        dz = (depth - depth.mean()) / (depth.std() + 1e-6)
+        lz = (small - small.mean()) / (small.std() + 1e-6)
+        if float(np.mean(dz * lz)) > 0:
+            depth = -depth
+            flipped = True
+    seams = [seam_fade(depth, axis) if source_kind != 'normal' and tiles(axis) else 0 for axis in (0, 1)]
+    depth = zoom(depth)
+    lo_, hi_ = np.percentile(depth, (1, 99))
+    d = np.clip((depth - lo_) / max(hi_ - lo_, 1e-4), 0, 1)
+    d = ndimage.gaussian_filter(d, max(0.001 / mpp, 0.5), mode='wrap')
+
+    # 2. Height. Stone: faces (shallow part of the depth) at the plane with a little of their own relief, the deep part
+    # recessed to the joint depth over a soft shoulder. Rock: the depth as it is.
+    pbr_height = load(os.path.join(a.pbrify, name + '__height.png'), 'RGB')[..., 0].astype(np.float32)
+    hewn = ndimage.gaussian_filter(pbr_height, 0.002 / mpp, mode='wrap') - ndimage.gaussian_filter(pbr_height, 0.012 / mpp, mode='wrap')
+    hewn = np.clip(hewn / (hewn.std() * 2.5 + 1e-6), -1, 1) * 0.0015
+    if kind == 'stone':
+        # Integrated normals give rounded stones: a steeper, later step keeps a flat face and a crisp edge.
+        t0, t1 = (0.45, 0.62) if source_kind == 'normal' else (0.35, 0.60)
+        x = np.clip((d - t0) / (t1 - t0), 0, 1)
+        s = x * x * (3 - 2 * x)                                  # 0 face, 1 joint
+        # Small isolated deep spots of the depth map are pits in a face, not joints ("drops" of dungeonbase): they stay
+        # a few millimetres deep. Joints are long connected networks.
+        deep = s > 0.3
+        labels, count = ndimage.label(deep)
+        if count:
+            objects = ndimage.find_objects(labels)
+            extent = np.array([0] + [max(sl[0].stop - sl[0].start, sl[1].stop - sl[1].start) for sl in objects]) * mpp
+            pit = extent < 0.2
+            pit[0] = False
+            damp = np.where(pit[labels], 0.12, 1.0).astype(np.float32)
+            damp = np.minimum(damp, ndimage.minimum_filter(damp, 3))
+            s = s * ndimage.gaussian_filter(damp, 1.0, mode='wrap')
+        face = -0.005 * np.clip(d / t0, 0, 1) + hewn             # faces: shallow pits of the depth map, chiselled grain
+        height = face * (1 - s) - joint_depth * s
+    else:
+        s = d
+        height = -joint_depth * d ** 0.8 + hewn
+    height = ndimage.gaussian_filter(height, max(0.0007 / mpp, 0.5), mode='wrap')
+    height -= np.percentile(height, 99.5)                        # the highest faces at the original plane: decals stay visible
+    lo, hi = -(joint_depth + 0.008), 0.003
+    height = np.clip(height, lo, hi).astype(np.float32)
+
+    # 3. Normal: slopes of the height, softly limited (~51 deg) against bright rims along joints, plus PBRify fine detail.
+    gx = (np.roll(height, -1, 1) - np.roll(height, 1, 1)) / (2 * mpp)
+    gy = (np.roll(height, -1, 0) - np.roll(height, 1, 0)) / (2 * mpp)
+    limit = 1 / np.sqrt(1 + (np.hypot(gx, gy) / 1.25) ** 2)
+    gx, gy = gx * limit, gy * limit
+    sx, sy = pbrify_slopes(a, name)
+    radius = 0.006 / mpp
+    keep = a.detail * (1 - 0.4 * s)
+    normal = normal_from(-gx + fine(sx, radius) * keep, gy + fine(sy, radius) * keep).astype(np.float32)
+
+    # 4. Matte: faces 0.77-0.92 not tied to albedo brightness, darker spots rougher, joints 0.95; normal variance into
+    # roughness (Toksvig-like, against sparkling lines under a close light).
+    lum = luminance(albedo)
+    pbr_rough = load(os.path.join(a.pbrify, name + '__roughness.png'), 'RGB')[..., 0].astype(np.float32)
+    resid, dark = matte(pbr_rough, lum, 0.02 / mpp)
+    face_rough = np.clip(0.84 + resid * 0.025 + dark * 0.06, 0.77, 0.92)
+    face_weight = (1 - s) ** 3
+    rough = face_rough * face_weight + 0.95 * (1 - face_weight)
+    mean = np.dstack([ndimage.gaussian_filter(normal[..., i], 1.5, mode='wrap') for i in range(3)])
+    spread = 1 - np.linalg.norm(mean, axis=2)
+    rough = np.minimum(np.sqrt(rough ** 2 + 3 * spread), 1)
+    occlusion = 1 - 0.45 * np.clip(-height / joint_depth, 0, 1) ** 1.5
+    maskmap = np.dstack([np.zeros_like(rough), occlusion, np.ones_like(rough), 1 - rough])
+
+    # 5. Specular coverage (F0 = 0.04 x value): dark stone dims its sheen, as dungeonbase.
+    linear = float(np.mean(albedo ** 2.2 @ np.array([0.2126, 0.7152, 0.0722], np.float32)))
+    face_coverage = float(np.clip(DARK_COVERAGE + (linear - DARK_LUM) / (LIGHT_LUM - DARK_LUM) * (1 - DARK_COVERAGE), 0.25, 1))
+    reflectance = (face_coverage - 0.08 * dark) * face_weight + face_coverage * 0.5 * (1 - face_weight)
+
+    save(a.out, 'stone_mask.png', (s < 0.5).astype(np.float64), 'L')
+    save(a.out, 'height.png', (height - lo) / (hi - lo), 'L')
+    save(a.out, 'normal.png', normal * 0.5 + 0.5, 'RGB')
+    save(a.out, 'mask.png', maskmap, 'RGBA')
+    save(a.out, 'specular.png', np.dstack([reflectance] * 3), 'RGB')     # RGB: a one-channel PNG imports as R8 / Alpha8
+    previews(a.out, albedo, s < 0.5, height, normal, step=max(1, cols // 1024))
+    return {'height_encoding_metres': [lo, hi], 'source': source_kind, 'metres_per_uv': metres_per_uv, 'joint_depth': joint_depth,
+            'relief_kind': kind, 'size': [cols, rows], 'seam_fade_bridged_texels': seams, 'tiling': bool(tiling),
+            'integrated_depth_flipped': flipped, 'face_share': float((s < 0.5).mean()), 'linear_albedo': linear,
+            'face_specular_coverage': face_coverage,
+            'face_roughness': [float(np.percentile(rough[s < 0.5], q)) for q in (5, 50, 95)],
+            # Atlases: relief fades at UV seams and creases (generic shapes are not checked across them).
+            'over_creases': False, 'mesh_tolerance_metres': 0.0025}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('material', choices=sorted(MATERIALS))
+    ap.add_argument('material', choices=sorted(MATERIALS) + sorted(GENERIC))
+    ap.add_argument('--joint-depth-override', type=float, help='generic: joint depth, m (default per material)')
     ap.add_argument('--source', default=os.path.join(ROOT, 'source'))
     ap.add_argument('--pbrify', help='PBRify result folder (default: <material>/pbrify-x4-batch-v1, dungeon: pbrify-x2-batch-v1)')
     ap.add_argument('--out', help='output folder (default: <material>/manual-relief-v1)')
@@ -661,19 +897,26 @@ def main():
     ap.add_argument('--chamfer', type=float, default=0.0025, help='boards: plank edge chamfer, m')
     ap.add_argument('--seed', type=int, default=7)
     a = ap.parse_args()
-    defaults = {'wall': (0.020, 0.016, 0.5), 'floor': (0.014, 0.018, 0.5), 'boards': (0.018, 0.0, 0.6), 'dungeon': (0.020, 0.016, 0.5)}[a.material]
+    is_generic = a.material in GENERIC
+    defaults = {'wall': (0.020, 0.016, 0.5), 'floor': (0.014, 0.018, 0.5), 'boards': (0.018, 0.0, 0.6),
+                'dungeon': (0.020, 0.016, 0.5)}.get(a.material, (0.0, 0.0, 0.5))
     if a.threshold is None and a.material != 'dungeon': a.threshold = 0.2     # dungeon: per island
     a.joint_depth = defaults[0] if a.joint_depth is None else a.joint_depth
     a.bevel = defaults[1] if a.bevel is None else a.bevel
     a.detail = defaults[2] if a.detail is None else a.detail
-    folder = os.path.join(ROOT, 'sourceRTXRemix', MATERIALS[a.material])
-    a.pbrify = a.pbrify or os.path.join(folder, 'pbrify-x2-batch-v1' if a.material == 'dungeon' else 'pbrify-x4-batch-v1')
+    rel = GENERIC[a.material][0] if is_generic else MATERIALS[a.material]
+    folder = os.path.join(ROOT, 'sourceRTXRemix', rel)
+    if not a.pbrify:
+        # dungeon and the generic materials: the x2 set where there is one (4096 atlases), else x4.
+        sets = [s for s in ('pbrify-x2-batch-v1', 'pbrify-x4-batch-v1') if os.path.isdir(os.path.join(folder, s))]
+        a.pbrify = os.path.join(folder, sets[0] if (is_generic or a.material == 'dungeon') and sets else 'pbrify-x4-batch-v1')
     a.out = a.out or os.path.join(folder, 'manual-relief-v1')
     os.makedirs(a.out, exist_ok=True)
-    info = {'material': MATERIALS[a.material] + '.mat', 'kind': a.material,
+    info = {'material': rel + '.mat', 'kind': 'generic' if is_generic else a.material,
             'height_encoding_metres': HEIGHT_RANGE, 'joint_depth': a.joint_depth, 'bevel': a.bevel,
-            'detail': a.detail, 'seed': a.seed, 'mask': 'edited: ' + a.mask if a.mask else 'automatic'}
-    info.update(globals()[a.material](a, np.random.default_rng(a.seed)))
+            'detail': a.detail, 'seed': a.seed, 'mask': 'edited: ' + a.mask if a.mask else 'automatic',
+            'pbrify': os.path.basename(a.pbrify)}
+    info.update((generic if is_generic else globals()[a.material])(a, np.random.default_rng(a.seed)))
     with open(os.path.join(a.out, 'relief.json'), 'w', encoding='utf-8') as f:
         json.dump(info, f, indent=2, ensure_ascii=False)
     print(json.dumps(info, ensure_ascii=False))

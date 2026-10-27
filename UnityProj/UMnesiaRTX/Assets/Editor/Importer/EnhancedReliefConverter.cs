@@ -30,7 +30,32 @@ namespace RTXMnesia.Importer
         public static readonly Dictionary<string, float> Profiles = new(StringComparer.Ordinal)
         {
             ["static_objects/castlebase/wall/castlebase_wall.mat"] = 0.045f,
+            // Generic manual relief 2026-10-27 (Build-ManualRelief.py <name>: shape from the HPL depth, matte, dimmed specular).
             ["static_objects/castlebase/wall/castlebase_wall_worn.mat"] = 0.035f,
+            ["static_objects/castlebase/wall/castlebase_wall_extension.mat"] = 0.02f,
+            ["static_objects/castlebase/wall/castlebase_wall_welder_convex.mat"] = 0.018f,
+            ["static_objects/castlebase/wall/castlebase_wall_door_straight.mat"] = 0.018f,
+            ["static_objects/castlebase/pillar/tall_stone.mat"] = 0.018f,
+            ["static_objects/castlebase/church_wall/church_floor.mat"] = 0.014f,
+            ["static_objects/murky_castlebase/murky_castlebase.mat"] = 0.02f,
+            ["static_objects/cellarbase/cellarbase.mat"] = 0.018f,
+            ["static_objects/cellarbase/cellarbase_details.mat"] = 0.015f,
+            ["static_objects/dungeonbase/special/torture_chancel.mat"] = 0.03f,
+            ["static_objects/dungeonbase/special/welder_sewer_stone.mat"] = 0.03f,
+            ["static_objects/dungeonbase/pillar/stone_round.mat"] = 0.028f,
+            ["static_objects/dungeonbase/pillar/gigantic.mat"] = 0.03f,
+            ["static_objects/dungeonbase/dungeonbase_lab_wall.mat"] = 0.035f,
+            ["static_objects/dungeonbase/wall/dungeon_wall_variant.mat"] = 0.025f,
+            ["static_objects/dungeonbase/dungeonbase_wall_tileable.mat"] = 0.03f,
+            ["static_objects/dungeonbase/dungeonbase_floor.mat"] = 0.018f,
+            ["static_objects/dungeonbase/floor/gigantic_stones.mat"] = 0.03f,
+            ["static_objects/dungeonbase/floor/dirt_mould.mat"] = 0.02f,
+            ["static_objects/cisternbase/cisternbase.mat"] = 0.025f,
+            ["static_objects/cisternbase/pillars/cistern_stone.mat"] = 0.03f,
+            ["static_objects/cisternbase/ceiling/stone_arched.mat"] = 0.03f,
+            ["static_objects/cisternbase/floor/stone_dirty.mat"] = 0.02f,
+            ["static_objects/debris/dungeon_cave_in/dungeon_cave_in.mat"] = 0.04f,
+            ["static_objects/sanctumbase/rock_tileable.mat"] = 0.035f,
             ["static_objects/castlebase/wall/castlebase_wall_square_bricks.mat"] = 0.035f,
             ["static_objects/castlebase/castlebase_floor.mat"] = 0.018f,
             ["static_objects/castlebase/castlebase_tiledfloor.mat"] = 0.012f,
@@ -152,6 +177,9 @@ namespace RTXMnesia.Importer
                     }
                     int count = 0;
                     long triangles = 0;
+                    var jobs = new List<Job>();
+                    var sources = new Dictionary<Mesh, HplReliefMeshBuilder.Source>();
+                    var uses = new Dictionary<string, int>();
                     var renderers = scanScene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<MeshRenderer>(true)).ToArray();
                     for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
                     {
@@ -211,40 +239,77 @@ namespace RTXMnesia.Importer
                         }
                         key.Append("|" + string.Join(",", slots.Select(s => s.displaced ? "1" : "0")));
                         string identity = Hash(key.ToString()).Substring(0, 32);
-                        if (!entries.TryGetValue(identity, out var entry))
+                        if (!entries.ContainsKey(identity))
                         {
                             string detailPath = Root + "/" + identity + "_detail.asset", coarsePath = Root + "/" + identity + "_coarse.asset";
                             string stampPath = AmnesiaPaths.ToAbsolute(CacheRoot + "/" + identity + ".txt");
                             string stamp = Hash(signature.ToString());
-                            try
+                            if (!File.Exists(stampPath) || File.ReadAllText(stampPath) != stamp ||
+                                AssetDatabase.LoadAssetAtPath<Mesh>(detailPath) == null || AssetDatabase.LoadAssetAtPath<Mesh>(coarsePath) == null)
                             {
-                                if (!File.Exists(stampPath) || File.ReadAllText(stampPath) != stamp ||
-                                    AssetDatabase.LoadAssetAtPath<Mesh>(detailPath) == null || AssetDatabase.LoadAssetAtPath<Mesh>(coarsePath) == null)
-                                {
-                                    Mesh detailed = BuildWithinBudget(mesh, surfaces, scale, surfaces.Any(s => s?.heightMetres != null || s?.boards == true) ? .01f : 0.03f, 120000);
-                                    Mesh coarse = BuildWithinBudget(mesh, surfaces, scale, 0.09f, 24000);
-                                    Save(detailed, detailPath); Save(coarse, coarsePath);
-                                    File.WriteAllText(stampPath, stamp);
-                                    generated++;
-                                }
+                                if (!sources.TryGetValue(mesh, out var source)) sources[mesh] = source = HplReliefMeshBuilder.Read(mesh);
+                                jobs.Add(new Job { identity = identity, mesh = mesh, source = source, surfaces = surfaces, scale = scale,
+                                    renderer = renderer.name, detailPath = detailPath, coarsePath = coarsePath, stampPath = stampPath, stamp = stamp });
                             }
-                            catch (InvalidOperationException e)
-                            {
-                                report.Add("SKIP " + renderer.name + ": " + e.Message);
-                                continue;
-                            }
-                            entry = new HplReliefSet.Entry { original = mesh, objectScale = scale, slots = slots,
-                                detailedResource = "HplReliefMeshes/" + identity + "_detail", coarseResource = "HplReliefMeshes/" + identity + "_coarse" };
-                            entries.Add(identity, entry);
+                            entries.Add(identity, new HplReliefSet.Entry { original = mesh, objectScale = scale, slots = slots,
+                                detailedResource = "HplReliefMeshes/" + identity + "_detail", coarseResource = "HplReliefMeshes/" + identity + "_coarse" });
                         }
-                        var detail = Resources.Load<Mesh>(entry.detailedResource);
-                        for (int i = 0; i < detail.subMeshCount; i++) triangles += (long)detail.GetIndexCount(i) / 3;
-                        count++;
+                        uses[identity] = uses.TryGetValue(identity, out int used) ? used + 1 : 1;
                         if (samplesOnly) sampleTextures.Add(slots[0].albedo);
-                        s_progress = (sceneIndex + (rendererIndex + 1f) / renderers.Length) / scenes.Length;
+                        s_progress = (sceneIndex + (rendererIndex + 1f) / renderers.Length * 0.2f) / scenes.Length;
                         s_description = Path.GetFileNameWithoutExtension(path) + ": " + renderer.name;
-                        yield return null;
+                        if (rendererIndex % 200 == 0) yield return null;
                     }
+                    // The subdivision and displacement are plain array math: all new variants of the map on every core.
+                    s_description = Path.GetFileNameWithoutExtension(path) + $": building {jobs.Count} relief meshes";
+                    yield return null;
+                    System.Threading.Tasks.Parallel.ForEach(jobs, job =>
+                    {
+                        try
+                        {
+                            float spacing = job.surfaces.Any(s => s?.heightMetres != null || s?.boards == true) ? .01f : 0.03f;
+                            job.detailed = ComputeWithinBudget(job.source, job.surfaces, job.scale, spacing, 120000);
+                            job.coarse = ComputeWithinBudget(job.source, job.surfaces, job.scale, 0.09f, 24000);
+                        }
+                        catch (InvalidOperationException e) when (e.Message.StartsWith("Relief triangle budget:", StringComparison.Ordinal))
+                        {
+                            // Huge planes (900-1900 m², one quad each) cannot hold 1 cm joints within the budget; coarse
+                            // spacing turns them into soft waves. They keep their flat geometry with the relief maps
+                            // (normal, matte, dimmed specular), like their neighbours, instead of the glossy plain material.
+                            job.flat = e.Message;
+                        }
+                        catch (InvalidOperationException e) { job.error = e.Message; }
+                    });
+                    foreach (var job in jobs)
+                    {
+                        if (job.error != null)
+                        {
+                            report.Add("SKIP " + job.renderer + ": " + job.error);
+                            entries.Remove(job.identity);
+                            uses.Remove(job.identity);
+                            continue;
+                        }
+                        Mesh detailed, coarse;
+                        if (job.flat != null)
+                        {
+                            detailed = Object.Instantiate(job.mesh); detailed.name = job.mesh.name + " (flat relief)";
+                            coarse = Object.Instantiate(job.mesh); coarse.name = job.mesh.name + " (flat relief)";
+                            report.Add("FLAT " + job.renderer + ": " + job.flat);
+                        }
+                        else { detailed = HplReliefMeshBuilder.Create(job.detailed); coarse = HplReliefMeshBuilder.Create(job.coarse); }
+                        job.detailed = job.coarse = null;
+                        Save(detailed, job.detailPath); Save(coarse, job.coarsePath);
+                        File.WriteAllText(job.stampPath, job.stamp);
+                        generated++;
+                    }
+                    jobs.Clear(); sources.Clear();
+                    foreach (var (identity, uses_) in uses)
+                    {
+                        var detail = Resources.Load<Mesh>(entries[identity].detailedResource);
+                        for (int i = 0; i < detail.subMeshCount; i++) triangles += (long)detail.GetIndexCount(i) * uses_ / 3;
+                        count += uses_;
+                    }
+                    uses.Clear();
                     instances += count;
                     report.Add($"{path}: {count} relief renderers, {triangles:N0} detailed triangles (before distance LOD)");
                     Debug.Log("[EnhancedRelief] " + report[^1]);
@@ -309,14 +374,26 @@ namespace RTXMnesia.Importer
             a.original == b.original && (a.objectScale - b.objectScale).sqrMagnitude <= 0.000001f && a.slots.Length == b.slots.Length &&
             a.slots.Zip(b.slots, (x, y) => x.albedo == y.albedo && (x.scale - y.scale).sqrMagnitude <= 0.00000001f && (x.offset - y.offset).sqrMagnitude <= 0.00000001f).All(v => v);
 
-        static Mesh BuildWithinBudget(Mesh mesh, HplReliefMeshBuilder.Surface[] surfaces, Vector3 scale, float spacing, int budget)
+        /// <summary>A relief variant to build: read on the main thread, computed in parallel, saved on the main thread.</summary>
+        sealed class Job
+        {
+            public string identity, renderer, detailPath, coarsePath, stampPath, stamp, flat, error;
+            public Mesh mesh;
+            public HplReliefMeshBuilder.Source source;
+            public HplReliefMeshBuilder.Surface[] surfaces;
+            public Vector3 scale;
+            public HplReliefMeshBuilder.Result detailed, coarse;
+        }
+
+        static HplReliefMeshBuilder.Result ComputeWithinBudget(HplReliefMeshBuilder.Source source, HplReliefMeshBuilder.Surface[] surfaces, Vector3 scale, float spacing, int budget)
         {
             for (int i = 0; ; i++)
             {
-                try { return HplReliefMeshBuilder.Build(mesh, surfaces, scale, spacing, budget); }
+                try { return HplReliefMeshBuilder.Compute(source, surfaces, scale, spacing, budget); }
                 catch (InvalidOperationException e) when (e.Message.StartsWith("Relief triangle budget:", StringComparison.Ordinal) && i < 8) { spacing *= 1.5f; }
             }
         }
+
         static void Save(Mesh mesh, string path)
         {
             var previous = AssetDatabase.LoadAssetAtPath<Mesh>(path);

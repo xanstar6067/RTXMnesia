@@ -56,7 +56,7 @@ namespace RTXMnesia.Importer
             public Vector2 uvScale = Vector2.one, uvOffset;
             public float amplitude = 0.04f, reference = 0.7f;
         }
-        struct Vertex
+        internal struct Vertex
         {
             public Vector3 p, n;
             public Vector4 tangent, uv0, uv1, uv2, uv3;
@@ -86,18 +86,58 @@ namespace RTXMnesia.Importer
             public bool crease;
         }
 
-        public static Mesh Build(Mesh original, Surface[] surfaces, Vector3 scale, float spacing, int triangleBudget = 120000)
+        /// <summary>The source mesh as plain arrays (main thread), so <see cref="Compute"/> can run on worker threads.</summary>
+        public sealed class Source
         {
-            if (original.subMeshCount != surfaces.Length || scale.x < 0.0001f || scale.y < 0.0001f || scale.z < 0.0001f)
-                throw new InvalidOperationException("Invalid relief surfaces/scale: " + original.name);
-            var positions = original.vertices;
-            var normals = original.normals;
-            var tangents = original.tangents;
-            if (normals.Length != positions.Length || tangents.Length != positions.Length || original.blendShapeCount != 0)
-                throw new InvalidOperationException("Relief requires a static mesh with normals/tangents: " + original.name);
-            var channels = new List<Vector4>[4];
-            for (int i = 0; i < channels.Length; i++) { channels[i] = new(); original.GetUVs(i, channels[i]); }
-            var colors = original.colors;
+            public string name;
+            public Vector3[] positions, normals;
+            public Vector4[] tangents;
+            public List<Vector4>[] channels;
+            public Color[] colors;
+            public int[][] triangles;
+            public bool[] isTriangles;
+            public int blendShapeCount;
+        }
+
+        /// <summary>A computed relief mesh, turned into a Mesh by <see cref="Create"/> on the main thread.</summary>
+        public sealed class Result
+        {
+            internal string name;
+            internal List<Vertex> vertices;
+            internal List<int>[] indices;
+            internal bool hasColors, recalculateTangents;
+            internal bool[] hasChannel;
+        }
+
+        public static Source Read(Mesh original)
+        {
+            var source = new Source { name = original.name, positions = original.vertices, normals = original.normals, tangents = original.tangents,
+                colors = original.colors, blendShapeCount = original.blendShapeCount, channels = new List<Vector4>[4],
+                triangles = new int[original.subMeshCount][], isTriangles = new bool[original.subMeshCount] };
+            for (int i = 0; i < source.channels.Length; i++) { source.channels[i] = new(); original.GetUVs(i, source.channels[i]); }
+            for (int sub = 0; sub < original.subMeshCount; sub++)
+            {
+                source.isTriangles[sub] = original.GetTopology(sub) == MeshTopology.Triangles;
+                source.triangles[sub] = source.isTriangles[sub] ? original.GetTriangles(sub) : Array.Empty<int>();
+            }
+            return source;
+        }
+
+        public static Mesh Build(Mesh original, Surface[] surfaces, Vector3 scale, float spacing, int triangleBudget = 120000) =>
+            Create(Compute(Read(original), surfaces, scale, spacing, triangleBudget));
+
+        /// <summary>Thread safe: only the arrays of <paramref name="source"/> and the surfaces' height functions.</summary>
+        public static Result Compute(Source source, Surface[] surfaces, Vector3 scale, float spacing, int triangleBudget = 120000)
+        {
+            if (source.triangles.Length != surfaces.Length || scale.x < 0.0001f || scale.y < 0.0001f || scale.z < 0.0001f)
+                throw new InvalidOperationException("Invalid relief surfaces/scale: " + source.name);
+            var positions = source.positions;
+            var normals = source.normals;
+            var tangents = source.tangents;
+            if (normals.Length != positions.Length || tangents.Length != positions.Length || source.blendShapeCount != 0)
+                throw new InvalidOperationException("Relief requires a static mesh with normals/tangents: " + source.name);
+            var channels = source.channels;
+            var colors = source.colors;
             var vertices = new List<Vertex>();
             // Displacement of each vertex, applied after all submeshes: coincident vertices (a UV or normal seam, a
             // material border) then move together, so the relief has no cracks along seams.
@@ -107,7 +147,7 @@ namespace RTXMnesia.Importer
             int totalTriangles = 0;
             for (int sub = 0; sub < surfaces.Length; sub++)
             {
-                if (original.GetTopology(sub) != MeshTopology.Triangles) throw new InvalidOperationException("Relief requires triangles.");
+                if (!source.isTriangles[sub]) throw new InvalidOperationException("Relief requires triangles.");
                 var local = new List<Vertex>();
                 var remap = new Dictionary<int, int>();
                 int Local(int index)
@@ -121,7 +161,7 @@ namespace RTXMnesia.Importer
                     return result;
                 }
                 var triangles = new List<int>();
-                foreach (int index in original.GetTriangles(sub)) triangles.Add(Local(index));
+                foreach (int index in source.triangles[sub]) triangles.Add(Local(index));
                 var surface = surfaces[sub];
                 var localOffsets = new Vector3[0];
                 if (surface != null)
@@ -205,7 +245,7 @@ namespace RTXMnesia.Importer
                                 case 7: Add(a, d, f); Add(d, b, e); Add(f, e, c); Add(d, e, f); break;
                             }
                         }
-                        if (next.Count / 3 + totalTriangles > triangleBudget) throw new InvalidOperationException("Relief triangle budget: " + original.name);
+                        if (next.Count / 3 + totalTriangles > triangleBudget) throw new InvalidOperationException("Relief triangle budget: " + source.name);
                         triangles = next;
                     }
                     localOffsets = new Vector3[local.Count];
@@ -274,7 +314,18 @@ namespace RTXMnesia.Importer
                 foreach (var (v, sum) in accumulated)
                     if (sum.sqrMagnitude > 1e-16f) { var vertex = vertices[v]; vertex.n = sum.normalized; vertices[v] = vertex; }
             }
-            var mesh = new Mesh { name = original.name + " relief", indexFormat = vertices.Count > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16 };
+            return new Result
+            {
+                name = source.name, vertices = vertices, indices = indices, hasColors = colors.Length == positions.Length,
+                hasChannel = Array.ConvertAll(channels, c => c.Count == positions.Length),
+                recalculateTangents = Array.Exists(surfaces, s => s != null && (s.geometryNormals || s.boards)),
+            };
+        }
+
+        public static Mesh Create(Result result)
+        {
+            var vertices = result.vertices;
+            var mesh = new Mesh { name = result.name + " relief", indexFormat = vertices.Count > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16 };
             var p = new List<Vector3>(); var n = new List<Vector3>(); var tan = new List<Vector4>(); var col = new List<Color>();
             var uv = new List<Vector4>[] { new(), new(), new(), new() };
             foreach (var vertex in vertices)
@@ -283,12 +334,12 @@ namespace RTXMnesia.Importer
                 uv[0].Add(vertex.uv0); uv[1].Add(vertex.uv1); uv[2].Add(vertex.uv2); uv[3].Add(vertex.uv3);
             }
             mesh.SetVertices(p); mesh.SetNormals(n); mesh.SetTangents(tan);
-            if (colors.Length == positions.Length) mesh.SetColors(col);
-            for (int i = 0; i < uv.Length; i++) if (channels[i].Count == positions.Length) mesh.SetUVs(i, uv[i]);
-            mesh.subMeshCount = surfaces.Length;
-            for (int i = 0; i < indices.Length; i++) mesh.SetTriangles(indices[i], i, false);
+            if (result.hasColors) mesh.SetColors(col);
+            for (int i = 0; i < uv.Length; i++) if (result.hasChannel[i]) mesh.SetUVs(i, uv[i]);
+            mesh.subMeshCount = result.indices.Length;
+            for (int i = 0; i < result.indices.Length; i++) mesh.SetTriangles(result.indices[i], i, false);
             mesh.RecalculateBounds();
-            if (Array.Exists(surfaces, s => s != null && (s.geometryNormals || s.boards))) mesh.RecalculateTangents();
+            if (result.recalculateTangents) mesh.RecalculateTangents();
             return mesh;
         }
 
