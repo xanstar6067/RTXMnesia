@@ -116,12 +116,18 @@ namespace RTXMnesia.Hpl
         /// A traced light keeps its slot this long (s) after its importance last reached HplLightAnalysis.MinImportance:
         /// a room seen far away through a narrow door is hit only by some of the 16 offsets of the analysis grid (0.2 s
         /// apart), and its lights went in and out of the slots every few frames (the oven room of 00_rainy_hall: its
-        /// light came and went). Two of the grid's whole cycles, even when the importance fell to nothing in between: far
-        /// candles of 09_back_hall were hit once a cycle and went every 0.7 s with the slots half free. A held light that
-        /// no longer shows ranks last, so it only keeps a slot nobody else wants.
+        /// light came and went). Two of the grid's whole cycles, even when the importance fell to nothing in between. A
+        /// held light that no longer shows ranks last, so it only keeps a slot nobody else wants.
         /// </summary>
         const float TracedHold = 6.4f;
+        /// <summary>
+        /// The slots go by the importance averaged over about this long (s, the grid's whole cycle): one estimate of a far
+        /// light varies fourfold with the grid's offset, and with the slots full a far candle of 09_back_hall and a window
+        /// light swapped every half second. A light that clearly matters more still wins at once, one out of view loses at once.
+        /// </summary>
+        const float RankTime = 3.2f;
         static readonly Dictionary<AmnesiaLight, float> s_seen = new();
+        static readonly Dictionary<AmnesiaLight, float> s_rank = new();
         static readonly Dictionary<Light, float> s_radius = new();
         static int s_frame = -1;
 
@@ -321,7 +327,7 @@ namespace RTXMnesia.Hpl
             s_frame = Time.frameCount;
             // Lights of an unloaded map.
             s_traced.RemoveWhere(l => l == null);
-            if (s_seen.Count > 256) s_seen.Clear();
+            if (s_seen.Count > 256) { s_seen.Clear(); s_rank.Clear(); }
             if (s_radius.Count > s_traced.Count)
             {
                 var gone = new List<Light>();
@@ -355,6 +361,10 @@ namespace RTXMnesia.Hpl
                 bool traced = s_traced.Contains(light);
                 if (importance >= HplLightAnalysis.MinImportance) s_seen[light] = Time.unscaledTime;
                 else if (!traced || !s_seen.TryGetValue(light, out float seen) || Time.unscaledTime - seen > TracedHold) continue;
+                // Out of view altogether (the player turned away): at once.
+                importance = s_rank[light] = importance > 0f && s_rank.TryGetValue(light, out float rank)
+                    ? Mathf.Lerp(rank, importance, 1f - Mathf.Exp(-Time.unscaledDeltaTime / RankTime))
+                    : importance;
                 if (traced) importance *= TracedKeep;
                 s_candidates.Add((light, importance));
             }

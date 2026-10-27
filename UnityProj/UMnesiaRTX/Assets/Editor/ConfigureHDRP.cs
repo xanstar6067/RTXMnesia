@@ -13,7 +13,7 @@ public static class ConfigureHDRP
     const string AssetPath = "Assets/Settings/HDRP_RenderPipeline.asset";
     const string ProfilePath = "Assets/Settings/HDRP_SampleSceneProfile.asset";
     /// <summary>Shadow maps HDRP may render in a frame (a point light is six); see the enhanced lighting note below.</summary>
-    public const int ShadowRequests = 512;
+    public const int ShadowRequests = 1024;
 
     [MenuItem("Tools/RTXMnesia/Configure HDRP")]
     public static void Apply()
@@ -80,8 +80,9 @@ public static class ConfigureHDRP
         SetBool(serialized, "m_RenderPipelineSettings.hdShadowInitParams.supportScreenSpaceShadows", true);
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.maxScreenSpaceShadowSlots", 16);
         // The enhanced lighting gives every lamp shadows and a physical reach (up to 25 m): a view of 00_rainy_hall
-        // wants up to ~260 shadow maps (a point light is six). Past maxShadowRequests HDRP silently drops the rest,
-        // those lights shine through the walls, and which ones drop changes from frame to frame (strobing).
+        // wants up to ~260 shadow maps (a point light is six), the candle halls of ptest/03_dungeon up to ~680. Past
+        // maxShadowRequests HDRP silently drops the rest, those lights shine through the walls, and which ones drop
+        // changes from frame to frame (strobing). The atlas rescales its viewports when they do not fit.
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.maxShadowRequests", ShadowRequests);
         // Cached shadow maps of the still lights (HplShadowCache): 8192² holds ~150 point lamps at 256 or 40 at 512.
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.cachedPunctualLightShadowAtlas", 8192);

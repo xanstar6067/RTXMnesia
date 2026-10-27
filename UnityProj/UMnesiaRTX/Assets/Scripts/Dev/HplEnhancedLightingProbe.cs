@@ -264,15 +264,24 @@ namespace RTXMnesia.Dev
                         var data = frame.GetData<Color32>();
                         for (int p = 0; p < data.Length; p++) frameSum += (data[p].r + data[p].g + data[p].b) / 3.0;
                         means.Add((float)(frameSum / data.Length));
+                        // "frames": frames 60–62 saved as well (what changes between them).
+                        if (mode.Contains("frames") && i >= 60 && i < 63)
+                        {
+                            var shot = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
+                            shot.SetPixelData(data, 0);
+                            File.WriteAllBytes(Path.Combine(folder, $"{mapName}_{name}_frame{i}.png"), shot.EncodeToPNG());
+                            Destroy(shot);
+                        }
                         var traced = new List<string>();
-                        foreach (var l in FindObjectsByType<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(FindObjectsSortMode.None))
-                            if (l.useRayTracedShadows && l.isActiveAndEnabled) traced.Add(l.name);
+                        foreach (var a in AmnesiaLight.All)
+                            if (a != null && a.TryGetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalLightData>(out var l) && l.useRayTracedShadows)
+                                traced.Add(l.isActiveAndEnabled ? l.name : l.name + " (inactive)");
                         traced.Sort(StringComparer.Ordinal);
                         string tracedNow = string.Join(",", traced);
                         if (tracedNow != lastTraced || means.Count > 1 && Mathf.Abs(means[^1] - means[^2]) > 0.5f)
                         {
                             var fx = map.effects;
-                            report.AppendLine($"    series frame {i}: mean {means[^1]:0.00}, traced [{tracedNow}] fx fade {fx.Fade.Alpha:0.00} flash {fx.Flash.Alpha:0.00} gain {fx.SanityGainFlash.Alpha:0.00} trail {fx.ImageTrail.Amount:0.00} sepia {fx.Sepia.Amount:0.00} blur {fx.RadialBlur.Size:0.00} t {Time.realtimeSinceStartup:0.0}s");
+                            report.AppendLine($"    series frame {i}: mean {means[^1]:0.00}, traced {HplRayTracing.TracedLights} of {HplRayTracing.ShadowedLights} [{tracedNow}] fx fade {fx.Fade.Alpha:0.00} flash {fx.Flash.Alpha:0.00} gain {fx.SanityGainFlash.Alpha:0.00} trail {fx.ImageTrail.Amount:0.00} sepia {fx.Sepia.Amount:0.00} blur {fx.RadialBlur.Size:0.00} t {Time.realtimeSinceStartup:0.0}s");
                             // "series-name": the state of the lights whose name contains it.
                             int at = mode.IndexOf("series-", StringComparison.Ordinal);
                             if (at >= 0)
