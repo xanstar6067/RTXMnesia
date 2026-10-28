@@ -130,6 +130,14 @@ namespace RTXMnesia.EditorDev
                     {
                         s_lastScene = test.SceneIndex; s_lastShot = -1;
                         Check(test.Map.GameUi == null && !test.Map.runScript && test.Map.disableAutoSaves, "World isolated " + s_lastScene);
+                        if (s_lastScene == 1)
+                        {
+                            var stove = test.Map.GetEntityByName("stove_metal_1");
+                            Check(stove != null && stove.Active && stove.GameObject.activeInHierarchy,
+                                "Stove remains visible: its SwingDoor type must not hide the entire stove");
+                            var cabinet = test.Map.GetEntityByName("cabinet_simple_1");
+                            Check(cabinet != null && cabinet.Active, "Furniture with hinged doors remains present");
+                        }
                         Audit(test);
                     }
                     int shot = Mathf.FloorToInt(test.SceneTime / 10);

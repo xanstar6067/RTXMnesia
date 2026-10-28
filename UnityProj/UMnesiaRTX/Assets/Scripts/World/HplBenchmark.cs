@@ -192,11 +192,13 @@ namespace RTXMnesia.World
             Map.hud.Canvas.enabled = false;
             _settings.Apply(Map); // copy of the options draft; never saved
             foreach (var enemy in Map.Enemies) enemy.SetActive(false);
-            // Remove movable door leaves only in these temporary worlds: opening their lock does not
-            // physically swing them out of the camera path, and a simulated hinge can swing back.
+            // SwingDoor is also used by stoves, cupboards and the machine hatch. Only passage
+            // doors may be removed: hiding every SwingDoor leaves the stove's separate fire floating.
             var setup = new Setup { Map = Map };
             foreach (var entity in Map.Entities)
-                if (entity is Props.PropSwingDoor door) door.SetActive(false);
+                if (entity is Props.PropSwingDoor door &&
+                    (door.Component.file ?? "").Replace('\\', '/').StartsWith("entities/door/", StringComparison.OrdinalIgnoreCase))
+                    door.SetActive(false);
             if (SceneIndex == 0)
             {
                 Map.GetEntityByName("fountain_childsnake_blood_1")?.SetActive(false);
