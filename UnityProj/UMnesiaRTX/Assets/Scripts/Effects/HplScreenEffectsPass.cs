@@ -122,7 +122,7 @@ namespace RTXMnesia.Effects
         }
 
         /// <summary>
-        /// The lighting comparison (HplRtxCompare, key C), before the HPL effects so both images get them: the frame
+        /// The graphics comparison (HplRtxCompare, keys C / L / T), before the HPL effects so both images get them: the frame
         /// is kept, then a slanted line sweeps the live image (left) over the kept one (right).
         /// </summary>
         void RenderCompare(CustomPassContext ctx)

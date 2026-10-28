@@ -27,7 +27,7 @@ namespace RTXMnesia.Ui
 
         const string PrefsKey = "RTXMnesia.KeyBindings.v1";
 
-        // The order of gvPlayerActions within each category.
+        // The order of gvPlayerActions within each category, followed by the port's graphics comparisons.
         static readonly (string name, Category category, string primary, string secondary)[] Defaults =
         {
             ("Forward", Category.Movement, "Keyboard.W", ""),
@@ -48,6 +48,9 @@ namespace RTXMnesia.Ui
             ("QuestLog", Category.Misc, "Keyboard.M", ""),
             ("RecentText", Category.Misc, "Keyboard.N", ""),
             ("CrosshairToggle", Category.Misc, "Keyboard.X", ""),
+            ("RayTracingToggle", Category.Misc, "Keyboard.C", ""),
+            ("LightingToggle", Category.Misc, "Keyboard.L", ""),
+            ("TexturesToggle", Category.Misc, "Keyboard.T", ""),
         };
 
         static List<Action> s_actions;

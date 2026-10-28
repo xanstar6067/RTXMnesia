@@ -244,17 +244,46 @@ namespace RTXMnesia.EditorDev
 
         // ================================================================== keys
 
+        /// <summary>Only the binding / key config checks, without opening maps or playing audio.</summary>
+        public static void RunKeysBatch()
+        {
+            if (!Application.isBatchMode) throw new InvalidOperationException("RunKeysBatch requires batch mode (isolated profile state).");
+            string saved = PlayerPrefs.HasKey("RTXMnesia.KeyBindings.v1") ? PlayerPrefs.GetString("RTXMnesia.KeyBindings.v1") : null;
+            int checks = 0;
+            try
+            {
+                Keys((condition, message) =>
+                {
+                    if (!condition) throw new InvalidOperationException(message);
+                    checks++;
+                    Debug.Log("[KeysCheck] ok: " + message);
+                });
+                Debug.Log($"[KeysCheck] PASS: {checks} checks");
+            }
+            finally
+            {
+                if (saved == null) PlayerPrefs.DeleteKey("RTXMnesia.KeyBindings.v1");
+                else PlayerPrefs.SetString("RTXMnesia.KeyBindings.v1", saved);
+                PlayerPrefs.Save();
+                HplKeyBindings.Reload();
+            }
+        }
+
         static void Keys(Action<bool, string> check)
         {
             PlayerPrefs.DeleteKey("RTXMnesia.KeyBindings.v1");
+            HplKeyBindings.Reload();
             HplKeyBindings.Apply(Array.Empty<(string, string, string)>()); // loads the defaults
             check(HplKeyBindings.Get("Forward").primary == "Keyboard.W" && HplKeyBindings.Get("Interact").primary == "MouseButton.LeftMouse" &&
                   HplKeyBindings.Get("CrosshairToggle").primary == "Keyboard.X" && HplKeyBindings.Get("Lean") == null &&
-                  HplKeyBindings.Actions.Count == 18, "18 configurable actions with the default_user_keys.cfg inputs (no gamepad, no Lean)");
+                  HplKeyBindings.Actions.Count == 21, "18 HPL2 actions plus 3 graphics comparisons (no gamepad, no Lean)");
+            check(HplKeyBindings.Get("RayTracingToggle").primary == "Keyboard.C" &&
+                  HplKeyBindings.Get("LightingToggle").primary == "Keyboard.L" &&
+                  HplKeyBindings.Get("TexturesToggle").primary == "Keyboard.T", "graphics comparison defaults: C / L / T");
             var config = new HplKeyConfig();
             config.Begin();
-            check(!config.HasInvalidInputs && config.EntriesOf(0).Count() == 9 && config.EntriesOf(1).Count() == 4 && config.EntriesOf(2).Count() == 5,
-                  "key config: movement 9, actions 4, misc 5, nothing invalid");
+            check(!config.HasInvalidInputs && config.EntriesOf(0).Count() == 9 && config.EntriesOf(1).Count() == 4 && config.EntriesOf(2).Count() == 8,
+                  "key config: movement 9, actions 4, misc 8, nothing invalid");
             int jump = config.Entries.FindIndex(e => e.name == "Jump");
             int forward = config.Entries.FindIndex(e => e.name == "Forward");
             config.StartWaiting(jump, 0, 0);
@@ -271,6 +300,26 @@ namespace RTXMnesia.EditorDev
             check(HplKeyBindings.Get("Jump").secondary == "MouseButton.MiddleMouse", "OK applies the draft");
             var saved = PlayerPrefs.GetString("RTXMnesia.KeyBindings.v1");
             check(saved.Contains("MiddleMouse"), "and saves it");
+
+            int lighting = config.Entries.FindIndex(e => e.name == "LightingToggle");
+            int textures = config.Entries.FindIndex(e => e.name == "TexturesToggle");
+            config.StartWaiting(textures, 0, 0);
+            config.Assign("Keyboard.L");
+            check(config.Entries[lighting].invalid[0] && config.Entries[textures].invalid[0], "duplicate graphics comparison keys are marked");
+            config.SetDefaults();
+            config.StartWaiting(textures, 1, 0);
+            config.Assign("MouseButton.MiddleMouse");
+            config.Apply();
+            HplKeyBindings.Reload();
+            check(HplKeyBindings.Get("TexturesToggle").secondary == "MouseButton.MiddleMouse", "comparison secondary input survives reload");
+
+            // A pre-upgrade binding file has no graphics actions: retain its choices and add the new defaults.
+            PlayerPrefs.SetString("RTXMnesia.KeyBindings.v1", "{\"actions\":[{\"name\":\"Lantern\",\"primary\":\"Keyboard.G\",\"secondary\":\"\"}]}");
+            HplKeyBindings.Reload();
+            check(HplKeyBindings.Get("Lantern").primary == "Keyboard.G" &&
+                  HplKeyBindings.Get("RayTracingToggle").primary == "Keyboard.C" &&
+                  HplKeyBindings.Get("LightingToggle").primary == "Keyboard.L" &&
+                  HplKeyBindings.Get("TexturesToggle").primary == "Keyboard.T", "old bindings retain user choices and gain comparison defaults");
             config.SetDefaults();
             config.Apply();
         }

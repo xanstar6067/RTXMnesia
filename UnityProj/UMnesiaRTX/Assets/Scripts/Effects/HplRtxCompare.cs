@@ -5,19 +5,22 @@ using UnityEngine;
 namespace RTXMnesia.Effects
 {
     /// <summary>
-    /// Ray tracing on / off in game (key C, not in the original): the current frame is kept, the "Ray tracing" setting
-    /// of the user (tab "Трассировка", field lighting) switches and is saved — the options window shows the new state —
+    /// Graphics comparisons in game (configurable keys C / L / T): the current frame is kept, the selected setting
+    /// switches and is saved — the options window shows the new state —
     /// and a wipe line sweeps the new image over the kept one from left to right (<see cref="HplScreenEffectsPass"/>);
-    /// a label in the HUD names the new state. The lighting set (classic / enhanced) is not touched.
+    /// a label in the HUD names the new state. Each comparison changes only its own setting.
     /// </summary>
     public static class HplRtxCompare
     {
         public const float WipeTime = 0.9f, LabelTime = 1.5f;
+        public enum Comparison { RayTracing, Lighting, Textures }
         enum Phase { Idle, Capture, Switch, Wipe }
 
         static Phase s_phase;
         static float s_start, s_labelStart = -100f;
         static HplUserSettings s_settings;
+        static Comparison s_comparison;
+        static bool s_english;
 
         /// <summary>The GPU traces rays (otherwise there is nothing to compare).</summary>
         public static bool Available => SystemInfo.supportsRayTracing;
@@ -28,7 +31,7 @@ namespace RTXMnesia.Effects
         public static float Progress => s_phase == Phase.Wipe ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((Time.unscaledTime - s_start) / WipeTime)) : 0f;
         /// <summary>Ray tracing is on after the switch.</summary>
         public static bool RayTracing { get; private set; }
-        public static string Label => RayTracing ? "Трассировка лучей: вкл" : "Трассировка лучей: выкл";
+        public static string Label { get; private set; } = "";
         /// <summary>The HUD label: shown at the switch, fades out after the wipe.</summary>
         public static float LabelAlpha
         {
@@ -40,16 +43,18 @@ namespace RTXMnesia.Effects
             }
         }
 
-        /// <summary>Key C: switches the given (applied) settings, ignored while a switch is running.</summary>
-        public static void Toggle(HplUserSettings settings)
+        /// <summary>Switches one applied setting, ignored while a comparison is running. Only RTX requires DXR.</summary>
+        public static void Toggle(HplUserSettings settings, Comparison comparison = Comparison.RayTracing, HplLanguage language = null)
         {
-            if (!Available || settings == null || s_phase != Phase.Idle) return;
+            if (settings == null || s_phase != Phase.Idle || (comparison == Comparison.RayTracing && !Available)) return;
             s_settings = settings;
+            s_comparison = comparison;
+            s_english = language != null && language.language != null && language.language.StartsWith("eng", System.StringComparison.OrdinalIgnoreCase);
             s_phase = Phase.Capture;
             s_start = Time.unscaledTime;
         }
 
-        /// <summary>The screen pass has kept the frame: the lighting switches on the next update.</summary>
+        /// <summary>The screen pass has kept the frame: the selected setting switches on the next update.</summary>
         public static void Captured()
         {
             if (s_phase == Phase.Capture) s_phase = Phase.Switch;
@@ -66,7 +71,24 @@ namespace RTXMnesia.Effects
                     break;
                 case Phase.Switch:
                 {
-                    s_settings.lighting = HplRayTracing.Active ? 0 : 1;
+                    switch (s_comparison)
+                    {
+                        case Comparison.RayTracing:
+                            s_settings.lighting = HplRayTracing.Active ? 0 : 1;
+                            Label = s_english ? (s_settings.lighting == 1 ? "Ray tracing: on" : "Ray tracing: off")
+                                : s_settings.lighting == 1 ? "Трассировка лучей: вкл" : "Трассировка лучей: выкл";
+                            break;
+                        case Comparison.Lighting:
+                            s_settings.lightingSet = HplGraphics.Lighting == 1 ? 0 : 1;
+                            Label = s_english ? (s_settings.lightingSet == 1 ? "Lighting: enhanced" : "Lighting: classic")
+                                : s_settings.lightingSet == 1 ? "Освещение: улучшенное" : "Освещение: классическое";
+                            break;
+                        case Comparison.Textures:
+                            s_settings.textures = HplGraphics.Textures == 1 ? 0 : 1;
+                            Label = s_english ? (s_settings.textures == 1 ? "Textures: enhanced" : "Textures: classic")
+                                : s_settings.textures == 1 ? "Текстуры: улучшенные" : "Текстуры: классические";
+                            break;
+                    }
                     HplGraphics.Apply(s_settings);
                     s_settings.Save();
                     RayTracing = HplRayTracing.Active;

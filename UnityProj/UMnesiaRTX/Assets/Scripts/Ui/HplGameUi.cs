@@ -101,8 +101,16 @@ namespace RTXMnesia.Ui
             if (!IsPaused && _map.player != null && _map.player.UiInputBlocked &&
                 (keyboard == null || !keyboard.escapeKey.wasPressedThisFrame)) return;
             if (keyboard != null && RouteKeys(keyboard)) return;
-            // C: compare the classic lighting and ray tracing (not an HPL2 key, not configurable).
-            if (!IsPaused && !IsTitleScreen && keyboard != null && keyboard.cKey.wasPressedThisFrame) Effects.HplRtxCompare.Toggle(Settings);
+            // Port-specific graphics comparisons use the same configurable inputs as the other actions.
+            if (!IsPaused && !IsTitleScreen)
+            {
+                if (HplKeyBindings.WasPressed("RayTracingToggle"))
+                    Effects.HplRtxCompare.Toggle(Settings, Effects.HplRtxCompare.Comparison.RayTracing, _map.language);
+                else if (HplKeyBindings.WasPressed("LightingToggle"))
+                    Effects.HplRtxCompare.Toggle(Settings, Effects.HplRtxCompare.Comparison.Lighting, _map.language);
+                else if (HplKeyBindings.WasPressed("TexturesToggle"))
+                    Effects.HplRtxCompare.Toggle(Settings, Effects.HplRtxCompare.Comparison.Textures, _map.language);
+            }
             if (!IsPaused) return;
 
             MenuOpacity = Mathf.MoveTowards(MenuOpacity, IsClosing ? 0f : 1f, Time.unscaledDeltaTime / Mathf.Max(0.001f, FadeTime()));

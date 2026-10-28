@@ -343,8 +343,10 @@ namespace RTXMnesia.Ui
             Section("Освещение");
             ScrollCombo(MenuControl.Lighting, settings);
             Note("«Улучшенное» освещение переставляет источники света карт (пока готовы не все карты). Трассировка лучей включается на вкладке «Трассировка» и работает поверх любого освещения.");
+            Note(CompareHint("LightingToggle"));
             Section("Текстуры");
             ScrollCombo(MenuControl.Textures, settings);
+            Note(CompareHint("TexturesToggle"));
             ScrollCombo(MenuControl.TextureQuality, settings);
             ScrollCombo(MenuControl.TextureMemoryBudget, settings);
             ScrollCombo(MenuControl.Anisotropy, settings);
@@ -407,7 +409,7 @@ namespace RTXMnesia.Ui
                 Note(!HplRayTracing.Applied(settings) ? "Применится после «OK»."
                     : settings.rtShadows == 0 ? "Тени: картами теней."
                     : "С трассировкой: " + HplRayTracing.TracedLights + " из " + HplRayTracing.ShadowedLights + " источников, чьи тени видны в кадре" + (HplRayTracing.TracedHandLights > 0 ? " + фонарь." : "."));
-            if (supported) Note(CompareHint);
+            if (supported) Note(CompareHint("RayTracingToggle"));
         }
 
         void SoundTabItems(HplUserSettings settings)
@@ -430,8 +432,29 @@ namespace RTXMnesia.Ui
         const string PathTracingNote = "Чисто, пока в кадре всё стоит; без окружающего света и тумана.";
         /// <summary>Frame generation: Unity has none of its own; NVIDIA's driver one is turned on in the NVIDIA App.</summary>
         const string FrameGenerationNote = "NVIDIA Smooth Motion включается в NVIDIA App для UMnesiaRTX.exe (RTX 40 и 50); в игре своей генерации кадров нет.";
-        /// <summary>The comparison key (Effects.HplRtxCompare).</summary>
-        const string CompareHint = "В игре клавиша C включает и выключает трассировку лучей (сохраняется).";
+        string KeyActionLabel(string action) => action switch
+        {
+            "RayTracingToggle" => HdrText("Переключить трассировку", "Toggle ray tracing"),
+            "LightingToggle" => HdrText("Переключить освещение", "Toggle lighting"),
+            "TexturesToggle" => HdrText("Переключить текстуры", "Toggle textures"),
+            _ => T("Actions", action, action),
+        };
+
+        /// <summary>The actual comparison bindings, including the secondary slot and unassigned actions.</summary>
+        string CompareHint(string action)
+        {
+            var binding = HplKeyBindings.Get(action);
+            string Input(string input)
+            {
+                string name = HplKeyBindings.ButtonName(input);
+                return name == "" ? "" : T("ButtonNames", name, name);
+            }
+            string keys = Input(binding?.primary), secondary = Input(binding?.secondary);
+            if (secondary != "") keys += (keys == "" ? "" : " / ") + secondary;
+            if (keys == "") keys = HdrText("Не назначено", "Unassigned");
+            return HdrText("В игре: ", "In game: ") + keys + " - " + KeyActionLabel(action) + ". "
+                + HdrText("Выбор сохраняется.", "The choice is saved.");
+        }
 
         // The calibration patch is drawn in the camera buffer, through a hole in the UI background.
         // Putting it in an ordinary UI texture would clamp its luminance to Paper White / Max Nits.
@@ -512,7 +535,7 @@ namespace RTXMnesia.Ui
             foreach (int i in keys.EntriesOf(keys.Category))
             {
                 var e = keys.Entries[i];
-                Draw(_guiText, T("Actions", e.name, e.name), new Vector2(x, y), size, Color.white);
+                Draw(_guiText, KeyActionLabel(e.name), new Vector2(x, y), size, Color.white);
                 for (int s = 0; s < 2; s++)
                 {
                     var rect = new Rect(x + (s == 0 ? 240 : 390), y, 140, 16);
