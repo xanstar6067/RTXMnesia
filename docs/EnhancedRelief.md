@@ -397,7 +397,7 @@ T-стыков, но совпадающие по положению вершин
 `ConvertApprovedBatch`:
 
 - **Стены:** `torture_chancel`, `stone_round`, `gigantic`, `castlebase_wall_extension` / `_worn` / `_welder_convex` /
-  `_door_straight`, `tall_stone`, `murky_castlebase`, `cellarbase`, `dungeonbase_lab_wall` (и `_wet` — та же альбедо),
+  `_door_straight` / `_win` (с 2026-10-28, см. ниже), `tall_stone`, `murky_castlebase`, `cellarbase`, `dungeonbase_lab_wall` (и `_wet` — та же альбедо),
   `dungeon_wall_variant`, `welder_sewer_stone`, `cistern_stone`, `stone_arched`, `dungeonbase_wall_tileable`.
 - **Полы:** `cobbled_stone`, `dungeonbase_floor`, `gigantic_stones`, `cisternbase`, `stone_dirty`, `church_floor`,
   `cellarbase_details`. **Скала и земля** (`rock`): `dungeon_cave_in`, `rock_tileable`, `dirt_mould`.
@@ -453,3 +453,11 @@ T-стыков, но совпадающие по положению вершин
 краях, остаток у краёв (1.5 %) гасится к уровню лица — иначе вдоль краёв атласа шли канавы на всю глубину шва.
 Знак интегрирования невязка не определяет: глубина ориентируется по альбедо (глубокое темнее, как у всех 16 карт
 глубины HPL; `integrated_depth_flipped` в `relief.json` — у `castlebase_wall_welder_convex`).
+
+**Стены с окнами castlebase** (2026-10-28, по просьбе пользователя после `01_old_archives`, комната с печкой): модуль
+`castlebase/wall/window_blue` несёт свой атлас `castlebase_wall_win` (кладка вокруг окна, подоконник, столбы рамы;
+146 м², больше всего на `01_old_archives`, ещё `02_entrance_hall`, `00_rainy_hall`, `09_back_hall`) и стекло
+`castlebase_wall_windows` — без рельефа оставались плоскими среди объёмной `castlebase_wall`. Рецепт общий, 4.2 м на
+UV, швы 2 см × 1.5. Форма — из нормали HPL, а не из альфы `_nrm`: альфа покрывает только бутовую кладку у окна и пояс
+под ней (размытые широкие швы), остальной атлас (тёсаные блоки, столбы) был бы плоским. Стекло и рама
+(`castlebase_wall_windows`) остаются как были.

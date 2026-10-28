@@ -31,6 +31,7 @@ namespace RTXMnesia.Importer
         {
             ["static_objects/castlebase/wall/castlebase_wall.mat"] = 0.045f,
             // Generic manual relief 2026-10-27 (Build-ManualRelief.py <name>: shape from the HPL depth, matte, dimmed specular).
+            ["static_objects/castlebase/wall/castlebase_wall_win.mat"] = 0.03f,
             ["static_objects/castlebase/wall/castlebase_wall_worn.mat"] = 0.035f,
             ["static_objects/castlebase/wall/castlebase_wall_extension.mat"] = 0.02f,
             ["static_objects/castlebase/wall/castlebase_wall_welder_convex.mat"] = 0.018f,
