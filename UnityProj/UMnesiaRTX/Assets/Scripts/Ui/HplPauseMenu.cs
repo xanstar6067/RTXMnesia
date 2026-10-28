@@ -312,7 +312,7 @@ namespace RTXMnesia.Ui
             Vector2 pos = _map.menuConfig != null ? _map.menuConfig.GetVector2("Main", _titleScreen ? "TopMenuStartRelativePos" : "TopMenuStartRelativePosInGame", _titleScreen ? new Vector2(0.8f, 0.325f) : Vector2.one * 0.5f) : Vector2.one * 0.5f;
             pos = Vector2.Scale(pos, new Vector2(800, 600));
             // cLuxMainMenu::CreateTopMenuGui: Continue / Load game with a save on the title screen, Exit and save in
-            // game while the player lives; Exit stays in game too (like closing the window, it auto saves as OnQuit).
+            // game while the player lives; both in-game exit entries return to the title screen.
             var labels = new List<string>();
             var controls = new List<MenuControl>();
             void Add(string key, string fallback, MenuControl control)
@@ -403,8 +403,7 @@ namespace RTXMnesia.Ui
                 MenuControl.ConfirmNewGame => T("MainMenu", "Start a new game?", "Начать новую игру?"),
                 MenuControl.ConfirmReturnTitle => T("MainMenu", "Sure you want to exit to main menu?", "Выйти в главное меню?"),
                 MenuControl.ConfirmContinue => T("MainMenu", "Continue old game?", "Продолжить прошлую игру?"),
-                // Own text: here "save and exit" leaves the game (the original's string says "to the main menu").
-                MenuControl.ConfirmExitAndSave => "Сохранить прогресс и выйти из игры?",
+                MenuControl.ConfirmExitAndSave => T("MainMenu", "Sure you want to exit and save?", "Выйти в главное меню и сохранить прогресс?"),
                 MenuControl.ConfirmLoad => T("LoadGame", "LoadGameMessage", "Загрузить сохранённую игру?"),
                 MenuControl.ConfirmKeyDefaults => T("KeyConfig", "LoadDefaultsMessage", "Применить раскладку по умолчанию?"),
                 MenuControl.ConfirmKeyInvalid => T("KeyConfig", "InvalidInputMessage", "Некоторые клавиши повторяются. Сохранить?"),
