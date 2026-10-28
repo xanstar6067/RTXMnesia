@@ -665,9 +665,10 @@ def dungeon(a, rng):
 # from the original HPL depth (its height map, else the alpha of its normal map, else its normal map integrated), no
 # stone segmentation (atlases mix stone, wood and metal; the depth map already holds what the artists' POM showed).
 # Faces stay at the plane, the deep part of the depth map becomes recessed joints, matte faces and dimmed specular as
-# the approved dungeonbase. Values: material (static_objects/...), depth source ('height', 'alpha' or 'normal'), metres
-# per UV unit (median of the modules, planes 1 / TileAmount), joint depth (m), the kind and optionally the stem of the
-# original textures when the .mat takes another material's:
+# the approved dungeonbase. Values: material (static_objects/...), depth source ('height', 'alpha', 'normal' or 'pbrify'
+# where HPL has no normal map), metres per UV unit (median of the modules, planes 1 / TileAmount), joint depth (m), the
+# kind, optionally the stem of the original depth / normal textures when the .mat takes another material's, and the
+# texture stem (PBRify set, albedo) when it lies elsewhere than the .mat:
 #   stone  plateau faces, joints from the deep part (walls, paving, pillars)
 #   rock   continuous depth without plateau (cave-ins, rock, earth)
 GENERIC = {
@@ -700,13 +701,68 @@ GENERIC = {
     'dungeon_cave_in': ('static_objects/debris/dungeon_cave_in/dungeon_cave_in', 'normal', 3.8, 0.040, 'rock'),
     'rock_tileable': ('static_objects/sanctumbase/rock_tileable', 'normal', 4.0, 0.035, 'rock'),
     'dirt_mould': ('static_objects/dungeonbase/floor/dirt_mould', 'normal', 4.0, 0.020, 'rock'),
+    # Third pass 2026-10-28 (user: all three groups of the materials left without relief, area over chapters 1-3 and
+    # Justine). 1: castle walls, doors, pillars and stairs next to the relief masonry.
+    # Door and window walls: the alpha of their normal map covers only the rubble by the opening (the dressed blocks
+    # and frame pillars would stay flat), the integrated normal the whole atlas, as castlebase_wall_win.
+    'castlebase_wall_door': ('static_objects/castlebase/wall/castlebase_wall_door', 'normal', 4.9, 0.020, 'stone'),
+    'castlebase_wall_extension_win': ('static_objects/castlebase/wall/castlebase_wall_extension_win', 'normal', 5.5, 0.020, 'stone',
+                                      'static_objects/castlebase/wall/castlebase_wall_extension'),
+    'castlebase_details': ('static_objects/castlebase/castlebase_details', 'alpha', 2.2, 0.015, 'stone'),
+    'cell_wall': ('static_objects/castlebase/special/cell_wall', 'alpha', 1.8, 0.025, 'stone',
+                  'static_objects/castlebase/special/cisternentr_wall_tile'),
+    'castlebase_wall_door_straight_worn': ('static_objects/castlebase/wall/castlebase_wall_door_straight_worn', 'normal', 4.9, 0.018, 'stone'),
+    'castlebase_pillars': ('static_objects/castlebase/pillar/castlebase_pillars', 'normal', 4.5, 0.018, 'stone'),
+    'castlebase_stairs': ('static_objects/castlebase/stairs/castlebase_stairs', 'normal', 1.6, 0.015, 'stone'),
+    'castlebase_stairs_worn': ('static_objects/castlebase/stairs/castlebase_stairs_worn', 'normal', 1.4, 0.015, 'stone',
+                               'static_objects/castlebase/stairs/castlebase_stairs'),
+    'castlebase_stair_welder': ('static_objects/castlebase/stairs/castlebase_stair_welder', 'normal', 2.6, 0.015, 'stone'),
+    'castlebase_stair_welder_worn': ('static_objects/castlebase/stairs/castlebase_stair_welder_worn', 'normal', 2.6, 0.015, 'stone',
+                                     'static_objects/castlebase/stairs/castlebase_stair_welder'),
+    'cellarbase_stone_stairs': ('static_objects/cellarbase/stairs/cellarbase_stone_stairs', 'normal', 1.3, 0.015, 'stone'),
+    # 2: ceilings and beams.
+    'cellarbase_wood_beams': ('static_objects/cellarbase/cellarbase_wood_beams', 'height', 1.9, 0.010, 'rock'),
+    'ceiling02_arched': ('static_objects/castlebase/ceiling/ceiling02_arched', 'alpha', 9.1, 0.020, 'stone'),
+    'castlebase_ceiling': ('static_objects/castlebase/castlebase_ceiling', 'normal', 2.5, 0.020, 'stone'),
+    'castlebase_ceiling02': ('static_objects/castlebase/castlebase_ceiling02', 'alpha', 3.4, 0.020, 'stone'),
+    'welder_wood': ('static_objects/castlebase/ceiling/welder_wood', 'normal', 2.6, 0.008, 'rock'),
+    'ceiling_rough': ('static_objects/castlebase/ceiling/ceiling_rough', 'height', 2.2, 0.020, 'stone'),
+    'ceiling02_window': ('static_objects/castlebase/ceiling/ceiling02_window', 'alpha', 5.9, 0.020, 'stone'),
+    'ceiling02_window_worn': ('static_objects/castlebase/ceiling/ceiling02_window_worn', 'alpha', 5.7, 0.020, 'stone',
+                              'static_objects/castlebase/ceiling/ceiling02_window'),
+    'tunnel': ('static_objects/tunnelbase/special/tunnel', 'normal', 6.5, 0.025, 'rock'),   # hewn rock, no courses
+    # 3: the mansion (plaster and wood: shallow rock), the sanctum, the rough cellar floor, the chasm edge.
+    'mansionbase02': ('static_objects/mansionbase/wall/mansionbase02', 'normal', 8.5, 0.008, 'rock'),
+    'outside_wall': ('static_objects/mansionbase/special/outside_wall', 'height', 13.9, 0.020, 'stone'),
+    'mansionbase': ('static_objects/mansionbase/wall/mansionbase', 'pbrify', 10.0, 0.006, 'rock'),     # HPL: no normal map
+    'mansionbase_concave': ('static_objects/mansionbase/ceiling/mansionbase_concave', 'normal', 4.1, 0.006, 'rock'),
+    'mansionbase_wood': ('static_objects/mansionbase/wall/mansionbase_wood', 'normal', 10.0, 0.006, 'rock'),
+    'sanctumbase01': ('static_objects/sanctumbase/special/sanctumbase01', 'normal', 11.4, 0.030, 'rock',
+                      'static_objects/sanctumbase/sanctumbase01', 'static_objects/sanctumbase/sanctumbase01'),
+    'sanctumbase02': ('static_objects/sanctumbase/special/sanctumbase02', 'normal', 32.1, 0.030, 'rock',
+                      'static_objects/sanctumbase/sanctumbase02', 'static_objects/sanctumbase/sanctumbase02'),
+    'sanctumbase_floor': ('static_objects/sanctumbase/floor/sanctumbase_floor', 'height', 4.0, 0.020, 'stone'),
+    'cellarbase_floor_rough': ('static_objects/cellarbase/floor/cellarbase_floor_rough', 'height', 4.7, 0.020, 'rock',
+                               'static_objects/cellarbase/floor/cellarbase_floor_dirt_rough',
+                               'static_objects/cellarbase/floor/cellarbase_floor_dirt_rough'),
+    'chasm_edge': ('static_objects/dungeonbase/floor/chasm_edge', 'normal', 6.45, 0.030, 'rock'),
 }
+# Carvings that stand out of the stone although darker in the albedo (the cross and braids of the stair welder): the
+# integrated sign is kept (raised, as the HPL normal's edges show), not oriented by the albedo.
+KEEP_INTEGRATED_SIGN = {'castlebase_stair_welder', 'castlebase_stair_welder_worn'}
 # Dark stone dims its specular (dungeonbase: linear albedo luminance 0.039, coverage 0.3 of F0 0.04); stone as light as the
 # approved castle wall (0.064) keeps the full F0 0.04.
 DARK_LUM, DARK_COVERAGE, LIGHT_LUM = 0.039, 0.3, 0.064
 # Second pass 2026-10-27 (user: "deeper joints, crisper stone edges"): the table depths x1.5 (classic POM shows 5-15 cm),
 # a narrower face -> joint transition, less smoothing, a steeper shading limit.
 DEPTH_GAIN = 1.5
+
+
+def texture_of(material):
+    """Texture stem of a generic material (PBRify set, albedo): the 7th field where the .mat lies elsewhere than its
+    texture (sanctumbase/special/sanctumbase01.mat -> sanctumbase/sanctumbase01), else the material path."""
+    entry = GENERIC[material]
+    return entry[6] if len(entry) > 6 else entry[0]
 
 
 def hpl_texture(a, rel, suffix, mode):
@@ -742,9 +798,9 @@ def seam_fade(depth, axis):
 
 def generic(a, rng):
     rel, source_kind, metres_per_uv, joint_depth, kind = GENERIC[a.material][:5]
-    original = GENERIC[a.material][5] if len(GENERIC[a.material]) > 5 else rel
+    original = GENERIC[a.material][5] if len(GENERIC[a.material]) > 5 and GENERIC[a.material][5] else rel
     joint_depth = a.joint_depth_override or joint_depth * DEPTH_GAIN
-    name = os.path.basename(rel)
+    name = os.path.basename(texture_of(a.material))
     albedo = load(os.path.join(a.pbrify, name + '__albedo.png'), 'RGB').astype(np.float32)
     rows, cols = albedo.shape[:2]
     mpp = metres_per_uv / cols
@@ -755,6 +811,9 @@ def generic(a, rng):
         depth = hpl_texture(a, original, '_height', 'L')
     elif source_kind == 'alpha':
         depth = hpl_texture(a, original, '_nrm', 'RGBA')[..., 3]
+    elif source_kind == 'pbrify':
+        # No HPL normal at all (mansionbase, ceiling02_hole): PBRify's own height, white = high.
+        depth = 1 - load(os.path.join(a.pbrify, name + '__height.png'), 'RGB')[..., 0].astype(np.float32)
     else:
         depth = None
     # Only along an axis where the texture tiles (the albedo continues across the opposite edges); atlas borders are
@@ -794,13 +853,13 @@ def generic(a, rng):
     # The deep part is darker in the albedo (all 16 HPL depth maps: correlation -0.26...-0.73). The integration's sign
     # is not fixed by the residual (stone_dirty came out inverted): orient it by the albedo.
     flipped = False
-    if source_kind == 'normal':
+    if source_kind == 'normal' and a.material not in KEEP_INTEGRATED_SIGN:
         dz = (depth - depth.mean()) / (depth.std() + 1e-6)
         lz = (small - small.mean()) / (small.std() + 1e-6)
         if float(np.mean(dz * lz)) > 0:
             depth = -depth
             flipped = True
-    seams = [seam_fade(depth, axis) if source_kind != 'normal' and tiles(axis) else 0 for axis in (0, 1)]
+    seams = [seam_fade(depth, axis) if source_kind in ('height', 'alpha') and tiles(axis) else 0 for axis in (0, 1)]
     depth = zoom(depth)
     lo_, hi_ = np.percentile(depth, (1, 99))
     d = np.clip((depth - lo_) / max(hi_ - lo_, 1e-4), 0, 1)
@@ -906,12 +965,12 @@ def main():
     a.bevel = defaults[1] if a.bevel is None else a.bevel
     a.detail = defaults[2] if a.detail is None else a.detail
     rel = GENERIC[a.material][0] if is_generic else MATERIALS[a.material]
-    folder = os.path.join(ROOT, 'sourceRTXRemix', rel)
+    folder = os.path.join(ROOT, 'sourceRTXRemix', texture_of(a.material) if is_generic else rel)
     if not a.pbrify:
         # dungeon and the generic materials: the x2 set where there is one (4096 atlases), else x4.
         sets = [s for s in ('pbrify-x2-batch-v1', 'pbrify-x4-batch-v1') if os.path.isdir(os.path.join(folder, s))]
         a.pbrify = os.path.join(folder, sets[0] if (is_generic or a.material == 'dungeon') and sets else 'pbrify-x4-batch-v1')
-    a.out = a.out or os.path.join(folder, 'manual-relief-v1')
+    a.out = a.out or os.path.join(ROOT, 'sourceRTXRemix', rel, 'manual-relief-v1')
     os.makedirs(a.out, exist_ok=True)
     info = {'material': rel + '.mat', 'kind': 'generic' if is_generic else a.material,
             'height_encoding_metres': HEIGHT_RANGE, 'joint_depth': a.joint_depth, 'bevel': a.bevel,

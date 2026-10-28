@@ -401,7 +401,8 @@ T-стыков, но совпадающие по положению вершин
   `dungeon_wall_variant`, `welder_sewer_stone`, `cistern_stone`, `stone_arched`, `dungeonbase_wall_tileable`.
 - **Полы:** `cobbled_stone`, `dungeonbase_floor`, `gigantic_stones`, `cisternbase`, `stone_dirty`, `church_floor`,
   `cellarbase_details`. **Скала и земля** (`rock`): `dungeon_cave_in`, `rock_tileable`, `dirt_mould`.
-- Не вошли: `mansionbase02`, `sanctumbase01` (нет набора PBRify), вода, трава, трубы, паутина, `plane_black`.
+- Не вошли тогда: `mansionbase02`, `sanctumbase01` (набора PBRify ещё не было; добавлены 2026-10-28, см. «Третий проход»), вода,
+  трава, трубы, паутина, `plane_black`.
 
 **Рецепт** (без разметки камней по участкам, как у dungeonbase: атласы смешивают камень, дерево и металл, а карта
 глубины HPL уже несёт то, что художники показывали POM):
@@ -461,3 +462,35 @@ T-стыков, но совпадающие по положению вершин
 UV, швы 2 см × 1.5. Форма — из нормали HPL, а не из альфы `_nrm`: альфа покрывает только бутовую кладку у окна и пояс
 под ней (размытые широкие швы), остальной атлас (тёсаные блоки, столбы) был бы плоским. Стекло и рама
 (`castlebase_wall_windows`) остаются как были.
+
+## Третий проход: пропущенные материалы глав 1–3 (2026-10-28)
+
+После стен с окнами пользователь попросил найти похожие пропуски. Подсчёт площадей по всем картам глав 1–3 и Justine
+(`.dae` модулей карт, сверка с `Profiles`) дал три группы камня, кирпича и дерева без рельефа; пользователь выбрал все
+три. Тот же общий рецепт (`GENERIC`), 30 материалов:
+
+- **Стены, двери, колонны и лестницы castlebase** (стоят рядом с объёмной кладкой): `castlebase_wall_door`,
+  `castlebase_wall_extension_win`, `castlebase_details`, `cell_wall`, `castlebase_wall_door_straight_worn`,
+  `castlebase_pillars`, `castlebase_stairs` / `_worn`, `castlebase_stair_welder` / `_worn`, `cellarbase_stone_stairs`.
+- **Потолки и балки:** `cellarbase_wood_beams` (25 980 м², самый большой пропуск), `ceiling02_arched`,
+  `castlebase_ceiling` / `02`, `welder_wood`, `ceiling_rough`, `ceiling02_window` / `_worn`, `tunnel`.
+- **Особняк, святилище и прочее:** `mansionbase02`, `outside_wall`, `mansionbase`, `mansionbase_concave`,
+  `mansionbase_wood`, `sanctumbase01` / `02`, `sanctumbase_floor`, `cellarbase_floor_rough`, `chasm_edge`.
+
+Особенности:
+- Стены с проёмами (`castlebase_wall_door`, `_extension_win`) — форма из нормали HPL, как `castlebase_wall_win`: альфа
+  `_nrm` покрывает только бутовую кладку у проёма.
+- Дерево, штукатурка и обработанная скала — вид `rock` с малой глубиной (особняк 0.9–1.2 см, балки 1.5 см), а не швы.
+- `mansionbase` в HPL без карты нормалей: форма из высоты PBRify (источник `pbrify`).
+- Где `.mat` лежит не там, где текстура (`sanctumbase/special/sanctumbase01.mat` → `sanctumbase/sanctumbase01`,
+  `cellarbase_floor_rough.mat` → `cellarbase_floor_dirt_rough`), 7-е поле записи — путь текстуры (набор PBRify,
+  альбедо); карты рельефа лежат по пути `.mat`, как их ищет `ApprovedReliefProfiles.ManualFolder`.
+- Знак интегрированной нормали по альбедо (глубокое темнее) неверен для резьбы, которая темнее, но выступает: крест и
+  плетёнка `castlebase_stair_welder` выпуклые по краям нормали HPL — для них `KEEP_INTEGRATED_SIGN`.
+- Не вошли: большие окна `castlebase_wall_large_win_*` (стекло с железной решёткой: прутья стали бы канавками),
+  `ceiling02_hole` (вырез с альфой), декали, паутина, плющ, трубы и металл, трава и земля фермы, витражи, ткани.
+- **Объём** после `ConvertApprovedBatch`: 3257 вариантов (897 новых) на 29 205 экземпляров, 61 утверждённая текстура;
+  `HplReliefMeshes` — 12 ГБ на диске. Два меша святилища (`polySurface53`, `polySurface81`) не уложились в бюджет и
+  получили плоскую копию с картами рельефа (`FLAT`).
+- Рендеры: лестница `02_entrance_hall`, панели особняка `03_archives` (режимы `_nostress`: на этой карте падает
+  проверка событий света), балки `05_wine_cellar`, пол `29_orb_chamber`.
