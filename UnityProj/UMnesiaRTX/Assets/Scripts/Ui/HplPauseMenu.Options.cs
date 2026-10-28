@@ -340,6 +340,8 @@ namespace RTXMnesia.Ui
 
         void GraphicsTabItems(HplUserSettings settings)
         {
+            ScrollButton(HdrText("Тест производительности.", "Performance test."), MenuControl.Benchmark);
+            Note(HdrText("Пролёт с выбранными настройками. Удерживайте Esc для отмены.", "Flythrough with selected settings. Hold Esc to cancel."));
             Section("Освещение");
             ScrollCombo(MenuControl.Lighting, settings);
             Note("«Улучшенное» освещение переставляет источники света карт (пока готовы не все карты). Трассировка лучей включается на вкладке «Трассировка» и работает поверх любого освещения.");

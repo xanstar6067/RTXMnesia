@@ -33,6 +33,7 @@ namespace RTXMnesia.Ui
         SoftShadows, ContactShadows, LanternShadow, ShadowCache,
         // Darkness by the visible light (game options).
         VisibleDarkness,
+        Benchmark,
     }
 
     /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>

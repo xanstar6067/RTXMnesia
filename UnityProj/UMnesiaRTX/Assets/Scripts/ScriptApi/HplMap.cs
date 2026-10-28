@@ -55,6 +55,8 @@ namespace RTXMnesia.ScriptApi
         public bool disableAutoSaves;
         public bool disableInsanity;
         public bool disableEnemyAI;
+        /// <summary>Temporary benchmark world: no game scripts, saves, UI or campaign progression.</summary>
+        public bool IsBenchmark { get; private set; }
         Dev.HplDevRoom _devRoom;
 
         public static HplMap Current { get; private set; }
@@ -191,16 +193,23 @@ namespace RTXMnesia.ScriptApi
         {
             if (_built) return;
             _built = true;
+            IsBenchmark = HplBenchmark.IsLoading(gameObject.scene.path);
+            if (IsBenchmark)
+            {
+                runScript = false;
+                disableAutoSaves = true;
+                disableEnemyAI = true;
+            }
             _devRoom = GetComponent<Dev.HplDevRoom>();
             Current = this;
             _level = GetComponent<AmnesiaLevel>();
             if (string.IsNullOrEmpty(mapFile) && _level != null) mapFile = _level.mapFile;
             if (!menuBackground && player == null) player = FindAnyObjectByType<AmnesiaPlayer>(FindObjectsInactive.Include);
             // A map change loaded this scene: the player starts at the asked position (AmnesiaPlayer.Start).
-            if (!menuBackground && Application.isPlaying) _arrival = HplMapChange.Take(mapFile);
+            if (!IsBenchmark && !menuBackground && Application.isPlaying) _arrival = HplMapChange.Take(mapFile);
             if (_arrival != null && player != null) player.startArea = _arrival.StartPos;
             // A save is being loaded into this map (cLuxSaveHandler::LoadSaveGameData).
-            if (!menuBackground && _arrival == null) _loadGame = RTXMnesia.Save.HplSaveHandler.TakePending(mapFile);
+            if (!IsBenchmark && !menuBackground && _arrival == null) _loadGame = RTXMnesia.Save.HplSaveHandler.TakePending(mapFile);
             if (effects == null && !TryGetComponent(out effects)) effects = gameObject.AddComponent<HplEffects>();
             if (hud == null && !TryGetComponent(out hud)) hud = gameObject.AddComponent<HplHud>();
             HplKeyBindings.SetDefaultsConfig(keysConfig);
@@ -298,7 +307,7 @@ namespace RTXMnesia.ScriptApi
             if (!disableEnemyAI)
                 foreach (var enemy in _enemies) enemy.AfterWorldLoad();
             foreach (var rope in _ropes) rope.AfterWorldLoad(transform);
-            if (HplDifficulty.HardMode && !menuBackground && player != null) RemoveHardModeItems();
+            if (!IsBenchmark && HplDifficulty.HardMode && !menuBackground && player != null) RemoveHardModeItems();
 
             InitFog();
 
@@ -314,7 +323,7 @@ namespace RTXMnesia.ScriptApi
             }
 
             // Runtime-only: existing imported levels get the UI without regenerating game content.
-            if (Application.isPlaying && !menuBackground)
+            if (Application.isPlaying && !menuBackground && !IsBenchmark)
             {
                 GameUi = gameObject.AddComponent<HplGameUi>();
                 GameUi.Init(this);
@@ -335,7 +344,7 @@ namespace RTXMnesia.ScriptApi
             // The enhanced lighting's overlay of this map (graphics tab), over the classic lights.
             if (Application.isPlaying && !menuBackground) HplEnhancedLighting.Attach(this);
             _devRoom?.Initialize(this);
-            if (!menuBackground) Dev.HplDebugSession.Prepare(this);
+            if (!menuBackground && !IsBenchmark) Dev.HplDebugSession.Prepare(this);
         }
 
         /// <summary>The water world reflection of this map (null: no such water or not in Play mode).</summary>
@@ -359,9 +368,10 @@ namespace RTXMnesia.ScriptApi
             _started = true;
             SetCharacterShapes();
             player?.Hands?.SetWorld(sound, ParticleWorld);
-            player?.Hands?.RemoveStrayCopies();
+            if (!IsBenchmark) player?.Hands?.RemoveStrayCopies();
             // cMapHandlerSoundCallback: started sound entities can be heard by enemies.
             Sound.HplSoundEntity.Started += OnSoundEntityStarted;
+            if (IsBenchmark) return;
             if (player != null && player.LookAt != null)
             {
                 player.LookAt.AtTarget += function => RunScript(function);
@@ -617,7 +627,7 @@ namespace RTXMnesia.ScriptApi
             if (_leaving) return;
             if (updateMap)
             {
-                HplGame.Update(timeStep);
+                if (!IsBenchmark) HplGame.Update(timeStep);
                 UpdateCheckCommentaryIconActive();
                 UpdateDissolveEntities(timeStep);
                 UpdateTimers(timeStep);
@@ -627,15 +637,19 @@ namespace RTXMnesia.ScriptApi
             }
 
             // cLuxPlayer::Update (its collide callbacks before the camera effects, the body moves later)
-            if (player != null) player.StepLogic(timeStep, _checkPlayerCallbacks);
+            if (player != null)
+            {
+                if (IsBenchmark) player.StepBenchmarkObserver(timeStep);
+                else player.StepLogic(timeStep, _checkPlayerCallbacks);
+            }
             // cLuxInsanityHandler::Update (the module after the player).
-            if (!menuBackground && !disableInsanity) Effects.HplInsanity.Update(this, timeStep);
+            if (!IsBenchmark && !menuBackground && !disableInsanity) Effects.HplInsanity.Update(this, timeStep);
 
             hud.Step(timeStep);
             effects.Step(timeStep);
 
             // PostUpdate message: cScene::PostUpdate → cWorld::Update → iPhysicsWorld::Update.
-            if (player != null) player.StepPhysics(timeStep);
+            if (player != null && !IsBenchmark) player.StepPhysics(timeStep);
             for (int i = 0; i < _enemies.Count; i++) _enemies[i].StepBody(timeStep);
             PhysicsWorld.BeforeSimulate(timeStep);
         }
@@ -650,7 +664,7 @@ namespace RTXMnesia.ScriptApi
             ParticleWorld.Update(timeStep);
             for (int i = 0; i < _lightList.Count; i++) _lightList[i].UpdateLight(timeStep);
             sound.Step(timeStep);
-            if (player != null) player.StepPostUpdate(timeStep);
+            if (player != null && !IsBenchmark) player.StepPostUpdate(timeStep);
             DestroyPendingEntities();
             GameTime += timeStep;
         }

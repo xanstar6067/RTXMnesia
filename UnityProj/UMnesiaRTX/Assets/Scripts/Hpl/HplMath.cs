@@ -15,6 +15,14 @@ namespace RTXMnesia.Hpl
         /// <summary>Restart the random sequence (for repeatable test runs).</summary>
         public static void Seed(int seed) => _random = new Random(seed);
 
+        // A cinematic must not consume the suspended campaign's random sequence.
+        internal static Random ExchangeRandom(Random replacement)
+        {
+            var previous = _random;
+            _random = replacement;
+            return previous;
+        }
+
         static int Rand() => _random.Next(0, RandMax + 1);
 
         /// <summary>cMath::RandRectf: min + rand()/RAND_MAX × (max − min), both ends included.</summary>

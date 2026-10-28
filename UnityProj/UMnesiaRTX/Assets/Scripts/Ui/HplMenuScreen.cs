@@ -360,6 +360,8 @@ namespace RTXMnesia.Ui
             _selected = 0;
         }
 
+        internal void ReportBenchmarkError(string error) => Message("Не удалось завершить тест: " + error);
+
         // ------------------------------------------------------------------ start game and hard mode
 
         /// <summary>cLuxMainMenu::PressStartGame with AllowHardMode (the main campaign): the start game window, normal mode.</summary>
@@ -745,6 +747,10 @@ namespace RTXMnesia.Ui
                     _ui.Settings.Apply(_map);
                     _ui.Settings.Save();
                     Show();
+                    break;
+                case MenuControl.Benchmark:
+                    if (!World.HplBenchmark.TryStart(_ui, DraftSettings, out string benchmarkError))
+                        Message(benchmarkError);
                     break;
                 case MenuControl.GameTab: case MenuControl.DisplayTab: case MenuControl.GraphicsTab: case MenuControl.ImageTab: case MenuControl.RayTab: case MenuControl.SoundTab: case MenuControl.InputTab:
                     _optionsTab = (int)control - (int)MenuControl.GameTab;

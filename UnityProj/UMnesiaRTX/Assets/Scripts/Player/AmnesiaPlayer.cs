@@ -628,6 +628,13 @@ namespace RTXMnesia.Player
             UpdateAvgSpeed(dt);
         }
 
+        /// <summary>The cinematic observer keeps enemy perception and audio without movement, damage or interaction.</summary>
+        internal void StepBenchmarkObserver(float dt)
+        {
+            SanityHelper.Update(dt);
+            UpdateTerror(dt);
+        }
+
         // ------------------------------------------------------------------ terror (cLuxPlayer)
 
         readonly HashSet<Enemies.HplEnemy> _terrorEnemies = new();

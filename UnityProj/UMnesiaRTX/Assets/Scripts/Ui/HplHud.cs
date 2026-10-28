@@ -750,6 +750,7 @@ namespace RTXMnesia.Ui
 
             public bool Add(string name, string message, float timeShown)
             {
+                if (World.HplBenchmark.Active) return false;
                 if (_showTextCount > 0f) return false;
                 if (HplGame.HintsBlocked.Contains(name)) return false;
                 if (!HplGame.HintsGiven.Add(name)) return false;
