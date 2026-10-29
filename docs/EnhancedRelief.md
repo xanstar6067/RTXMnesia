@@ -172,7 +172,8 @@ Batch: `RTXMnesia.Importer.EnhancedReliefConverter.ConvertSamplesBatch` /
 Результаты, все вне git:
 
 - `Assets/AmnesiaImported/Resources/HplEnhancedRelief.asset` — каталог;
-- `Assets/AmnesiaImported/Resources/HplReliefMeshes/` — два меша на вариант;
+- `Assets/AmnesiaImported/Resources/HplReliefMeshes/` — два меша на вариант, файлы `<id>_detail.hplrelief` /
+  `<id>_coarse.hplrelief` (см. «Хранение мешей»);
 - `Assets/AmnesiaImported/EnhancedReliefCache/` — сигнатуры и неиспользуемые результаты
   экспериментов, не попадающие в сборку через Resources;
 - `Logs/EnhancedRelief/Import.txt` — состав обработанных карт и число треугольников.
@@ -181,6 +182,22 @@ Batch: `RTXMnesia.Importer.EnhancedReliefConverter.ConvertSamplesBatch` /
 выходного Mesh сохраняются при пересборке. Смена height или версии генератора
 инвалидирует кэш. Неиспользуемые экспериментальные меши сохраняются вне Resources;
 при следующей генерации могут быть возвращены с прежними GUID.
+
+### Хранение мешей
+
+С 2026-10-29 меши рельефа — не `.asset`, а двоичные `.hplrelief` (`Assets/Editor/Importer/HplReliefMeshFile.cs`,
+импортёр `HplReliefMeshImporter`). Проект сериализует ассеты текстом (`ForceText`), и вершинный буфер в `.asset`
+записывался hex — вдвое больше данных. Формат `.hplrelief`: сжатый Deflate буфер, позиции Float32 (миллиметровые швы,
+RT строит структуры по ним), нормали и тангенты SNorm16×4, цвета UNorm8×4, UV Float32 без пустых zw (у HPL-мешей только
+xy), индексы UInt16/UInt32, исходные bounds. Путь в Resources (`HplReliefMeshes/<id>_detail`) и каталог не изменились,
+`isReadable` остаётся включённым (тесты читают вершины).
+
+Перевод сделан один раз `EnhancedReliefConverter.ConvertStorageBatch` (меню «Enhanced relief: convert stored meshes to
+binary»): каждый меш кодируется, декодируется и сверяется с исходным (позиции, UV, индексы, bounds — точно, направления —
+в пределах SNorm16), старые `.asset` удаляются только после записи всей папки. Итог: 6818 мешей (6516 в Resources и
+302 отложенных), 13.2 ГБ текста → 2.4 ГБ на диске; отчёт — `Logs/EnhancedRelief/Storage.txt`. GUID мешей при переводе
+сменились; ссылок по GUID на них нет (рантайм грузит по пути). После перевода: `EnhancedReliefTests.RunBatch` — 6597
+условий PASS, `ApprovedLevelReliefTests.RunBatch` — PASS (156 стен, перепад 0.0239 м, GPU-пары), `BuildCheck` — 0 ошибок.
 
 ## Рантайм
 

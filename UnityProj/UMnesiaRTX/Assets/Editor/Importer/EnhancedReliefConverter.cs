@@ -273,7 +273,7 @@ namespace RTXMnesia.Importer
                         string identity = Hash(key.ToString()).Substring(0, 32);
                         if (!entries.ContainsKey(identity))
                         {
-                            string detailPath = Root + "/" + identity + "_detail.asset", coarsePath = Root + "/" + identity + "_coarse.asset";
+                            string detailPath = Root + "/" + identity + "_detail" + HplReliefMeshFile.Extension, coarsePath = Root + "/" + identity + "_coarse" + HplReliefMeshFile.Extension;
                             string stampPath = AmnesiaPaths.ToAbsolute(CacheRoot + "/" + identity + ".txt");
                             string stamp = Hash(signature.ToString());
                             if (!File.Exists(stampPath) || File.ReadAllText(stampPath) != stamp ||
@@ -363,13 +363,13 @@ namespace RTXMnesia.Importer
                 var catalogNow = AssetDatabase.LoadAssetAtPath<HplReliefSet>(CatalogPath);
                 var activePaths = new HashSet<string>(catalogNow.entries.SelectMany(e => new[]
                 {
-                    AmnesiaPaths.ImportedAssetsRoot + "/Resources/" + e.detailedResource + ".asset",
-                    AmnesiaPaths.ImportedAssetsRoot + "/Resources/" + e.coarseResource + ".asset"
+                    AmnesiaPaths.ImportedAssetsRoot + "/Resources/" + e.detailedResource + HplReliefMeshFile.Extension,
+                    AmnesiaPaths.ImportedAssetsRoot + "/Resources/" + e.coarseResource + HplReliefMeshFile.Extension
                 }));
-                foreach (string file in Directory.GetFiles(AmnesiaPaths.ToAbsolute(Root), "*.asset"))
+                foreach (string file in Directory.GetFiles(AmnesiaPaths.ToAbsolute(Root), "*" + HplReliefMeshFile.Extension))
                 {
                     string name = Path.GetFileName(file), path = Root + "/" + name;
-                    if (activePaths.Contains(path) || !System.Text.RegularExpressions.Regex.IsMatch(name, "^[0-9a-f]{32}_(detail|coarse)\\.asset$")) continue;
+                    if (activePaths.Contains(path) || !System.Text.RegularExpressions.Regex.IsMatch(name, "^[0-9a-f]{32}_(detail|coarse)\\.hplrelief$")) continue;
                     string error = AssetDatabase.MoveAsset(path, parked + "/" + name);
                     if (!string.IsNullOrEmpty(error)) throw new InvalidOperationException(error);
                     s_description = "Keeping unused experiment meshes outside the build";
@@ -428,28 +428,82 @@ namespace RTXMnesia.Importer
 
         static void Save(Mesh mesh, string path)
         {
-            var previous = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            // Rewriting the file in place (or after moving a parked one back) keeps its GUID.
             string parked = CacheRoot + "/Meshes/" + Path.GetFileName(path);
-            if (previous == null && AssetDatabase.LoadAssetAtPath<Mesh>(parked) != null)
+            if (!File.Exists(AmnesiaPaths.ToAbsolute(path)) && File.Exists(AmnesiaPaths.ToAbsolute(parked)))
             {
                 string error = AssetDatabase.MoveAsset(parked, path);
                 if (!string.IsNullOrEmpty(error)) throw new InvalidOperationException(error);
-                previous = AssetDatabase.LoadAssetAtPath<Mesh>(path);
             }
-            if (previous == null) AssetDatabase.CreateAsset(mesh, path);
-            else
+            try { HplReliefMeshFile.Write(mesh, AmnesiaPaths.ToAbsolute(path)); }
+            finally { Object.DestroyImmediate(mesh); }
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        /// <summary>One-off: moves the text .asset meshes (Resources and parked) to binary .hplrelief files, same names, verified.</summary>
+        [MenuItem("Tools/RTXMnesia/Import/Enhanced relief: convert stored meshes to binary")]
+        public static void ConvertStorageBatch()
+        {
+            var report = new List<string>();
+            long before = 0, after = 0;
+            int converted = 0;
+            foreach (string folder in new[] { Root, CacheRoot + "/Meshes" })
             {
-                // Mesh setters invalidate the live GPU buffers as well as the serialized data.
-                previous.Clear(); previous.name = mesh.name; previous.indexFormat = mesh.indexFormat;
-                previous.vertices = mesh.vertices; previous.normals = mesh.normals; previous.tangents = mesh.tangents;
-                previous.colors = mesh.colors;
-                var uv = new List<Vector4>();
-                for (int channel = 0; channel < 8; channel++) { mesh.GetUVs(channel, uv); previous.SetUVs(channel, uv); }
-                previous.subMeshCount = mesh.subMeshCount;
-                for (int sub = 0; sub < mesh.subMeshCount; sub++) previous.SetIndices(mesh.GetIndices(sub), mesh.GetTopology(sub), sub);
-                previous.bounds = mesh.bounds;
-                EditorUtility.SetDirty(previous); Object.DestroyImmediate(mesh);
+                if (!Directory.Exists(AmnesiaPaths.ToAbsolute(folder))) continue;
+                var files = Directory.GetFiles(AmnesiaPaths.ToAbsolute(folder), "*.asset").Select(Path.GetFileName).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+                for (int i = 0; i < files.Length; i++)
+                {
+                    string path = folder + "/" + files[i], target = path.Substring(0, path.Length - ".asset".Length) + HplReliefMeshFile.Extension;
+                    var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+                    if (mesh == null) throw new InvalidOperationException("Not a mesh: " + path);
+                    byte[] bytes = HplReliefMeshFile.Encode(mesh);
+                    var decoded = HplReliefMeshFile.Decode(bytes, mesh.name);
+                    try { string problem = Compare(mesh, decoded); if (problem != null) throw new InvalidOperationException(path + ": " + problem); }
+                    finally { Object.DestroyImmediate(decoded); }
+                    File.WriteAllBytes(AmnesiaPaths.ToAbsolute(target), bytes);
+                    before += new FileInfo(AmnesiaPaths.ToAbsolute(path)).Length;
+                    after += bytes.Length;
+                    converted++;
+                    if (i % 100 == 99) { EditorUtility.UnloadUnusedAssetsImmediate(); Debug.Log($"[EnhancedRelief] storage {folder}: {i + 1}/{files.Length}"); }
+                }
+                // Deleted only after every file of the folder was written and verified.
+                var failed = new List<string>();
+                if (!AssetDatabase.DeleteAssets(files.Select(n => folder + "/" + n).ToArray(), failed)) throw new InvalidOperationException("Cannot delete " + string.Join(", ", failed));
             }
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            report.Add($"READY: {converted} meshes, {before / 1048576.0:N0} MB text -> {after / 1048576.0:N0} MB binary");
+            int missing = AssetDatabase.LoadAssetAtPath<HplReliefSet>(CatalogPath).entries
+                .Count(e => Resources.Load<Mesh>(e.detailedResource) == null || Resources.Load<Mesh>(e.coarseResource) == null);
+            report.Add($"catalog entries without both meshes: {missing}");
+            Directory.CreateDirectory(Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", "EnhancedRelief"));
+            File.WriteAllLines(Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", "EnhancedRelief", "Storage.txt"), report);
+            foreach (string line in report) Debug.Log("[EnhancedRelief] " + line);
+            if (missing != 0) throw new InvalidOperationException("Relief catalog lost meshes after conversion.");
+        }
+
+        /// <summary>The compact layout keeps positions, UVs and indices exact, and directions within SNorm16.</summary>
+        static string Compare(Mesh a, Mesh b)
+        {
+            if (a.vertexCount != b.vertexCount || a.subMeshCount != b.subMeshCount) return "counts";
+            var pa = a.vertices; var pb = b.vertices;
+            for (int i = 0; i < pa.Length; i++) if (pa[i] != pb[i]) return "position " + i;
+            var na = a.normals; var nb = b.normals;
+            if (na.Length != nb.Length) return "normals";
+            for (int i = 0; i < na.Length; i++) if ((na[i] - nb[i]).sqrMagnitude > 1e-8f) return "normal " + i;
+            var ta = a.tangents; var tb = b.tangents;
+            if (ta.Length != tb.Length) return "tangents";
+            for (int i = 0; i < ta.Length; i++) if ((ta[i] - tb[i]).sqrMagnitude > 1e-8f) return "tangent " + i;
+            if (!a.colors32.SequenceEqual(b.colors32)) return "colors";
+            var ua = new List<Vector4>(); var ub = new List<Vector4>();
+            for (int channel = 0; channel < 8; channel++)
+            {
+                a.GetUVs(channel, ua); b.GetUVs(channel, ub);
+                if (!ua.SequenceEqual(ub)) return "uv" + channel;
+            }
+            for (int sub = 0; sub < a.subMeshCount; sub++)
+                if (a.GetTopology(sub) != b.GetTopology(sub) || !a.GetIndices(sub).SequenceEqual(b.GetIndices(sub))) return "indices " + sub;
+            if (a.bounds != b.bounds) return "bounds";
+            return null;
         }
 
         static Dictionary<Texture, Profile> LoadProfiles(bool approvedOnly)
