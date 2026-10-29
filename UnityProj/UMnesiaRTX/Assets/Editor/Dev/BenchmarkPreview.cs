@@ -130,8 +130,13 @@ namespace RTXMnesia.EditorDev
                     {
                         s_lastScene = test.SceneIndex; s_lastShot = -1;
                         Check(test.Map.GameUi == null && !test.Map.runScript && test.Map.disableAutoSaves, "World isolated " + s_lastScene);
+                        if (s_lastScene == 2 || s_lastScene == 3)
+                            foreach (var entity in test.Map.Entities)
+                                if (entity is Props.PropLamp lamp && (lamp.Component.file ?? "").Replace('\\', '/').StartsWith("entities/lamp/", StringComparison.OrdinalIgnoreCase))
+                                    Check(lamp.Lit, "Practical light lit " + lamp.Name);
                         if (s_lastScene == 1)
                         {
+                            Check((test.Map.GetEntityByName("candlestick01_1") as Props.PropLamp)?.Lit == true, "Stove room candle lit");
                             var stove = test.Map.GetEntityByName("stove_metal_1");
                             Check(stove != null && stove.Active && stove.GameObject.activeInHierarchy,
                                 "Stove remains visible: its SwingDoor type must not hide the entire stove");
@@ -221,7 +226,35 @@ namespace RTXMnesia.EditorDev
                 previous = point;
             }
             Check(collisions == 0, "Camera clearance " + route.map + " contacts=" + collisions);
+            if (test.SceneIndex == 5) AuditEnemy(test);
             File.WriteAllLines(ReportPath, Report);
+        }
+
+        static void AuditEnemy(HplBenchmark test)
+        {
+            var enemy = test.Map.GetEntityByName("servant_brute_1") as Enemies.HplEnemy;
+            Vector3 size = enemy.Body.Size;
+            int contacts = 0;
+            var names = new HashSet<string>();
+            for (float t = 8; t <= 25; t += 0.05f)
+            {
+                Vector3 feet = HplSpace.Position(HplBenchmark.EnemyFeet(t));
+                // Leave clearance under the soles for the floor, test the entire torso/head width.
+                var half = size * 0.5f; half.y -= 0.08f;
+                Vector3 center = feet + Vector3.up * (size.y * 0.5f + 0.08f);
+                foreach (var collider in Physics.OverlapBox(center, half, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    if (collider.gameObject.scene != test.Map.gameObject.scene || collider.GetComponentInParent<Player.HplCharacterBody>() != null) continue;
+                    // Respect the HPL character collision mask: decorative floor ivy is deliberately
+                    // non-colliding and must not be treated as an obstacle for a walking enemy.
+                    var body = collider.GetComponentInParent<AmnesiaBody>();
+                    if (body != null && !body.collideCharacter) continue;
+                    contacts++;
+                    if (names.Add(collider.name + collider.transform.parent?.name))
+                        Report.Add($"ENEMY HIT t={t:F2} feet={feet} collider={collider.name} parent={collider.transform.parent?.name}");
+                }
+            }
+            Check(contacts == 0, "Brute full body clearance contacts=" + contacts);
         }
 
         static void Capture(HplBenchmark test, int shot)

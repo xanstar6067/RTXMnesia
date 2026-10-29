@@ -204,6 +204,14 @@ namespace RTXMnesia.World
                 Map.GetEntityByName("fountain_childsnake_blood_1")?.SetActive(false);
                 Map.GetEntityByName("corpse_male_plague_fountain_1")?.SetActive(false);
             }
+            if (SceneIndex == 1)
+                (Map.GetEntityByName("candlestick01_1") as Props.PropLamp)?.SetLit(true, false);
+            // Stage existing practical lights, keeping their configured intensity, flicker and audio.
+            if (SceneIndex == 2 || SceneIndex == 3)
+                foreach (var entity in Map.Entities)
+                    if (entity is Props.PropLamp lamp &&
+                        (lamp.Component.file ?? "").Replace('\\', '/').StartsWith("entities/lamp/", StringComparison.OrdinalIgnoreCase))
+                        lamp.SetLit(true, false);
             if (SceneIndex == 3)
             {
                 (Map.GetEntityByName("13_burner") as Props.PropLamp)?.SetLit(true, false);
@@ -262,8 +270,7 @@ namespace RTXMnesia.World
                 if (visible) _enemy.PlayAnim("Walk", true, 0, false, _enemyWalkScale);
             }
             // Disabled AI keeps the same walk and animation events; the camera cannot trigger a hunt.
-            float u = Mathf.Clamp01((SceneTime - 8) / 17);
-            _enemy.Body.SetFeetPosition(HplSpace.Position(new Vector3(4.5f, 0, Mathf.Lerp(11, 23, u))));
+            _enemy.Body.SetFeetPosition(HplSpace.Position(EnemyFeet(SceneTime)));
             _enemy.SetHplYaw(Mathf.PI);
             _enemy.StepBody(0); // updates the model pose without a character physics step
             bool fear = SceneTime >= 10 && SceneTime < 24;
@@ -276,6 +283,9 @@ namespace RTXMnesia.World
         }
 
         void LateUpdate() => ApplyCamera();
+
+        /// <summary>Straight central aisle, clear of both the broken pillar and the intact pillar row.</summary>
+        public static Vector3 EnemyFeet(float time) => new(0, 0, Mathf.Lerp(11, 23, Mathf.Clamp01((time - 8) / 17)));
 
         void ApplyCamera()
         {
