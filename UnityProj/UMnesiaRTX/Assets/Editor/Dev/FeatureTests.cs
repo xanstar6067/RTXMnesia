@@ -41,6 +41,7 @@ namespace RTXMnesia.EditorDev
                 log.Info("ok: " + message);
             }
             var simulationMode = Physics.simulationMode;
+            bool showCompletionCounter = HplCompletionCount.ShowCounter;
             Physics.simulationMode = SimulationMode.Script;
             var savedPrefs = PrefKeys.Select(k => PlayerPrefs.HasKey(k) ? PlayerPrefs.GetString(k) : null).ToArray();
             HplSaveHandler.FolderOverride = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Logs", "FeatureCheck"));
@@ -50,7 +51,10 @@ namespace RTXMnesia.EditorDev
                 HplGame.Reset();
                 HplInsanity.ResetSession();
                 Study(Check);
+                // The optional counter is hidden in normal gameplay; enable it for its existing checks.
+                HplCompletionCount.ShowCounter = true;
                 Completion(Check);
+                HplCompletionCount.ShowCounter = showCompletionCounter;
                 Sliders(Check);
                 Keys(Check);
                 Water(Check);
@@ -69,6 +73,7 @@ namespace RTXMnesia.EditorDev
             }
             finally
             {
+                HplCompletionCount.ShowCounter = showCompletionCounter;
                 Physics.simulationMode = simulationMode;
                 for (int i = 0; i < PrefKeys.Length; i++)
                 {

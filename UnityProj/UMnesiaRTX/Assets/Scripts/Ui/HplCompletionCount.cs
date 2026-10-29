@@ -13,8 +13,8 @@ namespace RTXMnesia.Ui
     /// </summary>
     public sealed class HplCompletionCount
     {
-        /// <summary>Draw the counter (off in the original game, which returns early from it).</summary>
-        public static bool ShowCounter = true;
+        /// <summary>Opt in to the counter and level door percentages; hidden by default, as in the original game.</summary>
+        public static bool ShowCounter = false;
 
         public readonly int QuestValue, ItemValue, NoteValue, DiaryValue, FlashbackValue, ChestValue;
 

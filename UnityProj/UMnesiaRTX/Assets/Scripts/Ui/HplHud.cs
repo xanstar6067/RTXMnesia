@@ -255,7 +255,7 @@ namespace RTXMnesia.Ui
             _questGlow.color = new Color(glowAlpha, glowAlpha, glowAlpha, 1f);
 
             // cLuxCompletionCountHandler::OnDraw: "%.1f%%" right of x = 400 and " Completed" left of it, size 21, y 20.
-            if (Completion != null && Completion.Alpha > 0f && _completionText != null && _completionText.font != null)
+            if (HplCompletionCount.ShowCounter && Completion != null && Completion.Alpha > 0f && _completionText != null && _completionText.font != null)
             {
                 var size = new Vector2(21f, 21f);
                 var color = new Color(1f, 1f, 1f, Completion.Alpha);
