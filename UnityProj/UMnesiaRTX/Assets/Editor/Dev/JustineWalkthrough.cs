@@ -360,6 +360,8 @@ namespace RTXMnesia.EditorDev
                 var c = Overlap[i];
                 var rb = c.attachedRigidbody;
                 bool loose = rb != null && !rb.isKinematic;
+                // An open door leaf stands where it is (a person walks round it); a closed one is the way through.
+                if (loose && _leavesBlock && _openLeaves.Contains(c)) return false;
                 if (loose)
                 {
                     if (blockers == null) continue;
@@ -391,9 +393,18 @@ namespace RTXMnesia.EditorDev
             return true;
         }
 
+        static readonly HashSet<Collider> _openLeaves = new(); // leaves of wide open swing doors
+        static bool _leavesBlock;
+
         static List<Node> Search(Vector3 start, float grid, List<Target> blockers, List<Vector3[][]> links, out bool capped)
         {
             _blockMask = Physics.DefaultRaycastLayers & ~(1 << HplPhysicsWorld.NoCollideLayer) & ~(1 << 2);
+            _openLeaves.Clear();
+            if (HplMap.Current != null)
+                foreach (var e in HplMap.Current.Entities)
+                    if (e is PropSwingDoor door && door.GetDoorState() == 1 && door.GameObject != null)
+                        foreach (var c in door.GameObject.GetComponentsInChildren<Collider>())
+                            if (!c.isTrigger && c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic) _openLeaves.Add(c);
             var nodes = new List<Node>();
             var seen = new HashSet<long>();
             long Key(int x, int z, int y) => ((long)(x + 20000) << 40) | ((long)(z + 20000) << 20) | (uint)(y + 500);
@@ -544,32 +555,164 @@ namespace RTXMnesia.EditorDev
                 if (area != null) t = new Target { kind = "Area", name = name, pos = area.transform.position, extra = "" };
             }
             if (t == null) { Out($"   WALK FAIL {name}: no entity or area"); return 1; }
+            return WalkToTarget(map, player, t, Out, drop);
+        }
+
+        static int WalkToTarget(HplMap map, AmnesiaPlayer player, Target t, Action<string> Out, float drop)
+        {
+            // Stuck (a door leaf swung open across the planned path): plan again from here, seeing the leaf.
+            int fails = 0;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                if (attempt > 0) Out($"   (walk to {t.name}: planning again from {player.Body.FeetPosition:F1})");
+                fails = WalkToTargetOnce(map, player, t, Out, drop);
+                if (fails == 0) break;
+            }
+            return fails;
+        }
+
+        static int WalkToTargetOnce(HplMap map, AmnesiaPlayer player, Target t, Action<string> Out, float drop)
+        {
             _blockMask = Physics.DefaultRaycastLayers & ~(1 << HplPhysicsWorld.NoCollideLayer) & ~(1 << 2);
             Physics.SyncTransforms();
             var links = LadderLinks(0.5f, _ => { });
             _allTargets = CollectTargets(map);
             MaxDrop = drop;
-            var nodes = Search(player.Body.FeetPosition, 0.5f, null, links, out _);
+            // A path for the real body radius (0.4) round open door leaves keeps clear of jambs and leaves; tighter
+            // places with the pre-filter's radius, and through leaves only if nothing else reaches the target.
+            List<Node> nodes = null;
+            foreach (var (radius, leaves) in new[] { (0.4f, true), (0.3f, true), (0.3f, false) })
+            {
+                Radius = radius;
+                _leavesBlock = leaves;
+                nodes = Search(player.Body.FeetPosition, 0.5f, null, links, out _);
+                if (NearestNode(nodes, t, 0.5f) >= 0) break;
+            }
+            Radius = 0.3f;
+            _leavesBlock = false;
             MaxDrop = 0.6f;
             var from = new Target { kind = "Start", name = "here", pos = player.Body.FeetPosition };
-            float yaw = player.Yaw;
-            return WalkTargets(map, player, nodes, new List<Target> { t }, from, 0.5f, true, Out);
+            if (NearestNode(nodes, t, 0.5f) >= 0) return WalkTargets(map, player, nodes, new List<Target> { t }, from, 0.5f, true, Out);
+
+            // The grid misses some stairs (03_dungeon to level_dungeon_2): to the closest floor it reaches, then
+            // straight on with the real controller, as a person walks up.
+            Vector3 goal = t.hasBounds ? t.bounds.center : t.pos;
+            int best = 0;
+            for (int i = 1; i < nodes.Count; i++)
+                if (Flat(nodes[i].pos - goal) < Flat(nodes[best].pos - goal)) best = i;
+            var near = new Target { kind = "Area", name = t.name + " (closest floor)", pos = nodes[best].pos, extra = "" };
+            Out($"   (walk to {t.name}: not in the grid search, to the closest floor {nodes[best].pos:F1}, {Flat(nodes[best].pos - goal):0.0} m off, then straight on)");
+            if (WalkTargets(map, player, nodes, new List<Target> { near }, from, 0.5f, true, Out) != 0) return 1;
+            float dt = Time.fixedDeltaTime, time = 0f, lastDist = float.MaxValue, progress = 0f;
+            float sign = Calibrate(map, player, dt);
+            int jumps = 0;
+            float reach = t.kind == "LevelDoor" || t.kind == "Entity" ? 1.2f : 0.6f;
+            float Dist() => t.hasBounds ? Flat(t.bounds.ClosestPoint(player.Body.FeetPosition + Vector3.up * 0.9f) - (player.Body.FeetPosition + Vector3.up * 0.9f))
+                                        : Flat(goal - player.Body.FeetPosition);
+            while (Dist() > reach && time < 30f)
+            {
+                Vector3 to = goal - player.Body.FeetPosition;
+                Vector3 fwd = player.playerCamera.transform.forward; fwd.y = 0f;
+                float err = Vector3.SignedAngle(fwd, new Vector3(to.x, 0f, to.z), Vector3.up);
+                player.AddLook(sign * Mathf.Clamp(err, -12f, 12f) * Mathf.Deg2Rad, 0f);
+                player.held = default;
+                player.held.forward = Mathf.Abs(err) < 35f;
+                map.Step(dt);
+                time += dt;
+                float d = Dist();
+                if (d < lastDist - 0.05f) { lastDist = d; progress = 0f; } else progress += dt;
+                if (progress > 1.2f && jumps < 3 && player.Body.IsOnGround) { jumps++; player.Jump(true); map.Step(dt); player.Jump(false); progress = 0f; }
+                else if (progress > 2.5f) break;
+            }
+            player.held = default;
+            bool ok = Dist() <= reach;
+            Out($"   STRAIGHT {(ok ? "OK  " : "FAIL")} {t.name}: feet {player.Body.FeetPosition:F2}, {Dist():0.00} m off, {time:0.0} s");
+            return ok ? 0 : 1;
+        }
+
+        static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
+
+        /// <summary>
+        /// "climb Ladder [up|down]": walk to the floor in front of the ladder foot (or behind its top), look at the
+        /// ladder, interact (PlayerStateLadder) and hold forward (backward) until the player leaves the ladder.
+        /// Returns 0 when the player got off at the other end.
+        /// </summary>
+        public static int ClimbLadder(HplMap map, AmnesiaPlayer player, string name, bool up, Action<string> Out)
+        {
+            if (!(map.GetEntityByName(name) is HplArea area) || area.AreaType != "Ladder") { Out($"   CLIMB FAIL {name}: no ladder area"); return 1; }
+            if (!area.Active) { Out($"   CLIMB FAIL {name}: the ladder area is not active"); return 1; }
+            Vector3 fwd = area.LadderForward; fwd.y = 0f; fwd.Normalize();
+            // The player stands at +forward of the ladder (cLuxArea_Ladder::GetStartPosition) and gets off at the top
+            // moving on, to -forward.
+            Vector3 spot = area.GameObject.transform.position + (up ? fwd : -fwd) * 0.9f;
+            spot.y = up ? area.LadderMinY : area.LadderMaxY;
+            if (WalkToTarget(map, player, new Target { kind = "Area", name = name + (up ? " foot" : " top"), pos = spot, extra = "" }, Out, 0.6f) != 0) return 1;
+
+            float dt = Time.fixedDeltaTime;
+            Vector3 feet0 = player.Body.FeetPosition;
+            Vector3 cam = player.LogicCameraPosition;
+            Vector3 goal = area.GameObject.transform.position;
+            goal.y = Mathf.Clamp(cam.y, area.LadderMinY + 0.3f, area.LadderMaxY - 0.3f);
+            Vector3 to = goal - cam;
+            float yawT = Mathf.Atan2(to.x, to.z), pitchT = -Mathf.Atan2(to.y, new Vector2(to.x, to.z).magnitude);
+            player.AddLook(Mathf.DeltaAngle(player.Yaw * Mathf.Rad2Deg, yawT * Mathf.Rad2Deg) * Mathf.Deg2Rad, pitchT - player.Pitch);
+            for (int i = 0; i < 10; i++) map.Step(dt);
+            string crosshair = player.States?.Current.GetCrosshair()?.ToString() ?? "none";
+            player.DoAction(PlayerAction.Interact, true);
+            map.Step(dt);
+            player.DoAction(PlayerAction.Interact, false);
+            if (player.States.Current.Type != PlayerStateType.Ladder)
+            {
+                Out($"   CLIMB FAIL {name}: no ladder state after interact (crosshair was {crosshair}, state {player.States.Current.Describe()})");
+                return 1;
+            }
+            float time = 0f;
+            float minY = float.MaxValue, maxY = float.MinValue;
+            while (player.States.Current.Type == PlayerStateType.Ladder && time < 40f)
+            {
+                player.held = default;
+                if (up) player.held.forward = true; else player.held.backward = true;
+                map.Step(dt);
+                time += dt;
+                minY = Mathf.Min(minY, player.Body.FeetPosition.y);
+                maxY = Mathf.Max(maxY, player.Body.FeetPosition.y);
+            }
+            player.held = default;
+            for (int i = 0; i < 30; i++) map.Step(dt);
+            Vector3 feet1 = player.Body.FeetPosition;
+            // Got off at the other end (a script may teleport the player at the top: 01_cells AreaLadderUp).
+            float climbed = (feet1.y - feet0.y) * (up ? 1f : -1f);
+            bool ok = player.States.Current.Type != PlayerStateType.Ladder && climbed > 0.6f * (area.LadderMaxY - area.LadderMinY - 1.8f);
+            Out($"   CLIMB {(ok ? "OK  " : "FAIL")} {name} {(up ? "up" : "down")}: feet {feet0:F2} -> {feet1:F2} (y {minY:0.00}..{maxY:0.00}), {time:0.0} s, " +
+                $"ladder y {area.LadderMinY:0.00}..{area.LadderMaxY:0.00}, state {player.States.Current.Describe()}");
+            return ok ? 0 : 1;
         }
 
         /// <summary>
-        /// "pull Name": walk to a lever, look at its handle, grab it and move the mouse (down, then up) until its state
-        /// changes. Returns 0 when the lever moved to another state.
+        /// "pull Name [state]": walk to a lever, look at its handle, grab it and move the mouse (down, then up) until its
+        /// state changes (to the given state). Returns 0 when the lever moved to another (the given) state.
         /// </summary>
-        public static int PullLever(HplMap map, AmnesiaPlayer player, string name, Action<string> Out)
+        public static int PullLever(HplMap map, AmnesiaPlayer player, string name, Action<string> Out, int? wanted = null)
         {
             if (!(map.GetEntityByName(name) is PropLever lever)) { Out($"   PULL FAIL {name}: no lever"); return 1; }
             if (WalkTo(map, player, name, Out) != 0) return 1;
             float dt = Time.fixedDeltaTime;
             int before = lever.CurrentState;
+            bool Done() => wanted.HasValue ? lever.CurrentState == wanted.Value : lever.CurrentState != before;
             foreach (float dir in new[] { 1f, -1f, 1f })
             {
                 var body = lever.Bodies.Find(b => b.Physics != null && !b.Physics.IsStatic) ?? lever.Bodies[0];
                 Vector3 goal = body.Physics != null ? body.Physics.WorldCenterOfMass : body.Transform.position;
+                // Standing against the lever, its handle swings into the player's body: step back to arm's length.
+                for (int i = 0; i < 60; i++)
+                {
+                    Vector3 d = goal - player.Body.FeetPosition; d.y = 0f;
+                    if (d.magnitude >= 1f) break;
+                    player.held = default;
+                    player.held.backward = true;
+                    map.Step(dt);
+                }
+                player.held = default;
                 Vector3 to = goal - player.LogicCameraPosition;
                 float yawT = Mathf.Atan2(to.x, to.z), pitchT = -Mathf.Atan2(to.y, new Vector2(to.x, to.z).magnitude);
                 player.AddLook(Mathf.DeltaAngle(player.Yaw * Mathf.Rad2Deg, yawT * Mathf.Rad2Deg) * Mathf.Deg2Rad, pitchT - player.Pitch);
@@ -577,17 +720,186 @@ namespace RTXMnesia.EditorDev
                 string focus = player.States?.Current.Describe() ?? "";
                 player.DoAction(PlayerAction.Interact, true);
                 for (int i = 0; i < 5; i++) map.Step(dt);
-                for (int i = 0; i < 240 && lever.CurrentState == before; i++) { player.AddYaw(0f); player.AddPitch(-8f * dir); map.Step(dt); }
+                for (int i = 0; i < 240 && !Done(); i++) { player.AddYaw(0f); player.AddPitch(-8f * dir); map.Step(dt); }
+                bool done = Done();
                 player.DoAction(PlayerAction.Interact, false);
                 for (int i = 0; i < 60; i++) map.Step(dt);
-                if (lever.CurrentState != before)
+                if (done)
                 {
                     Out($"   PULL OK   {name}: state {before} -> {lever.CurrentState} (mouse {(dir > 0 ? "down" : "up")}; focus was {focus})");
                     return 0;
                 }
             }
-            Out($"   PULL FAIL {name}: state stayed {before}");
+            Out($"   PULL FAIL {name}: state {before} -> {lever.CurrentState}{(wanted.HasValue ? ", wanted " + wanted.Value : "")}");
             return 1;
+        }
+
+        // Look at a point (camera yaw and pitch towards it).
+        static void LookAt(AmnesiaPlayer player, Vector3 goal)
+        {
+            Vector3 to = goal - player.LogicCameraPosition;
+            float yawT = Mathf.Atan2(to.x, to.z), pitchT = -Mathf.Atan2(to.y, new Vector2(to.x, to.z).magnitude);
+            player.AddLook(Mathf.DeltaAngle(player.Yaw * Mathf.Rad2Deg, yawT * Mathf.Rad2Deg) * Mathf.Deg2Rad, pitchT - player.Pitch);
+        }
+
+        /// <summary>Look at the center of an entity (its moving body, or its area).</summary>
+        public static void Look(AmnesiaPlayer player, HplEntity entity) => LookAt(player, EntityCenter(entity));
+
+        static Vector3 EntityCenter(HplEntity entity)
+        {
+            var body = entity.Bodies.Find(b => b.Physics != null && !b.Physics.IsStatic) ?? (entity.Bodies.Count > 0 ? entity.Bodies[0] : null);
+            if (body?.Physics != null) return body.Physics.WorldCenterOfMass;
+            var box = entity.GameObject.GetComponent<BoxCollider>();
+            return box != null ? entity.GameObject.transform.TransformPoint(box.center) : entity.GameObject.transform.position;
+        }
+
+        /// <summary>"pick Item": walk to an item, look at it and interact; 0 when it is in the inventory.</summary>
+        public static int PickItem(HplMap map, AmnesiaPlayer player, string name, Action<string> Out)
+        {
+            if (map.GetEntityByName(name) == null) { Out($"   PICK FAIL {name}: no entity"); return 1; }
+            // A debug start may have given the item already (03_dungeon ScriptDebugOn): the entity must go.
+            if (HplGame.GetItem(name) != null) Out($"   (pick {name}: already in the inventory before the pick)");
+            if (WalkTo(map, player, name, Out) != 0) return 1;
+            var entity = map.GetEntityByName(name);
+            float dt = Time.fixedDeltaTime;
+            bool Taken() => map.GetEntityByName(name) is not HplEntity e || !e.Active;
+            for (int attempt = 0; attempt < 4 && !Taken(); attempt++)
+            {
+                LookAt(player, EntityCenter(entity));
+                for (int i = 0; i < 10; i++) map.Step(dt);
+                // Out of sight on top of a high shelf (02_library stencil03): jump and grab at the top of the jump,
+                // stepping back a little first for a flatter look.
+                if (attempt >= 1)
+                {
+                    for (int i = 0; i < 8 * attempt; i++) { player.held = default; player.held.backward = true; map.Step(dt); }
+                    player.held = default;
+                    player.Jump(true); map.Step(dt); player.Jump(false);
+                    for (int i = 0; i < 14; i++) { LookAt(player, EntityCenter(entity)); map.Step(dt); }
+                }
+                string focus = player.States.Current.Describe();
+                player.DoAction(PlayerAction.Interact, true);
+                map.Step(dt);
+                player.DoAction(PlayerAction.Interact, false);
+                for (int i = 0; i < 20; i++) map.Step(dt);
+                if (!Taken()) Out($"   (pick {name}: not taken, focus was {focus})");
+            }
+            bool ok = Taken() && HplGame.GetItem(name) != null;
+            Out($"   PICK {(ok ? "OK  " : "FAIL")} {name}: inventory [{string.Join(", ", HplGame.Items.Select(i => i.name))}]");
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>
+        /// "use Item Target": walk to the target entity or area, take the item from the inventory (puzzle item: the
+        /// use-item state), look at the target and click. 0 when a use-item callback of the map ran.
+        /// </summary>
+        public static int UseItem(HplMap map, AmnesiaPlayer player, string itemName, string target, Action<string> Out)
+        {
+            var item = HplGame.GetItem(itemName);
+            if (item == null) { Out($"   USE FAIL {itemName}: not in the inventory"); return 1; }
+            var entity = map.GetEntityByName(target);
+            if (entity == null) { Out($"   USE FAIL {itemName}: no entity '{target}'"); return 1; }
+            if (WalkTo(map, player, target, Out) != 0) return 1;
+            float dt = Time.fixedDeltaTime;
+            var inventory = map.GameUi?.Inventory;
+            if (inventory != null) inventory.Use(item);
+            else
+            {
+                PlayerStateVars.InventoryItem = item;
+                player.States.ChangeState(PlayerStateType.UseItem);
+            }
+            if (player.States.Current.Type != PlayerStateType.UseItem) { Out($"   USE FAIL {itemName}: no use-item state ({player.States.Current.Describe()})"); return 1; }
+            LookAt(player, EntityCenter(entity));
+            for (int i = 0; i < 10; i++) map.Step(dt);
+            string focus = player.States.Current.Describe();
+            bool callback = map.Script?.HasUseItemCallback(itemName, target) == true;
+            player.DoAction(PlayerAction.Interact, true);
+            map.Step(dt);
+            player.DoAction(PlayerAction.Interact, false);
+            string message = map.hud.Messages.Text;
+            for (int i = 0; i < 30; i++) map.Step(dt);
+            bool ok = callback && player.EntityInFocus != null && message == "" || callback && HplGame.GetItem(itemName) == null;
+            Out($"   USE {(ok ? "OK  " : "FAIL")} {itemName} on {target}: {focus}, callback {callback}, message \"{message}\", in inventory {HplGame.GetItem(itemName) != null}");
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>
+        /// "carry Prop Target": walk to a loose prop, grab it (interact held) and walk with it to the target, then let go.
+        /// 0 when the prop ended within 1.5 m of the target.
+        /// </summary>
+        public static int CarryProp(HplMap map, AmnesiaPlayer player, string prop, string target, Action<string> Out)
+        {
+            var entity = map.GetEntityByName(prop);
+            if (entity == null) { Out($"   CARRY FAIL {prop}: no entity"); return 1; }
+            var goalEntity = map.GetEntityByName(target);
+            if (goalEntity == null) { Out($"   CARRY FAIL {prop}: no target '{target}'"); return 1; }
+            if (WalkTo(map, player, prop, Out) != 0) return 1;
+            float dt = Time.fixedDeltaTime;
+            LookAt(player, EntityCenter(entity));
+            for (int i = 0; i < 10; i++) map.Step(dt);
+            player.DoAction(PlayerAction.Interact, true);
+            for (int i = 0; i < 20; i++) map.Step(dt);
+            if (player.States.Current.Type != PlayerStateType.InteractGrab)
+            {
+                player.DoAction(PlayerAction.Interact, false);
+                Out($"   CARRY FAIL {prop}: not grabbed ({player.States.Current.Describe()})");
+                return 1;
+            }
+            _carrying = true;
+            int fails;
+            try { fails = WalkTo(map, player, target, Out); }
+            finally { _carrying = false; }
+            Vector3 goal = EntityCenter(goalEntity);
+            LookAt(player, goal);
+            for (int i = 0; i < 60; i++) map.Step(dt);
+            bool held = player.States.Current.Type == PlayerStateType.InteractGrab;
+            player.DoAction(PlayerAction.Interact, false);
+            for (int i = 0; i < 90; i++) map.Step(dt);
+            float d = Vector3.Distance(EntityCenter(entity), goal);
+            bool ok = fails == 0 && d < 1.5f;
+            Out($"   CARRY {(ok ? "OK  " : "FAIL")} {prop} to {target}: {d:0.00} m from it, still held on arrival {held}");
+            return ok ? 0 : 1;
+        }
+
+        static bool _carrying;
+        static readonly bool _traceWheel = Environment.GetCommandLineArgs().Contains("-traceWheel");
+
+        /// <summary>
+        /// "wheel Wheel dir seconds": walk to a wheel (valve, phonograph crank), grab it and circle the mouse
+        /// (dir 1 or -1) for the given time. 0 when the wheel turned.
+        /// </summary>
+        public static int TurnWheel(HplMap map, AmnesiaPlayer player, string name, float dir, float seconds, Action<string> Out)
+        {
+            if (!(map.GetEntityByName(name) is PropWheel wheel)) { Out($"   TURN FAIL {name}: no wheel"); return 1; }
+            if (WalkTo(map, player, name, Out) != 0) return 1;
+            float dt = Time.fixedDeltaTime;
+            LookAt(player, EntityCenter(wheel));
+            for (int i = 0; i < 10; i++) map.Step(dt);
+            player.DoAction(PlayerAction.Interact, true);
+            map.Step(dt);
+            if (player.States.Current.Type != PlayerStateType.InteractWheel)
+            {
+                player.DoAction(PlayerAction.Interact, false);
+                Out($"   TURN FAIL {name}: not grabbed ({player.States.Current.Describe()})");
+                return 1;
+            }
+            string start = player.States.Current.Describe();
+            int before = wheel.CurrentState;
+            // Smooth circles, 8° a step (0.75 s a turn): the wheel state judges the curve of the last 10 moves, only
+            // a short arc reads as a circle.
+            int steps = Mathf.RoundToInt(seconds / dt);
+            for (int i = 0; i < steps; i++)
+            {
+                float a = (dir >= 0f ? 1f : -1f) * i * 8f * Mathf.Deg2Rad;
+                player.AddYaw(-3f * Mathf.Cos(a));
+                player.AddPitch(-3f * Mathf.Sin(a));
+                map.Step(dt);
+                if (_traceWheel && i % 15 == 0) Out($"      {player.States.Current.Describe()}");
+            }
+            string end = player.States.Current.Describe();
+            player.DoAction(PlayerAction.Interact, false);
+            for (int i = 0; i < 30; i++) map.Step(dt);
+            Out($"   TURN {name}: {start} -> {end}, state {before} -> {wheel.CurrentState}");
+            return 0;
         }
 
         // ---- real controller walk ---------------------------------------------------------------------------------
@@ -622,8 +934,11 @@ namespace RTXMnesia.EditorDev
                 var onRoute = (_allTargets ?? targets).Where(d => (d.kind == "SwingDoor" || d.kind == "LockedDoor") && d.hasBounds &&
                                                  path.Any(q => d.bounds.SqrDistance(q + Vector3.up * 0.9f) < 0.5f * 0.5f)).ToList();
                 if (onRoute.Count > 0) Out($"   route to {t.name} passes doors: {string.Join(", ", onRoute.Select(d => d.name + (d.locked ? " [LOCKED at start]" : "")))}");
-                var pendingDoors = onRoute.Where(d => !d.locked).ToList();
-                player.PlaceAt(path[0], 0f);
+                // Doors not wide open when the path was planned are thrown open on the way; wide open ones the search
+                // went round.
+                var pendingDoors = onRoute.Where(d => !d.locked && !(map.GetEntityByName(d.name) is PropSwingDoor sd && sd.GetDoorState() == 1)).ToList();
+                // Carrying a prop, the player is not set on the path start (it would turn the view away from the prop).
+                if (!_carrying) player.PlaceAt(path[0], 0f);
                 player.active = true;
                 player.held = default;
                 for (int i = 0; i < 30; i++) map.Step(dt);
@@ -633,6 +948,7 @@ namespace RTXMnesia.EditorDev
                 for (int w = 0; w < wps.Count && stuckAt < 0; w++)
                 {
                     float wpTime = 0f, lastDist = float.MaxValue, progressTime = 0f;
+                    int jumps = 0;
                     if ((player.MoveState != null && player.MoveState.Crouching) != wpCrouch[w]) { player.Crouch(true); map.Step(dt); }
                     while (true)
                     {
@@ -641,7 +957,33 @@ namespace RTXMnesia.EditorDev
                             if (pendingDoors[di].bounds.SqrDistance(feet + Vector3.up * 0.9f) < 2.0f * 2.0f)
                             {
                                 if (map.GetEntityByName(pendingDoors[di].name) is PropSwingDoor psd && !psd.Locked)
+                                {
+                                    // The closed leaf fills the doorway: its middle is clear of the open leaf.
+                                    var leaf = psd.GameObject.GetComponentsInChildren<Collider>().Where(c => !c.isTrigger && c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic).ToArray();
+                                    Bounds closed = leaf.Length > 0 ? leaf[0].bounds : pendingDoors[di].bounds;
+                                    foreach (var c in leaf) closed.Encapsulate(c.bounds);
                                     Out($"   (door {pendingDoors[di].name}: thrown open {(OpenByImpulse(map, psd, dt) ? "ok" : "FAILED")})");
+                                    // Through the doorway square on, not along the hinge side where the body pushes
+                                    // the open leaf shut: a point in front, the middle and a point behind.
+                                    Vector2 c2 = new Vector2(closed.center.x, closed.center.z);
+                                    Vector2 n2 = closed.extents.x < closed.extents.z ? Vector2.right : Vector2.up;
+                                    int first = -1, last = -1;
+                                    for (int j = w; j < wps.Count; j++)
+                                        if (Vector2.Distance(new Vector2(wps[j].x, wps[j].z), c2) < 1.4f) { if (first < 0) first = j; last = j; }
+                                    if (first >= 0)
+                                    {
+                                        int after = Mathf.Min(last + 1, wps.Count - 1);
+                                        float side = Vector2.Dot(new Vector2(wps[after].x, wps[after].z) - c2, n2) >= 0f ? 1f : -1f;
+                                        float y = wps[first].y;
+                                        bool cr = wpCrouch[first];
+                                        var through = new[] { c2 - n2 * side * 0.9f, c2, c2 + n2 * side * 0.9f }
+                                            .Select(q => new Vector3(q.x, y, q.y)).ToList();
+                                        wps.RemoveRange(first, last - first + 1);
+                                        wpCrouch.RemoveRange(first, last - first + 1);
+                                        wps.InsertRange(first, through);
+                                        wpCrouch.InsertRange(first, new[] { cr, cr, cr });
+                                    }
+                                }
                                 pendingDoors.RemoveAt(di);
                             }
                         Vector3 to = wps[w] - feet;
@@ -657,7 +999,17 @@ namespace RTXMnesia.EditorDev
                         wpTime += dt; time += dt;
                         if (flat < lastDist - 0.05f) { lastDist = flat; progressTime = 0f; }
                         else progressTime += dt;
-                        if (progressTime > 2.5f && doorTries < 12) { doorTries++; if (TryMoveProp(player, wps[w], Out) || TryOpenDoor(map, player, targets, dt, sign, doorTries, Out)) { progressTime = 0f; continue; } progressTime = 2.4f; continue; }
+                        // A step too high for the controller (block box stairs, 03_dungeon): a person jumps up it.
+                        if (progressTime > 1.2f && jumps < 2 && player.Body.IsOnGround)
+                        {
+                            jumps++;
+                            player.Jump(true); map.Step(dt); player.Jump(false);
+                            for (int i = 0; i < 40; i++) { player.held = default; player.held.forward = true; map.Step(dt); }
+                            Out($"   (jumped towards waypoint {w + 1}: feet {player.Body.FeetPosition:F2})");
+                            progressTime = 0f;
+                            continue;
+                        }
+                        if (progressTime > 2.5f && doorTries < 12 && !_carrying) { doorTries++; if (TryMoveProp(player, wps[w], Out) || TryOpenDoor(map, player, targets, dt, sign, doorTries, Out)) { progressTime = 0f; continue; } progressTime = 2.4f; continue; }
                         if (progressTime > 2.5f || wpTime > 15f) { stuckAt = w; break; }
                     }
                 }
@@ -684,6 +1036,7 @@ namespace RTXMnesia.EditorDev
                 {
                     fails++;
                     Out($"   WALK FAIL {t.kind} {t.name}: stuck at waypoint {stuckAt + 1}/{wps.Count}, feet {end:F2}, wanted {wps[stuckAt]:F2}, {time:0.0} s");
+                    Out($"      route: {string.Join(" ", wps.Skip(Mathf.Max(0, stuckAt - 3)).Take(7).Select((q, i) => $"{q:F1}{(wpCrouch[Mathf.Max(0, stuckAt - 3) + i] ? "c" : "")}"))}");
                     Vector3 dirw = wps[stuckAt] - end; dirw.y = 0f; dirw.Normalize();
                     foreach (var c in Physics.OverlapCapsule(end + Vector3.up * 0.5f + dirw * 0.25f, end + Vector3.up * 1.4f + dirw * 0.25f, 0.5f, ~0, QueryTriggerInteraction.Ignore))
                     {
@@ -779,7 +1132,9 @@ namespace RTXMnesia.EditorDev
                 map.Step(dt);
                 player.DoAction(PlayerAction.Interact, true);
                 map.Step(dt);
-                for (int i = 0; i < 100; i++) { player.AddYaw(0f); player.AddPitch(12f * dir); map.Step(dt); }
+                // Pulling, a person steps back out of the door's swing (a door opening towards the player).
+                for (int i = 0; i < 100; i++) { player.held = default; player.held.backward = dir < 0f && i < 60; player.AddYaw(0f); player.AddPitch(12f * dir); map.Step(dt); }
+                player.held = default;
                 player.DoAction(PlayerAction.Interact, false);
                 for (int i = 0; i < 20; i++) map.Step(dt);
                 float a = Quaternion.Angle(startRot, bodies[0].rotation);

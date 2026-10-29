@@ -28,7 +28,9 @@ namespace RTXMnesia.EditorDev
     /// body Entity (bodies and joints) | call Function args (script or engine function).
     /// "watch" steps like idle and logs the script state every interval.
     /// until Var value timeout | expectvar Var value: wait for / assert a local script variable.
-    /// walkto Name [maxDrop]: walk on foot to an entity or area (JustineWalkthrough.WalkTo).
+    /// walkto Name [maxDrop]: walk on foot to an entity or area (JustineWalkthrough.WalkTo); pull Lever [state];
+    /// climb Ladder [up|down]; pick Item; use Item Target (from the inventory); carry Prop Target (grabbed);
+    /// wheel Wheel dir seconds (mouse circles); door LevelDoor (on into the next map); credits.
     /// </summary>
     public static class PlayerSimulation
     {
@@ -41,7 +43,12 @@ namespace RTXMnesia.EditorDev
             string map = ImportMenu.Arg("-amnesiaMap", ImportMenu.TestMap);
             string scenePath = LevelConverter.ScenePathFor(Path.Combine(AmnesiaPaths.SourceRoot, map));
             EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
-            Run(Path.GetFileNameWithoutExtension(map), ImportMenu.Arg("-script", DefaultScript), SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null);
+            // -scriptFile path: the script from a file, a command per line, '#' starts a comment.
+            string script = ImportMenu.Arg("-script", DefaultScript);
+            string scriptFile = ImportMenu.Arg("-scriptFile", "");
+            if (scriptFile != "")
+                script = string.Join(";", File.ReadAllLines(scriptFile).Select(l => l.Split('#')[0].Trim()).Where(l => l != ""));
+            Run(Path.GetFileNameWithoutExtension(map), script, SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null);
         }
 
         static void Run(string mapName, string script, bool shots)
@@ -93,8 +100,9 @@ namespace RTXMnesia.EditorDev
                 Call(player, "Start");
 
                 var map = UnityEngine.Object.FindAnyObjectByType<HplMap>();
-                if (map != null)
+                void BeginMap()
                 {
+                    if (map == null) return;
                     map.scriptDebug = ImportMenu.HasArg("-scriptDebug");
                     map.runScript = !ImportMenu.HasArg("-noScript");
                     map.logDebugMessages = true;
@@ -104,6 +112,7 @@ namespace RTXMnesia.EditorDev
                     log.Info($"Map {map.mapFile}: script {map.Script?.GetType().Name ?? "none"}, {map.Entities.Count} script entities, " +
                              $"debug {map.scriptDebug}");
                 }
+                BeginMap();
 
                 float dt = Time.fixedDeltaTime;
                 log.Info($"Fixed step {dt:0.#####} s; start feet {player.Body.FeetPosition:F3} yaw {player.Body.Yaw * Mathf.Rad2Deg:0.#}°");
@@ -269,9 +278,103 @@ namespace RTXMnesia.EditorDev
                         }
                         case "pull":
                         {
-                            // pull Lever: walk to the lever, grab the handle and pull it with the mouse until its state changes.
+                            // pull Lever [state]: walk to the lever, grab the handle and pull it with the mouse until its state changes
+                            // (to the given state).
                             if (map == null) { log.Warn("pull needs an HplMap"); continue; }
-                            if (JustineWalkthrough.PullLever(map, player, p.Length > 1 ? p[1] : "", m => log.Info(m)) != 0) log.Warn($"pull {p[1]} FAILED");
+                            int? wantedState = p.Length > 2 ? int.Parse(p[2], CultureInfo.InvariantCulture) : null;
+                            if (JustineWalkthrough.PullLever(map, player, p.Length > 1 ? p[1] : "", m => log.Info(m), wantedState) != 0) log.Warn($"pull {p[1]} FAILED");
+                            Step(1);
+                            break;
+                        }
+                        case "pick":
+                        {
+                            // pick Item: walk to the item, look at it and take it.
+                            if (map == null) { log.Warn("pick needs an HplMap"); continue; }
+                            if (JustineWalkthrough.PickItem(map, player, p.Length > 1 ? p[1] : "", m => log.Info(m)) != 0) log.Warn($"pick {p[1]} FAILED");
+                            Step(1);
+                            break;
+                        }
+                        case "use":
+                        {
+                            // use Item Target: walk to the target, take the item from the inventory and click on the target.
+                            if (map == null || p.Length < 3) { log.Warn("use needs an HplMap, an item and a target"); continue; }
+                            if (JustineWalkthrough.UseItem(map, player, p[1], p[2], m => log.Info(m)) != 0) log.Warn($"use {p[1]} {p[2]} FAILED");
+                            Step(1);
+                            break;
+                        }
+                        case "carry":
+                        {
+                            // carry Prop Target: grab a loose prop and walk with it to the target, then let go.
+                            if (map == null || p.Length < 3) { log.Warn("carry needs an HplMap, a prop and a target"); continue; }
+                            if (JustineWalkthrough.CarryProp(map, player, p[1], p[2], m => log.Info(m)) != 0) log.Warn($"carry {p[1]} {p[2]} FAILED");
+                            Step(1);
+                            break;
+                        }
+                        case "wheel":
+                        {
+                            // wheel Wheel dir seconds: grab a wheel and circle the mouse (dir 1 / -1) for the time.
+                            if (map == null || p.Length < 2) { log.Warn("wheel needs an HplMap and a wheel"); continue; }
+                            JustineWalkthrough.TurnWheel(map, player, p[1], Arg(2, 1f), Arg(3, 3f), m => log.Info(m));
+                            Step(1);
+                            break;
+                        }
+                        case "door":
+                        {
+                            // door LevelDoor: walk to a level door and open it (the real PropLevelDoor), then follow the
+                            // map change (HplMapChange) into the next map: here the scene is opened at once, the new map
+                            // takes the arrival (player, effects, music, start position) and the load screen is skipped.
+                            if (map == null || p.Length < 2) { log.Warn("door needs an HplMap and a level door"); continue; }
+                            if (JustineWalkthrough.WalkTo(map, player, p[1], m => log.Info(m)) != 0) { log.Warn($"door {p[1]} FAILED: not reached"); continue; }
+                            JustineWalkthrough.Look(player, map.GetEntityByName(p[1]));
+                            Step(10);
+                            string focus = $"{player.States.Current.Describe()} crosshair {player.States.Current.GetCrosshair()?.ToString() ?? "none"} text '{player.FocusText.Replace('\n', ' ')}'";
+                            player.DoAction(PlayerAction.Interact, true);
+                            Step(1);
+                            player.DoAction(PlayerAction.Interact, false);
+                            for (int i = 0; i < 600 && !HplMapChange.Pending; i++) Step(1);
+                            if (!HplMapChange.Pending) { log.Warn($"door {p[1]} FAILED: no map change (focus was {focus})"); continue; }
+                            string from = map.MapName;
+                            string next = HplMapChange.PendingMapName;
+                            string scene = HplMapChange.FindScene(next);
+                            if (scene == null) { log.Warn($"door {p[1]} FAILED: no scene for {next}"); continue; }
+                            log.Info($"t={time,6:0.00} DOOR {p[1]}: {from} -> {next} (focus was {focus}); inventory [{string.Join(", ", HplGame.Items.Select(it => it.name))}]");
+                            // The load screen holds the music handed over (DontDestroyOnLoad in Play): it goes with
+                            // the next scene before the old one closes.
+                            var oldScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+                            var newScene = EditorSceneManager.OpenScene(scene, OpenSceneMode.Additive);
+                            if (RTXMnesia.Ui.HplLoadScreen.Current != null)
+                                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(RTXMnesia.Ui.HplLoadScreen.Current.gameObject, newScene);
+                            UnityEngine.SceneManagement.SceneManager.SetActiveScene(newScene);
+                            EditorSceneManager.CloseScene(oldScene, true);
+                            Physics.SyncTransforms();
+                            player = UnityEngine.Object.FindAnyObjectByType<AmnesiaPlayer>();
+                            player.readDevices = false;
+                            Call(player, "Awake");
+                            Call(player, "Start");
+                            map = UnityEngine.Object.FindAnyObjectByType<HplMap>();
+                            mapName = Path.GetFileNameWithoutExtension(scene);
+                            BeginMap();
+                            // The load screen waits for its text and fades (unscaled time in Play).
+                            for (int i = 0; i < 2000 && RTXMnesia.Ui.HplLoadScreen.Current != null; i++)
+                            {
+                                RTXMnesia.Ui.HplLoadScreen.Current.ExitPressed();
+                                RTXMnesia.Ui.HplLoadScreen.Current.UpdateGameState(dt);
+                            }
+                            Time.timeScale = 1f;
+                            log.Info($"t={time,6:0.00} arrived in {map.MapName} at {player.Body.FeetPosition:F2}, health {player.health:0}, " +
+                                     $"globals {string.Join(" ", new[] { "VictorIsDead", "HectorIsDead", "FelixIsDead" }.Select(g => g + "=" + HplGame.GetGlobalVar(g)))}");
+                            Step(1);
+                            break;
+                        }
+                        case "credits":
+                            // credits: the end credits are running (StartCredits).
+                            log.Info($"t={time,6:0.00} credits {(RTXMnesia.Ui.HplCredits.Active ? "ACTIVE" : "not running")}");
+                            break;
+                        case "climb":
+                        {
+                            // climb Ladder [up|down]: walk to the ladder, interact and climb until the player gets off.
+                            if (map == null) { log.Warn("climb needs an HplMap"); continue; }
+                            if (JustineWalkthrough.ClimbLadder(map, player, p.Length > 1 ? p[1] : "", !(p.Length > 2 && p[2] == "down"), m => log.Info(m)) != 0) log.Warn($"climb {p[1]} FAILED");
                             Step(1);
                             break;
                         }

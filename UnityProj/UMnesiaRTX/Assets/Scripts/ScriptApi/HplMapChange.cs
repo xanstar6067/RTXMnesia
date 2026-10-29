@@ -32,6 +32,9 @@ namespace RTXMnesia.ScriptApi
         /// <summary>A map scene is loading or loaded and waiting to take the arrival.</summary>
         public static bool Pending => s_pending != null;
 
+        /// <summary>The map being entered (tools follow the change in the editor).</summary>
+        public static string PendingMapName => s_pending?.MapName;
+
         /// <summary>cLuxMapHandler::FileToMapName: the file name without extension, lower case.</summary>
         public static string FileToMapName(string file) =>
             System.IO.Path.GetFileNameWithoutExtension((file ?? "").Replace('\\', '/')).ToLowerInvariant();

@@ -205,8 +205,9 @@ namespace RTXMnesia.ScriptApi
             _level = GetComponent<AmnesiaLevel>();
             if (string.IsNullOrEmpty(mapFile) && _level != null) mapFile = _level.mapFile;
             if (!menuBackground && player == null) player = FindAnyObjectByType<AmnesiaPlayer>(FindObjectsInactive.Include);
-            // A map change loaded this scene: the player starts at the asked position (AmnesiaPlayer.Start).
-            if (!IsBenchmark && !menuBackground && Application.isPlaying) _arrival = HplMapChange.Take(mapFile);
+            // A map change loaded this scene: the player starts at the asked position (AmnesiaPlayer.Start). In the
+            // editor only a tool that follows a map change has one pending (PlayerSimulation "door").
+            if (!IsBenchmark && !menuBackground && (Application.isPlaying || HplMapChange.Pending)) _arrival = HplMapChange.Take(mapFile);
             if (_arrival != null && player != null) player.startArea = _arrival.StartPos;
             // A save is being loaded into this map (cLuxSaveHandler::LoadSaveGameData).
             if (!IsBenchmark && !menuBackground && _arrival == null) _loadGame = RTXMnesia.Save.HplSaveHandler.TakePending(mapFile);

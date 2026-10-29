@@ -1,0 +1,72 @@
+# Justine: all four maps in a row on foot, with real actions (PlayerSimulation script, see
+# docs/ScriptPort/justine/walkthrough.md). Start: maps/ptest/01_cells.map, without -scriptDebug, with -noEnemyAI.
+# Route: Victor dies (lever), Hector and Felix are saved.
+
+# ---- 01_cells: the intro, the phonograph lowers the lantern, its pickup opens the cell door.
+watch 40 20
+walkto phonograph_1
+aim phonograph_1
+interact
+mouse 3 0 1
+mouse 0 3 1
+mouse -3 0 1
+mouse 0 -3 1
+release
+watch 6 6
+pick lantern_1
+watch 4 4
+# Three pulls bang the hatch open; the third rolls the ladder down and kills Victor.
+pull lever_simple01_1 1
+watch 3 3
+pull lever_simple01_1 1
+watch 3 3
+pull lever_simple01_1 1
+watch 12 12
+climb LadderArea_1
+watch 2 2
+# The loft tunnel ends at a drop (falls up to 25 m allowed), then the corridors to the library door.
+walkto level_wood_1 25
+door level_wood_1
+
+# ---- 02_library: stencils 4 and 3 in the slots save Hector, the secret shelf opens the way down.
+watch 3 3
+pick stencil04
+pick stencil03
+use stencil04 AreaCardSlot_01
+use stencil03 AreaCardSlot_02
+pull slot_machine_1 1
+watch 10 10
+door level_celler_1
+
+# ---- 03_dungeon: the lever handle, the cogwheel for the machine, the prisoner's door, the exit door.
+watch 5 5
+pick slide_door01_lever_handle
+use slide_door01_lever_handle PuzzleOpenDoor01_StickyArea
+watch 1 1
+pull slide_door01_fixedlever
+watch 6 6
+carry elevator_cogwheel01_1 PuzzleSlideDoor02_CogSticky
+watch 3 3
+pull slide_door02_lever_open -1
+watch 6 6
+# The valve lowers Felix's door (saved), the other one raises the exit door.
+wheel valve_iron_rusty02_2 -1 4
+watch 2 2
+wheel valve_iron_rusty02_1 1 6
+watch 3 3
+walkto PlayerStartArea_5
+pull slide_door03_lever_close 1
+watch 6 6
+door level_dungeon_2
+
+# ---- 04_final: the graves and the maze on the way, the crush room (pass out, wake up), Clarice, the end.
+watch 5 5
+walkto Area_CrushRoom
+watch 160 20
+walkto AreaClarice_1
+watch 70 10
+credits
+call GetGlobalVarInt VictorIsDead
+call GetGlobalVarInt HectorIsDead
+call GetGlobalVarInt FelixIsDead
+health

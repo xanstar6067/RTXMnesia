@@ -453,7 +453,9 @@ namespace RTXMnesia.Player
 
         public void PlaceAtStart(AmnesiaArea area)
         {
-            // cLuxPlayer::PlaceAtStartNode: reset, or the player splashes on the ground.
+            // cLuxPlayer::PlaceAtStartNode: the normal state first (a teleport off a ladder, 01_cells
+            // CollideAreaLadderUp), reset water, or the player splashes on the ground.
+            States?.ChangeState(PlayerStateType.Normal);
             IsInWater = false;
             Vector3 f = area.transform.forward;
             PlaceAt(area.transform.position + new Vector3(0f, 0.05f, 0f), Mathf.Atan2(f.x, f.z));
