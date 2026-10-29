@@ -282,7 +282,15 @@ namespace RTXMnesia.World
             }
         }
 
-        void LateUpdate() => ApplyCamera();
+        void LateUpdate()
+        {
+            if (_restored) return;
+            // Player.OnDisable and scene activation can release the cursor after the initial lock.
+            // Own it throughout the tour and loading transitions, until Restore returns it to the menu.
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+            ApplyCamera();
+        }
 
         /// <summary>Straight central aisle, clear of both the broken pillar and the intact pillar row.</summary>
         public static Vector3 EnemyFeet(float time) => new(0, 0, Mathf.Lerp(11, 23, Mathf.Clamp01((time - 8) / 17)));
