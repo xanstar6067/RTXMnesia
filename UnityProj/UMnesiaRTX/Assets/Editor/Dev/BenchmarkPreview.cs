@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using RTXMnesia.Hpl;
 using RTXMnesia.ScriptApi;
@@ -22,7 +23,7 @@ namespace RTXMnesia.EditorDev
         static string s_preferences;
         static float s_health, s_sanity;
         static int s_stage, s_lastScene = -1, s_lastShot = -1, s_errors;
-        static bool s_enemyChecked;
+        static bool s_enemyChecked, s_resultsClosed, s_cancelSawResults;
         static RenderTexture s_target;
         static double s_start;
         static readonly List<string> Report = new();
@@ -41,6 +42,7 @@ namespace RTXMnesia.EditorDev
                     s_start = EditorApplication.timeSinceStartup;
                     s_stage = 0; s_errors = 0; s_lastScene = s_lastShot = -1;
                     s_enemyChecked = false;
+                    s_resultsClosed = s_cancelSawResults = false;
                     Report.Clear(); Hits.Clear();
                     EditorApplication.update += Update;
                 }
@@ -60,6 +62,7 @@ namespace RTXMnesia.EditorDev
         {
             if (!Application.isBatchMode) throw new InvalidOperationException("Benchmark preview is batch-only");
             Directory.CreateDirectory(Folder);
+            BenchmarkStatsTests.Run();
             AudioListener.volume = 0;
             EditorSceneManager.OpenScene(title ? HplGameUi.MainMenuScene : HplBenchmarkRoute.All[1].ScenePath);
             var map = UnityEngine.Object.FindAnyObjectByType<HplMap>();
@@ -121,8 +124,19 @@ namespace RTXMnesia.EditorDev
                             .GetValue(null), s_origin), "Enhanced lighting reattached to original map");
                         Check(PlayerPrefs.GetString(HplUserSettings.PrefsKey, "") == s_preferences, "Preferences never written");
                         Check(s_lastScene == 5, "All six scenes completed");
+                        Check(s_resultsClosed, "Back closes the completed results screen");
+                        Check(!Resources.FindObjectsOfTypeAll<Texture2D>().Any(t => t.name == "Benchmark frame times"), "Graph texture released on Back");
                         s_owner.Choose(MenuControl.Benchmark);
                         s_stage = 2;
+                        return;
+                    }
+                    if (test.ShowingResults)
+                    {
+                        if (s_resultsClosed) return;
+                        CheckResults(test);
+                        CaptureResults(test);
+                        ChooseResult(test, true);
+                        s_stage = 4;
                         return;
                     }
                     if (!test.IsPlaying || test.Map == null) return;
@@ -130,6 +144,15 @@ namespace RTXMnesia.EditorDev
                     {
                         s_lastScene = test.SceneIndex; s_lastShot = -1;
                         Check(test.Map.GameUi == null && !test.Map.runScript && test.Map.disableAutoSaves, "World isolated " + s_lastScene);
+                        Check(!test.ShowingResults, "No results during flythrough " + s_lastScene);
+                        if (s_lastScene == 0)
+                        {
+                            Check(test.CounterVisible, "Counter enabled by default");
+                            typeof(HplBenchmark).GetMethod("ToggleCounter", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(test, null);
+                            Check(!test.CounterVisible, "Tab handler hides counter");
+                            typeof(HplBenchmark).GetMethod("ToggleCounter", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(test, null);
+                            Check(test.CounterVisible, "Tab handler shows counter");
+                        }
                         if (s_lastScene == 2 || s_lastScene == 3)
                             foreach (var entity in test.Map.Entities)
                                 if (entity is Props.PropLamp lamp && (lamp.Component.file ?? "").Replace('\\', '/').StartsWith("entities/lamp/", StringComparison.OrdinalIgnoreCase))
@@ -146,7 +169,7 @@ namespace RTXMnesia.EditorDev
                         Audit(test);
                     }
                     int shot = Mathf.FloorToInt(test.SceneTime / 10);
-                    if (shot != s_lastShot)
+                    if (shot != s_lastShot && Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkShots") >= 0)
                     {
                         s_lastShot = shot;
                         Capture(test, shot);
@@ -181,14 +204,94 @@ namespace RTXMnesia.EditorDev
                     Check(test.CancelRequested, "Held Esc cancels");
                     s_stage = 3;
                 }
-                else if (s_stage == 3 && test == null)
+                else if (s_stage == 3)
                 {
+                    if (test != null) { s_cancelSawResults |= test.ShowingResults; return; }
+                    Check(!s_cancelSawResults, "Cancellation never shows results");
                     Check(HplMap.Current == s_origin && s_owner.ShowingOptions, "Cancellation restores options and map");
                     Check(PlayerPrefs.GetString(HplUserSettings.PrefsKey, "") == s_preferences, "Cancellation preserves preferences");
                     Finish();
                 }
+                else if (s_stage == 4)
+                {
+                    if (test == null) { Check(false, "Repeat unexpectedly restored the owner"); Finish(); return; }
+                    if (!test.IsPlaying) return;
+                    Check(test.SceneIndex == 0 && test.Stats.Count < 1000, "Repeat restarts at scene one with fresh statistics");
+                    var settings = (HplUserSettings)typeof(HplBenchmark).GetField("_settings", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(test);
+                    Check(settings.lightingSet == 1 && settings.textures == 1, "Repeat preserves the original settings copy");
+                    s_stage = 5;
+                }
+                else if (s_stage == 5)
+                {
+                    if (test == null) { Check(false, "Repeated run disappeared"); Finish(); return; }
+                    if (test.ShowingResults)
+                    {
+                        CheckResults(test);
+                        ChooseResult(test, false);
+                        s_resultsClosed = true; s_stage = 1;
+                    }
+                    else if (test.IsPlaying && test.SceneTime > 1 && test.SceneTime < HplBenchmarkRoute.All[test.SceneIndex].Duration - 2)
+                        Seek(test, HplBenchmarkRoute.All[test.SceneIndex].Duration - 1);
+                }
             }
             catch (Exception e) { Check(false, e.ToString()); Finish(); }
+        }
+
+        static void ChooseResult(HplBenchmark test, bool repeat) => typeof(HplBenchmark)
+            .GetMethod("ChooseResult", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(test, new object[] { repeat });
+
+        static void CheckResults(HplBenchmark test)
+        {
+            Check(!test.IsPlaying && test.Map == null && test.ShowingResults, "Results appear only after temporary scenes unload");
+            Check(Cursor.visible && Cursor.lockState == CursorLockMode.None, "Results release the cursor");
+            var total = test.Stats.Calculate();
+            Check(total.Frames > 0 && total.AverageFps > 0 && test.Stats.DroppedFrames == 0, "Measured frames and total FPS collected");
+            int count = 0;
+            for (int i = 0; i < HplBenchmarkRoute.All.Length; i++)
+            {
+                var scene = test.Stats.Calculate(i); count += scene.Frames;
+                Check(scene.Frames > 0 && scene.Seconds > 0, "Statistics collected for scene " + i + ": frames=" + scene.Frames);
+            }
+            Check(count == total.Frames, "Scene frame counts equal the total");
+            int timings = 0;
+            for (int i = 0; i < test.Stats.Count; i++) if (test.Stats[i].gpuMs > 0) timings++;
+            Report.Add("INFO GPU timing samples=" + timings + "/" + count + ", bottleneck=" + total.Bottleneck);
+            for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
+            {
+                var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+                Check(!scene.name.StartsWith("Benchmark runtime ") && Array.FindIndex(HplBenchmarkRoute.All, r => r.ScenePath == scene.path) < 0 || scene == s_origin.gameObject.scene,
+                    "No temporary benchmark scene remains: " + scene.name);
+            }
+        }
+
+        static void CaptureResults(HplBenchmark test)
+        {
+            var canvas = test.GetComponentInChildren<Canvas>();
+            var go = new GameObject("Results snapshot camera", typeof(Camera));
+            var camera = go.GetComponent<Camera>(); camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = Color.black;
+            camera.orthographic = true; camera.orthographicSize = 300;
+            var target = new RenderTexture(1600, 1200, 24, RenderTextureFormat.ARGB32);
+            var image = new Texture2D(1600, 1200, TextureFormat.RGB24, false);
+            var active = RenderTexture.active;
+            try
+            {
+                camera.targetTexture = target;
+                canvas.renderMode = RenderMode.ScreenSpaceCamera; canvas.worldCamera = camera; canvas.planeDistance = 1;
+                Canvas.ForceUpdateCanvases();
+                // Batch has no overlay framebuffer. Composite the actual font commands and
+                // images after a real GPU tour, without rendering an already unloaded HDRP world.
+                RenderTexture.active = target; GL.Clear(true, true, Color.black);
+                image.ReadPixels(new Rect(0, 0, 1600, 1200), 0, 0); image.Apply();
+                HudSnapshot.DrawCanvas(image, canvas, camera);
+                File.WriteAllBytes(Path.Combine(Folder, "results.png"), image.EncodeToPNG());
+            }
+            finally
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.worldCamera = null;
+                RenderTexture.active = active;
+                UnityEngine.Object.DestroyImmediate(image); UnityEngine.Object.DestroyImmediate(target); UnityEngine.Object.DestroyImmediate(go);
+            }
         }
 
         static void CancelInput(HplBenchmark test, bool held, float dt) => typeof(HplBenchmark)

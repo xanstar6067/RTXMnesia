@@ -14,7 +14,7 @@ namespace RTXMnesia.EditorDev
     /// </summary>
     static class HudSnapshot
     {
-        /// <summary>Canvas snapshot from the actual generated quad meshes (including skin images), after rendering the world.</summary>
+        /// <summary>Canvas snapshot from skin meshes and the font's original quad commands, after rendering the world.</summary>
         public static void DrawCanvas(Texture2D image, Canvas canvas, Camera camera)
         {
             var textures = new Dictionary<Texture2D, Texture2D>();
@@ -22,8 +22,6 @@ namespace RTXMnesia.EditorDev
             foreach (var graphic in canvas.GetComponentsInChildren<UnityEngine.UI.Graphic>())
             {
                 if (!graphic.isActiveAndEnabled || graphic.canvasRenderer == null) continue;
-                var mesh = graphic.canvasRenderer.GetMesh();
-                if (mesh == null || mesh.vertexCount == 0) continue;
                 var texture = graphic.mainTexture as Texture2D;
                 if (texture == null) continue;
                 if (!textures.TryGetValue(texture, out var source))
@@ -39,29 +37,25 @@ namespace RTXMnesia.EditorDev
                     clip = Rect.MinMaxRect(Mathf.Max(clip.xMin, Mathf.Min(a.x, b.x)), Mathf.Max(clip.yMin, Mathf.Min(a.y, b.y)),
                                            Mathf.Min(clip.xMax, Mathf.Max(a.x, b.x)), Mathf.Min(clip.yMax, Mathf.Max(a.y, b.y)));
                 }
-                var vertices = mesh.vertices;
-                var uvs = mesh.uv;
-                var colors = mesh.colors32;
-                for (int start = 0; start + 3 < vertices.Length; start += 4)
+                void DrawQuad(Vector3[] vertices, Vector2[] uvs, Color tint)
                 {
                     var points = new Vector2[4];
                     float left = float.MaxValue, right = float.MinValue, bottom = float.MaxValue, top = float.MinValue;
                     for (int j = 0; j < 4; j++)
                     {
-                        points[j] = camera.WorldToScreenPoint(graphic.transform.TransformPoint(vertices[start + j]));
+                        points[j] = camera.WorldToScreenPoint(graphic.transform.TransformPoint(vertices[j]));
                         left = Mathf.Min(left, points[j].x); right = Mathf.Max(right, points[j].x);
                         bottom = Mathf.Min(bottom, points[j].y); top = Mathf.Max(top, points[j].y);
                     }
-                    if (right <= left || top <= bottom) continue;
+                    if (right <= left || top <= bottom) return;
                     Vector2 UvAt(float x, float y)
                     {
                         int nearest = 0;
                         for (int j = 1; j < 4; j++)
                             if ((points[j] - new Vector2(x, y)).sqrMagnitude < (points[nearest] - new Vector2(x, y)).sqrMagnitude) nearest = j;
-                        return uvs[start + nearest];
+                        return uvs[nearest];
                     }
                     Vector2 bl = UvAt(left, bottom), br = UvAt(right, bottom), tl = UvAt(left, top), tr = UvAt(right, top);
-                    Color tint = colors.Length > start ? colors[start] : Color.white;
                     for (int y = Mathf.Max(Mathf.CeilToInt(clip.yMin - 0.5f), Mathf.FloorToInt(bottom)); y < Mathf.Min(Mathf.CeilToInt(clip.yMax - 0.5f), Mathf.CeilToInt(top)); y++)
                     {
                         float v = (y + 0.5f - bottom) / (top - bottom);
@@ -74,6 +68,28 @@ namespace RTXMnesia.EditorDev
                             pixels[i] = Color.Lerp(pixels[i], new Color(color.r, color.g, color.b, 1), color.a);
                         }
                     }
+                }
+                if (graphic is HplGuiText text)
+                {
+                    // Native Canvas text meshes can reorder vertices. The font commands retain
+                    // exact glyph rectangles/UVs and do not depend on consecutive native quads.
+                    Rect area = text.rectTransform.rect;
+                    text.ForEachQuad((rect, uv, color) =>
+                    {
+                        float x0 = area.xMin + rect.xMin, x1 = area.xMin + rect.xMax;
+                        float y0 = area.yMax - rect.yMin, y1 = area.yMax - rect.yMax;
+                        DrawQuad(new[] { new Vector3(x0, y0), new Vector3(x1, y0), new Vector3(x1, y1), new Vector3(x0, y1) },
+                            new[] { new Vector2(uv.xMin, uv.yMax), new Vector2(uv.xMax, uv.yMax), new Vector2(uv.xMax, uv.yMin), new Vector2(uv.xMin, uv.yMin) }, color);
+                    });
+                }
+                else
+                {
+                    var mesh = graphic.canvasRenderer.GetMesh();
+                    if (mesh == null || mesh.vertexCount == 0) continue;
+                    var vertices = mesh.vertices; var uvs = mesh.uv; var colors = mesh.colors32;
+                    for (int start = 0; start + 3 < vertices.Length; start += 4)
+                        DrawQuad(new[] { vertices[start], vertices[start + 1], vertices[start + 2], vertices[start + 3] },
+                            new[] { uvs[start], uvs[start + 1], uvs[start + 2], uvs[start + 3] }, colors.Length > start ? colors[start] : Color.white);
                 }
             }
             image.SetPixels32(pixels);
@@ -125,6 +141,12 @@ namespace RTXMnesia.EditorDev
         static Texture2D Readable(Texture2D atlas)
         {
             string path = AssetDatabase.GetAssetPath(atlas);
+            if (string.IsNullOrEmpty(path) && atlas.isReadable)
+            {
+                var runtimeCopy = new Texture2D(atlas.width, atlas.height, TextureFormat.RGBA32, false);
+                runtimeCopy.SetPixels32(atlas.GetPixels32()); runtimeCopy.Apply();
+                return runtimeCopy;
+            }
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
             var copy = new Texture2D(2, 2, TextureFormat.RGBA32, false, true) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
             copy.LoadImage(File.ReadAllBytes(path));

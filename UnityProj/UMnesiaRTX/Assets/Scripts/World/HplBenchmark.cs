@@ -27,6 +27,9 @@ namespace RTXMnesia.World
         public bool IsPlaying => _playing;
         public HplMap Map { get; private set; }
         public string Error { get; private set; }
+        public HplBenchmarkStats Stats { get; } = new();
+        public bool ShowingResults => _results != null;
+        public bool CounterVisible => _counterVisible;
 
         HplGameUi _owner;
         HplUserSettings _settings;
@@ -46,6 +49,18 @@ namespace RTXMnesia.World
         bool _enemyVoice;
         float _enemyWalkScale;
         double _sceneStartedAt;
+        bool _skipFirstFrame, _counterVisible = true, _english;
+        double _lastSampleAt, _nextCounterAt;
+        HplGuiText _counter;
+        RawImage _counterBack, _progressBack, _progress;
+        readonly FrameTiming[] _timings = new FrameTiming[1];
+        readonly int[] _timingFrames = new int[16], _timingSamples = new int[16];
+        ulong _lastTimingTimestamp;
+        HplBenchmarkResults _results;
+        HplBenchmarkResults.Choice _resultChoice;
+        string[] _system;
+
+        string T(string ru, string en) => _english ? en : ru;
 
         sealed class Setup : HplScript
         {
@@ -94,6 +109,7 @@ namespace RTXMnesia.World
                 yield return next;
             }
             _playing = false; _black = 1;
+            CloseResults();
             s_loadingPath = null;
             if (_worldScene.IsValid() && _worldScene.isLoaded) yield return SceneManager.UnloadSceneAsync(_worldScene);
             if (_scratchScene.IsValid() && _scratchScene.isLoaded) yield return SceneManager.UnloadSceneAsync(_scratchScene);
@@ -108,6 +124,7 @@ namespace RTXMnesia.World
             _cursorLock = Cursor.lockState; _cursorVisible = Cursor.visible;
             _random = UnityEngine.Random.state;
             _hplRandom = HplMath.ExchangeRandom(new System.Random(317));
+            _english = _owner.Map.language?.language?.StartsWith("eng", StringComparison.OrdinalIgnoreCase) == true;
             CreateOverlay();
             _soundPaused = _owner.Map.sound.MenuPaused;
             // Include all initially loaded scenes, so a multi-scene editor setup is suspended too.
@@ -125,55 +142,80 @@ namespace RTXMnesia.World
             foreach (var root in _suspended) root.SetActive(false);
             Time.timeScale = 1;
             Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
-            for (SceneIndex = 0; SceneIndex < HplBenchmarkRoute.All.Length && !CancelRequested; SceneIndex++)
+            bool repeat;
+            do
             {
-                var route = HplBenchmarkRoute.All[SceneIndex];
-                SceneTime = 0; _enemy = null; _enemyVoice = false;
-                UnityEngine.Random.InitState(317 + SceneIndex);
-                HplMath.Seed(317 + SceneIndex);
-                _scratchScene = SceneManager.CreateScene("Benchmark runtime " + SceneIndex);
-                SceneManager.SetActiveScene(_scratchScene);
-                s_loadingPath = route.ScenePath;
-                void Loaded(Scene scene, LoadSceneMode mode)
+                repeat = false;
+                Stats.Clear();
+                for (int i = 0; i < _timingFrames.Length; i++) _timingFrames[i] = -1;
+                for (SceneIndex = 0; SceneIndex < HplBenchmarkRoute.All.Length && !CancelRequested; SceneIndex++)
                 {
-                    if (scene.path != route.ScenePath) return;
-                    _worldScene = scene;
-                    SceneManager.SetActiveScene(scene);
+                    var route = HplBenchmarkRoute.All[SceneIndex];
+                    SceneTime = 0; _enemy = null; _enemyVoice = false;
+                    UnityEngine.Random.InitState(317 + SceneIndex);
+                    HplMath.Seed(317 + SceneIndex);
+                    _scratchScene = SceneManager.CreateScene("Benchmark runtime " + SceneIndex);
+                    SceneManager.SetActiveScene(_scratchScene);
+                    s_loadingPath = route.ScenePath;
+                    void Loaded(Scene scene, LoadSceneMode mode)
+                    {
+                        if (scene.path != route.ScenePath) return;
+                        _worldScene = scene;
+                        SceneManager.SetActiveScene(scene);
+                    }
+                    SceneManager.sceneLoaded += Loaded;
+                    AsyncOperation load;
+                    try
+                    {
+                        load = SceneManager.LoadSceneAsync(route.ScenePath, LoadSceneMode.Additive);
+                        while (!load.isDone) yield return null;
+                    }
+                    finally { SceneManager.sceneLoaded -= Loaded; }
+                    if (!_worldScene.IsValid()) throw new InvalidOperationException("Benchmark scene did not load: " + route.map);
+                    Map = null;
+                    foreach (var root in _worldScene.GetRootGameObjects())
+                        if (root.TryGetComponent<HplMap>(out var found)) { Map = found; break; }
+                    if (Map == null || !Map.IsBenchmark) throw new InvalidOperationException("Benchmark map was not isolated: " + route.map);
+                    yield return null; // player Start/Init before configuring its observer helpers
+                    if (CancelRequested) break;
+                    PrepareWorld();
+                    // Render at the first key under the curtain while textures and temporal lighting settle.
+                    double warmUntil = Time.realtimeSinceStartupAsDouble + 2;
+                    while (Time.realtimeSinceStartupAsDouble < warmUntil && !CancelRequested) yield return null;
+                    float fade = 0;
+                    while (fade < 0.5f && !CancelRequested) { fade += Time.unscaledDeltaTime; _black = 1 - fade / 0.5f; yield return null; }
+                    _black = 0; _sceneStartedAt = Time.realtimeSinceStartupAsDouble; _playing = true;
+                    _skipFirstFrame = true; _nextCounterAt = 0;
+                    while (SceneTime < route.Duration && !CancelRequested) yield return null;
+                    _playing = false;
+                    fade = 0;
+                    while (fade < 0.5f && !CancelRequested) { fade += Time.unscaledDeltaTime; _black = fade / 0.5f; yield return null; }
+                    _black = 1;
+                    if (SceneIndex == HplBenchmarkRoute.All.Length - 1)
+                        _system = HplBenchmarkResults.CaptureSystem(_settings, _english, Map.PlayerCamera);
+                    Map = null;
+                    yield return SceneManager.UnloadSceneAsync(_worldScene);
+                    _worldScene = default;
+                    yield return SceneManager.UnloadSceneAsync(_scratchScene);
+                    _scratchScene = default;
+                    yield return Resources.UnloadUnusedAssets();
                 }
-                SceneManager.sceneLoaded += Loaded;
-                AsyncOperation load;
-                try
+                if (!CancelRequested && SceneIndex == HplBenchmarkRoute.All.Length)
                 {
-                    load = SceneManager.LoadSceneAsync(route.ScenePath, LoadSceneMode.Additive);
-                    while (!load.isDone) yield return null;
+                    var assets = Resources.Load<HplMenuAssets>(_owner.Map.Campaign.ResourceName(HplMenuAssets.ResourceName));
+                    _resultChoice = HplBenchmarkResults.Choice.None;
+                    _text.Clear(); _holdBar.gameObject.SetActive(false); SetCounterActive(false);
+                    _results = new HplBenchmarkResults(_canvas, assets != null ? assets.guiFont : _owner.Map.hud.defaultFont,
+                        Stats, _settings, _english, _system);
+                    Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
+                    // Do not let a key that ended the previous frame also dismiss this screen.
+                    yield return null;
+                    while (_resultChoice == HplBenchmarkResults.Choice.None) yield return null;
+                    repeat = _resultChoice == HplBenchmarkResults.Choice.Repeat;
+                    CloseResults(); _holdBar.gameObject.SetActive(true);
+                    _hold = 0;
                 }
-                finally { SceneManager.sceneLoaded -= Loaded; }
-                if (!_worldScene.IsValid()) throw new InvalidOperationException("Benchmark scene did not load: " + route.map);
-                Map = null;
-                foreach (var root in _worldScene.GetRootGameObjects())
-                    if (root.TryGetComponent<HplMap>(out var found)) { Map = found; break; }
-                if (Map == null || !Map.IsBenchmark) throw new InvalidOperationException("Benchmark map was not isolated: " + route.map);
-                yield return null; // player Start/Init before configuring its observer helpers
-                if (CancelRequested) break;
-                PrepareWorld();
-                // Render at the first key under the curtain while textures and temporal lighting settle.
-                double warmUntil = Time.realtimeSinceStartupAsDouble + 2;
-                while (Time.realtimeSinceStartupAsDouble < warmUntil && !CancelRequested) yield return null;
-                float fade = 0;
-                while (fade < 0.5f && !CancelRequested) { fade += Time.unscaledDeltaTime; _black = 1 - fade / 0.5f; yield return null; }
-                _black = 0; _sceneStartedAt = Time.realtimeSinceStartupAsDouble; _playing = true;
-                while (SceneTime < route.Duration && !CancelRequested) yield return null;
-                _playing = false;
-                fade = 0;
-                while (fade < 0.5f && !CancelRequested) { fade += Time.unscaledDeltaTime; _black = fade / 0.5f; yield return null; }
-                _black = 1;
-                Map = null;
-                yield return SceneManager.UnloadSceneAsync(_worldScene);
-                _worldScene = default;
-                yield return SceneManager.UnloadSceneAsync(_scratchScene);
-                _scratchScene = default;
-                yield return Resources.UnloadUnusedAssets();
-            }
+            } while (repeat);
         }
 
         void PrepareWorld()
@@ -236,20 +278,94 @@ namespace RTXMnesia.World
 
         void Update()
         {
+            if (ShowingResults)
+            {
+                if (_resultChoice == HplBenchmarkResults.Choice.None) _resultChoice = _results.UpdateInput();
+                return;
+            }
+            SampleFrame();
             // Real elapsed time: a slow frame must not stretch the camera route, and render motion
             // must remain smooth on displays faster than the 60 Hz world simulation.
             if (_playing) SceneTime = Mathf.Min((float)(Time.realtimeSinceStartupAsDouble - _sceneStartedAt),
                 HplBenchmarkRoute.All[SceneIndex].Duration);
             bool held = Keyboard.current != null && Keyboard.current.escapeKey.isPressed;
             UpdateCancellation(held, Application.isFocused, Time.unscaledDeltaTime);
+            if (Keyboard.current != null && Keyboard.current.tabKey.wasPressedThisFrame) ToggleCounter();
+            SetCounterActive(_playing && _counterVisible);
+            if (_playing && Time.realtimeSinceStartupAsDouble >= _nextCounterAt) UpdateCounter();
             if (_curtain == null) return;
             _curtain.color = new Color(0, 0, 0, Mathf.Clamp01(_black));
             _holdBar.rectTransform.sizeDelta = new Vector2(360 * Mathf.Clamp01(_hold / CancelHoldSeconds), 3);
             _text.Clear();
-            _text.DrawFont("Удерживайте Esc для отмены", new Vector2(400, 565), Vector2.one * 16, Color.white, HplFontAlign.Center);
+            _text.DrawFont(T("Удерживайте Esc для отмены | Tab: счётчик", "Hold Esc to cancel | Tab: counter"), new Vector2(400, 565), Vector2.one * 16, Color.white, HplFontAlign.Center);
             if (_black > 0.95f)
-                _text.DrawFont(CancelRequested ? "Завершение теста..." : "Тест производительности: загрузка...",
+                _text.DrawFont(CancelRequested ? T("Завершение теста...", "Finishing test...") : T("Тест производительности: загрузка...", "Performance test: loading..."),
                     new Vector2(400, 285), Vector2.one * 20, Color.white, HplFontAlign.Center);
+        }
+
+        void SampleFrame()
+        {
+            double now = Time.realtimeSinceStartupAsDouble;
+            int sample = -1;
+            if (_playing)
+            {
+                if (!_skipFirstFrame) sample = Stats.AddFrame(SceneIndex, now - _sceneStartedAt, now - _lastSampleAt);
+                _skipFirstFrame = false;
+            }
+            _lastSampleAt = now;
+            // The elapsed interval belongs to the previous rendered frame. Unity returns CPU/GPU
+            // timings four frames late. Keep the association through fades, excluding all loading samples.
+            int renderedFrame = Time.frameCount - 1, slot = renderedFrame % _timingFrames.Length;
+            _timingFrames[slot] = renderedFrame; _timingSamples[slot] = sample;
+            FrameTimingManager.CaptureFrameTimings();
+            if (FrameTimingManager.GetLatestTimings(1, _timings) == 0) return;
+            var timing = _timings[0];
+            if (timing.frameStartTimestamp == 0 || timing.frameStartTimestamp == _lastTimingTimestamp) return;
+            _lastTimingTimestamp = timing.frameStartTimestamp;
+            int frame = Time.frameCount - 4;
+            if (frame < 0) return;
+            slot = frame % _timingFrames.Length;
+            if (_timingFrames[slot] == frame)
+                Stats.SetTiming(_timingSamples[slot], timing.cpuMainThreadFrameTime, timing.cpuRenderThreadFrameTime, timing.gpuFrameTime);
+        }
+
+        internal void ToggleCounter() { _counterVisible = !_counterVisible; SetCounterActive(_playing && _counterVisible); }
+        internal void ChooseResult(bool repeat) => _resultChoice = repeat ? HplBenchmarkResults.Choice.Repeat : HplBenchmarkResults.Choice.Back;
+        void CloseResults() { _results?.Dispose(); _results = null; }
+
+        void SetCounterActive(bool visible)
+        {
+            if (_counter == null || _counter.gameObject.activeSelf == visible) return;
+            _counter.gameObject.SetActive(visible); _counterBack.gameObject.SetActive(visible);
+            _progressBack.gameObject.SetActive(visible); _progress.gameObject.SetActive(visible);
+        }
+
+        void UpdateCounter()
+        {
+            _nextCounterAt = Time.realtimeSinceStartupAsDouble + 0.25;
+            if (!_counterVisible) return;
+            int n = 0, mainN = 0, renderN = 0, gpuN = 0;
+            double seconds = 0, main = 0, render = 0, gpu = 0;
+            for (int i = Stats.Count - 1; i >= 0; i--)
+            {
+                var f = Stats[i];
+                if (f.scene != SceneIndex || seconds >= 0.5) break;
+                n++; seconds += f.seconds;
+                if (f.cpuMainMs > 0) { main += f.cpuMainMs; mainN++; }
+                if (f.cpuRenderMs > 0) { render += f.cpuRenderMs; renderN++; }
+                if (f.gpuMs > 0) { gpu += f.gpuMs; gpuN++; }
+            }
+            string Ms(double time, int count) => count > 0 ? (time / count).ToString("0.0") : T("н/д", "n/a");
+            _counter.Clear();
+            _counter.DrawFont((n > 0 ? (n / seconds).ToString("0.0") : T("н/д", "n/a")) + " FPS | "
+                + (n > 0 ? (seconds * 1000 / n).ToString("0.0") : T("н/д", "n/a")) + T(" мс", " ms"), new Vector2(24, 20), Vector2.one * 14, Color.white);
+            _counter.DrawFont("CPU: " + Ms(main, mainN) + " / " + Ms(render, renderN) + " | GPU: " + Ms(gpu, gpuN) + T(" мс", " ms"), new Vector2(24, 39), Vector2.one * 13, Color.white);
+            _counter.DrawFont(T("Сцена ", "Scene ") + (SceneIndex + 1) + "/" + HplBenchmarkRoute.All.Length + ": "
+                + HplBenchmarkResults.SceneTitle(SceneIndex, _english), new Vector2(24, 58), Vector2.one * 13, Color.white);
+            float total = 0, completed = 0;
+            for (int i = 0; i < HplBenchmarkRoute.All.Length; i++)
+            { total += HplBenchmarkRoute.All[i].Duration; if (i < SceneIndex) completed += HplBenchmarkRoute.All[i].Duration; }
+            _progress.rectTransform.sizeDelta = new Vector2(342 * Mathf.Clamp01((completed + SceneTime) / total), 2);
         }
 
         internal void UpdateCancellation(bool held, bool focused, float deltaTime)
@@ -285,6 +401,7 @@ namespace RTXMnesia.World
         void LateUpdate()
         {
             if (_restored) return;
+            if (ShowingResults) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; return; }
             // Player.OnDisable and scene activation can release the cursor after the initial lock.
             // Own it throughout the tour and loading transitions, until Restore returns it to the menu.
             Cursor.lockState = CursorLockMode.Locked;
@@ -331,6 +448,17 @@ namespace RTXMnesia.World
             _curtain.rectTransform.anchorMin = Vector2.zero; _curtain.rectTransform.anchorMax = Vector2.one;
             _curtain.rectTransform.offsetMin = _curtain.rectTransform.offsetMax = Vector2.zero;
             _curtain.color = Color.black;
+            _counterBack = Image("Counter background", new Vector2(366, 78), new Vector2(-200, 249));
+            _counterBack.color = new Color(0, 0, 0, 0.65f);
+            _progressBack = Image("Tour progress background", new Vector2(342, 2), new Vector2(-205, 220));
+            _progressBack.color = new Color(0.25f, 0.23f, 0.18f);
+            _progress = Image("Tour progress", new Vector2(0, 2), new Vector2(-376, 220));
+            _progress.rectTransform.pivot = new Vector2(0, 0.5f); _progress.color = new Color(0.91f, 0.79f, 0.11f);
+            var counter = new GameObject("Benchmark counter", typeof(RectTransform), typeof(HplGuiText));
+            counter.transform.SetParent(go.transform, false);
+            counter.GetComponent<RectTransform>().sizeDelta = new Vector2(800, 600);
+            _counter = counter.GetComponent<HplGuiText>(); _counter.raycastTarget = false; _counter.font = _owner.Map.hud.defaultFont;
+            SetCounterActive(false);
             _holdBar = Image("Cancel hold", new Vector2(0, 3), new Vector2(-180, -281));
             _holdBar.rectTransform.pivot = new Vector2(0, 0.5f);
             var text = new GameObject("Benchmark instructions", typeof(RectTransform), typeof(HplGuiText));
@@ -375,6 +503,7 @@ namespace RTXMnesia.World
 
         void OnDestroy()
         {
+            CloseResults();
             if (_restored || s_instance != this) return;
             // Also cover a component destroyed externally (normal completion restores in Drive).
             Restore();
