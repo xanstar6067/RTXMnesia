@@ -51,8 +51,13 @@ namespace RTXMnesia.World
         double _sceneStartedAt;
         bool _skipFirstFrame, _counterVisible = true, _english;
         double _lastSampleAt, _nextCounterAt;
+        const float OverlayMargin = 20;
+        static readonly Color Gold = new(232f / 255, 201f / 255, 28f / 255), Dim = new(0.82f, 0.79f, 0.72f);
         HplGuiText _counter;
-        RawImage _counterBack, _progressBack, _progress;
+        RawImage[] _segmentBack, _segmentFill;
+        string _fpsText = "--", _detailText = "";
+        bool _counterDirty = true;
+        float _counterDrawnAlpha = -1;
         readonly FrameTiming[] _timings = new FrameTiming[1];
         readonly int[] _timingFrames = new int[16], _timingSamples = new int[16];
         ulong _lastTimingTimestamp;
@@ -179,13 +184,14 @@ namespace RTXMnesia.World
                     yield return null; // player Start/Init before configuring its observer helpers
                     if (CancelRequested) break;
                     PrepareWorld();
+                    ResetCounter();
                     // Render at the first key under the curtain while textures and temporal lighting settle.
                     double warmUntil = Time.realtimeSinceStartupAsDouble + 2;
                     while (Time.realtimeSinceStartupAsDouble < warmUntil && !CancelRequested) yield return null;
                     float fade = 0;
                     while (fade < 0.5f && !CancelRequested) { fade += Time.unscaledDeltaTime; _black = 1 - fade / 0.5f; yield return null; }
                     _black = 0; _sceneStartedAt = Time.realtimeSinceStartupAsDouble; _playing = true;
-                    _skipFirstFrame = true; _nextCounterAt = 0;
+                    _skipFirstFrame = true;
                     while (SceneTime < route.Duration && !CancelRequested) yield return null;
                     _playing = false;
                     fade = 0;
@@ -291,16 +297,40 @@ namespace RTXMnesia.World
             bool held = Keyboard.current != null && Keyboard.current.escapeKey.isPressed;
             UpdateCancellation(held, Application.isFocused, Time.unscaledDeltaTime);
             if (Keyboard.current != null && Keyboard.current.tabKey.wasPressedThisFrame) ToggleCounter();
-            SetCounterActive(_playing && _counterVisible);
             if (_playing && Time.realtimeSinceStartupAsDouble >= _nextCounterAt) UpdateCounter();
+            DrawOverlay();
+        }
+
+        void DrawOverlay()
+        {
             if (_curtain == null) return;
-            _curtain.color = new Color(0, 0, 0, Mathf.Clamp01(_black));
-            _holdBar.rectTransform.sizeDelta = new Vector2(360 * Mathf.Clamp01(_hold / CancelHoldSeconds), 3);
+            bool inScene = Map != null && SceneIndex >= 0 && SceneIndex < HplBenchmarkRoute.All.Length;
+            float black = Mathf.Clamp01(_black), overlay = inScene && _counterVisible ? 1 - black : 0;
+            SetCounterActive(overlay > 0);
+            if (overlay > 0)
+            {
+                // Text is rebuilt only for new values (4 Hz) or while the curtain fades.
+                if (_counterDirty || Mathf.Abs(overlay - _counterDrawnAlpha) > 0.01f) { DrawCounter(overlay); _counterDirty = false; }
+                LayoutProgress(overlay);
+            }
+            _curtain.color = new Color(0, 0, 0, black);
+            _holdBar.rectTransform.anchoredPosition = new Vector2(-OverlayMargin, 24);
+            _holdBar.rectTransform.sizeDelta = new Vector2(200 * Mathf.Clamp01(_hold / CancelHoldSeconds), 2);
             _text.Clear();
-            _text.DrawFont(T("Удерживайте Esc для отмены | Tab: счётчик", "Hold Esc to cancel | Tab: counter"), new Vector2(400, 565), Vector2.one * 16, Color.white, HplFontAlign.Center);
+            float width = Width, fade = inScene ? CaptionFade(SceneTime) : 0;
+            if (overlay * fade > 0)
+            {
+                Shadowed(_text, T("Сцена ", "Scene ") + (SceneIndex + 1) + T(" из ", " of ") + HplBenchmarkRoute.All.Length,
+                    new Vector2(OverlayMargin, 600 - 66), 12, Alpha(Gold, overlay * fade));
+                Shadowed(_text, HplBenchmarkResults.SceneTitle(SceneIndex, _english), new Vector2(OverlayMargin, 600 - 52), 20, Alpha(Color.white, overlay * fade));
+            }
+            float hint = Mathf.Max(black, fade, _hold > 0 ? 1 : 0);
+            if (hint > 0)
+                Shadowed(_text, T("Удерживайте Esc для отмены   Tab: показатели", "Hold Esc to cancel   Tab: stats"),
+                    new Vector2(width - OverlayMargin, 600 - 40), 13, Alpha(Dim, hint), HplFontAlign.Right);
             if (_black > 0.95f)
                 _text.DrawFont(CancelRequested ? T("Завершение теста...", "Finishing test...") : T("Тест производительности: загрузка...", "Performance test: loading..."),
-                    new Vector2(400, 285), Vector2.one * 20, Color.white, HplFontAlign.Center);
+                    new Vector2(width / 2, 285), Vector2.one * 20, Color.white, HplFontAlign.Center);
         }
 
         void SampleFrame()
@@ -336,9 +366,13 @@ namespace RTXMnesia.World
         void SetCounterActive(bool visible)
         {
             if (_counter == null || _counter.gameObject.activeSelf == visible) return;
-            _counter.gameObject.SetActive(visible); _counterBack.gameObject.SetActive(visible);
-            _progressBack.gameObject.SetActive(visible); _progress.gameObject.SetActive(visible);
+            _counter.gameObject.SetActive(visible);
+            foreach (var image in _segmentBack) image.gameObject.SetActive(visible);
+            foreach (var image in _segmentFill) image.gameObject.SetActive(visible);
+            _counterDirty = true;
         }
+
+        void ResetCounter() { _fpsText = "--"; _detailText = ""; _counterDirty = true; _nextCounterAt = 0; }
 
         void UpdateCounter()
         {
@@ -355,17 +389,14 @@ namespace RTXMnesia.World
                 if (f.cpuRenderMs > 0) { render += f.cpuRenderMs; renderN++; }
                 if (f.gpuMs > 0) { gpu += f.gpuMs; gpuN++; }
             }
-            string Ms(double time, int count) => count > 0 ? (time / count).ToString("0.0") : T("н/д", "n/a");
-            _counter.Clear();
-            _counter.DrawFont((n > 0 ? (n / seconds).ToString("0.0") : T("н/д", "n/a")) + " FPS | "
-                + (n > 0 ? (seconds * 1000 / n).ToString("0.0") : T("н/д", "n/a")) + T(" мс", " ms"), new Vector2(24, 20), Vector2.one * 14, Color.white);
-            _counter.DrawFont("CPU: " + Ms(main, mainN) + " / " + Ms(render, renderN) + " | GPU: " + Ms(gpu, gpuN) + T(" мс", " ms"), new Vector2(24, 39), Vector2.one * 13, Color.white);
-            _counter.DrawFont(T("Сцена ", "Scene ") + (SceneIndex + 1) + "/" + HplBenchmarkRoute.All.Length + ": "
-                + HplBenchmarkResults.SceneTitle(SceneIndex, _english), new Vector2(24, 58), Vector2.one * 13, Color.white);
-            float total = 0, completed = 0;
-            for (int i = 0; i < HplBenchmarkRoute.All.Length; i++)
-            { total += HplBenchmarkRoute.All[i].Duration; if (i < SceneIndex) completed += HplBenchmarkRoute.All[i].Duration; }
-            _progress.rectTransform.sizeDelta = new Vector2(342 * Mathf.Clamp01((completed + SceneTime) / total), 2);
+            if (n == 0) return;
+            _fpsText = Mathf.RoundToInt((float)(n / seconds)).ToString();
+            // CPU is the slower of the main and render threads, as in the results bottleneck.
+            _detailText = (seconds * 1000 / n).ToString("0.0") + T(" мс", " ms");
+            if (mainN > 0 || renderN > 0)
+                _detailText += "   CPU " + Math.Max(mainN > 0 ? main / mainN : 0, renderN > 0 ? render / renderN : 0).ToString("0.0");
+            if (gpuN > 0) _detailText += "   GPU " + (gpu / gpuN).ToString("0.0");
+            _counterDirty = true;
         }
 
         internal void UpdateCancellation(bool held, bool focused, float deltaTime)
@@ -448,24 +479,77 @@ namespace RTXMnesia.World
             _curtain.rectTransform.anchorMin = Vector2.zero; _curtain.rectTransform.anchorMax = Vector2.one;
             _curtain.rectTransform.offsetMin = _curtain.rectTransform.offsetMax = Vector2.zero;
             _curtain.color = Color.black;
-            _counterBack = Image("Counter background", new Vector2(366, 78), new Vector2(-200, 249));
-            _counterBack.color = new Color(0, 0, 0, 0.65f);
-            _progressBack = Image("Tour progress background", new Vector2(342, 2), new Vector2(-205, 220));
-            _progressBack.color = new Color(0.25f, 0.23f, 0.18f);
-            _progress = Image("Tour progress", new Vector2(0, 2), new Vector2(-376, 220));
-            _progress.rectTransform.pivot = new Vector2(0, 0.5f); _progress.color = new Color(0.91f, 0.79f, 0.11f);
-            var counter = new GameObject("Benchmark counter", typeof(RectTransform), typeof(HplGuiText));
-            counter.transform.SetParent(go.transform, false);
-            counter.GetComponent<RectTransform>().sizeDelta = new Vector2(800, 600);
-            _counter = counter.GetComponent<HplGuiText>(); _counter.raycastTarget = false; _counter.font = _owner.Map.hud.defaultFont;
+            // Info sits on the real screen corners (full canvas width), not inside the centred 4:3 area.
+            int scenes = HplBenchmarkRoute.All.Length;
+            _segmentBack = new RawImage[scenes]; _segmentFill = new RawImage[scenes];
+            for (int i = 0; i < scenes; i++)
+            {
+                _segmentBack[i] = Corner(Image("Tour segment " + i, Vector2.zero, Vector2.zero), Vector2.zero);
+                _segmentFill[i] = Corner(Image("Tour segment fill " + i, Vector2.zero, Vector2.zero), Vector2.zero);
+            }
+            _counter = MakeText("Benchmark counter");
             SetCounterActive(false);
-            _holdBar = Image("Cancel hold", new Vector2(0, 3), new Vector2(-180, -281));
-            _holdBar.rectTransform.pivot = new Vector2(0, 0.5f);
-            var text = new GameObject("Benchmark instructions", typeof(RectTransform), typeof(HplGuiText));
-            text.transform.SetParent(go.transform, false);
-            var rect = text.GetComponent<RectTransform>();
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(800, 600);
-            _text = text.GetComponent<HplGuiText>(); _text.raycastTarget = false; _text.font = _owner.Map.hud.defaultFont;
+            _holdBar = Corner(Image("Cancel hold", Vector2.zero, Vector2.zero), new Vector2(1, 0));
+            _holdBar.color = Gold;
+            _text = MakeText("Benchmark instructions");
+
+            static RawImage Corner(RawImage image, Vector2 corner)
+            {
+                image.rectTransform.anchorMin = image.rectTransform.anchorMax = image.rectTransform.pivot = corner;
+                return image;
+            }
+            HplGuiText MakeText(string name)
+            {
+                var child = new GameObject(name, typeof(RectTransform), typeof(HplGuiText));
+                child.transform.SetParent(go.transform, false);
+                var rect = child.GetComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
+                var text = child.GetComponent<HplGuiText>(); text.raycastTarget = false; text.font = _owner.Map.hud.defaultFont;
+                return text;
+            }
+        }
+
+        float Width => ((RectTransform)_canvas.transform).rect.width;
+
+        /// <summary>Scene caption and key hint: fade in after the curtain opens, fade out after five seconds.</summary>
+        static float CaptionFade(float time) => Mathf.Clamp01(time / 0.6f) * Mathf.Clamp01((5 - time) / 0.8f);
+
+        static void Shadowed(HplGuiText text, string value, Vector2 position, float size, Color color, HplFontAlign align = HplFontAlign.Left)
+        {
+            text.DrawFont(value, position + Vector2.one, Vector2.one * size, new Color(0, 0, 0, color.a * 0.75f), align);
+            text.DrawFont(value, position, Vector2.one * size, color, align);
+        }
+
+        static Color Alpha(Color color, float alpha) { color.a *= alpha; return color; }
+
+        void DrawCounter(float alpha)
+        {
+            _counter.Clear();
+            Shadowed(_counter, _fpsText, new Vector2(OverlayMargin, 12), 28, Alpha(Color.white, alpha));
+            float x = OverlayMargin + _counter.font.GetLength(Vector2.one * 28, _fpsText) + 5;
+            Shadowed(_counter, "FPS", new Vector2(x, 25), 12, Alpha(Gold, alpha));
+            if (_detailText.Length > 0) Shadowed(_counter, _detailText, new Vector2(OverlayMargin, 45), 12, Alpha(Dim, alpha));
+            _counterDrawnAlpha = alpha;
+        }
+
+        void LayoutProgress(float alpha)
+        {
+            const float gap = 4, height = 2, bottom = 10;
+            var routes = HplBenchmarkRoute.All;
+            float total = 0;
+            foreach (var route in routes) total += route.Duration;
+            float x = OverlayMargin, span = Width - 2 * OverlayMargin - gap * (routes.Length - 1);
+            for (int i = 0; i < routes.Length; i++)
+            {
+                float w = span * routes[i].Duration / total;
+                _segmentBack[i].rectTransform.anchoredPosition = _segmentFill[i].rectTransform.anchoredPosition = new Vector2(x, bottom);
+                _segmentBack[i].rectTransform.sizeDelta = new Vector2(w, height);
+                _segmentBack[i].color = i < SceneIndex ? Alpha(Gold, 0.55f * alpha) : new Color(1, 1, 1, 0.18f * alpha);
+                float fill = i == SceneIndex ? w * Mathf.Clamp01(SceneTime / routes[i].Duration) : 0;
+                _segmentFill[i].rectTransform.sizeDelta = new Vector2(fill, height);
+                _segmentFill[i].color = Alpha(Gold, 0.9f * alpha);
+                x += w + gap;
+            }
         }
 
         void Restore()

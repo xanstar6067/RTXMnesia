@@ -109,7 +109,7 @@ namespace RTXMnesia.EditorDev
                 var test = UnityEngine.Object.FindAnyObjectByType<HplBenchmark>();
                 if (test != null && test.Map != null)
                 {
-                    if (s_target == null) s_target = new RenderTexture(960, 540, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+                    if (s_target == null) s_target = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
                     test.Map.PlayerCamera.targetTexture = s_target;
                 }
                 if (s_stage == 1)
@@ -168,8 +168,9 @@ namespace RTXMnesia.EditorDev
                         }
                         Audit(test);
                     }
-                    int shot = Mathf.FloorToInt(test.SceneTime / 10);
-                    if (shot != s_lastShot && Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkShots") >= 0)
+                    // Shots start at 2 s, when the scene caption is fully visible.
+                    int shot = Mathf.FloorToInt((test.SceneTime - 2) / 10);
+                    if (shot >= 0 && shot != s_lastShot && Shots)
                     {
                         s_lastShot = shot;
                         Capture(test, shot);
@@ -186,7 +187,7 @@ namespace RTXMnesia.EditorDev
                     if (Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkQuick") >= 0 && test.SceneIndex != 5)
                     {
                         float duration = HplBenchmarkRoute.All[test.SceneIndex].Duration;
-                        if (test.SceneTime > 1 && test.SceneTime < duration / 2 - 1)
+                        if (test.SceneTime > (Shots ? 2.5f : 1) && test.SceneTime < duration / 2 - 1)
                             Seek(test, duration / 2);
                         else if (test.SceneTime > duration / 2 + 1 && test.SceneTime < duration - 2)
                             Seek(test, duration - 1);
@@ -360,22 +361,38 @@ namespace RTXMnesia.EditorDev
             Check(contacts == 0, "Brute full body clearance contacts=" + contacts);
         }
 
+        static bool Shots => Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkShots") >= 0;
+        static int ShotWidth => Shots ? 1600 : 960;
+        static int ShotHeight => Shots ? 900 : 540;
+
         static void Capture(HplBenchmark test, int shot)
         {
             var camera = test.Map.PlayerCamera;
             var active = RenderTexture.active;
-            var image = new Texture2D(960, 540, TextureFormat.RGB24, false);
+            var image = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
+            var canvas = test.GetComponentInChildren<Canvas>();
+            var go = new GameObject("Overlay snapshot camera", typeof(Camera));
+            var ui = go.GetComponent<Camera>(); ui.enabled = false; ui.orthographic = true; ui.orthographicSize = 300;
+            var uiTarget = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32);
             try
             {
                 typeof(HplBenchmark).GetMethod("ApplyCamera", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(test, null);
                 camera.Render();
-                RenderTexture.active = s_target; image.ReadPixels(new Rect(0, 0, 960, 540), 0, 0); image.Apply();
+                RenderTexture.active = s_target; image.ReadPixels(new Rect(0, 0, ShotWidth, ShotHeight), 0, 0); image.Apply();
+                // Batch has no overlay framebuffer: lay the overlay out for the shot aspect, then composite it.
+                ui.targetTexture = uiTarget;
+                canvas.renderMode = RenderMode.ScreenSpaceCamera; canvas.worldCamera = ui; canvas.planeDistance = 1;
+                Canvas.ForceUpdateCanvases();
+                typeof(HplBenchmark).GetMethod("DrawOverlay", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(test, null);
+                Canvas.ForceUpdateCanvases();
+                HudSnapshot.DrawCanvas(image, canvas, ui);
                 File.WriteAllBytes(Path.Combine(Folder, $"scene_{test.SceneIndex}_{shot}.png"), image.EncodeToPNG());
             }
             finally
             {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.worldCamera = null;
                 RenderTexture.active = active;
-                UnityEngine.Object.DestroyImmediate(image);
+                UnityEngine.Object.DestroyImmediate(image); UnityEngine.Object.DestroyImmediate(uiTarget); UnityEngine.Object.DestroyImmediate(go);
             }
         }
 
