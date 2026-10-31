@@ -22,7 +22,7 @@ namespace RTXMnesia.Hpl
     {
         public static readonly int[] FpsLimits = { 0, 60, 120, 144, 240, 280, 360 };
         public static readonly int[] AnisotropyLevels = { 1, 2, 4, 8, 16 };
-        public static readonly int[] TextureMemoryBudgetsGb = { 2, 4, 8, 10, 12, 16 };
+        public static readonly int[] TextureMemoryBudgetsGb = { 1, 2, 3, 4, 6, 8, 10, 12, 16 };
         /// <summary>Shadow choices: off, low, medium, high (cLuxMainMenu_Options shadows + ShadowQuality).</summary>
         public const int ShadowsOff = 0, ShadowsHigh = 3;
 
@@ -106,6 +106,33 @@ namespace RTXMnesia.Hpl
         }
 
         /// <summary>The window / screen: mode, then the resolution (0 × 0 — the desktop). Not in the editor.</summary>
+        /// <summary>
+        /// Frees HDRP's per-camera data (history buffers of TAA, denoisers, RT shadows/GI/reflections, volumetrics) of
+        /// a camera that stays disabled for a while. HDRP never releases disabled Game cameras (HDCamera.CleanUnused),
+        /// so a suspended scene's camera kept hundreds of MB at the screen size. The next render recreates the data,
+        /// with its history reset. Reflection on HDRP internals: on any mismatch nothing is freed.
+        /// </summary>
+        public static void ReleaseCameraData(Camera camera)
+        {
+            if (camera == null) return;
+            try
+            {
+                var type = typeof(HDCamera);
+                var cameras = type.GetField("s_Cameras", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.GetValue(null) as System.Collections.IDictionary;
+                var dispose = type.GetMethod("Dispose", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, null, Type.EmptyTypes, null);
+                if (cameras == null || dispose == null) return;
+                var keys = new List<object>();
+                foreach (System.Collections.DictionaryEntry entry in cameras)
+                    if (entry.Value is HDCamera hd && hd.camera == camera) keys.Add(entry.Key);
+                foreach (var key in keys)
+                {
+                    dispose.Invoke(cameras[key], null);
+                    cameras.Remove(key);
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[HplGraphics] Camera data not released: " + e.Message); }
+        }
+
         static void ApplyScreen(HplUserSettings s)
         {
             if (Application.isEditor) return;

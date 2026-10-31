@@ -180,6 +180,8 @@ namespace RTXMnesia.Importer
             importer.maxTextureSize = 4096; importer.mipmapEnabled = true; importer.wrapMode = TextureWrapMode.Repeat;
             importer.filterMode = FilterMode.Trilinear; importer.anisoLevel = 8; importer.isReadable = false;
             importer.textureCompression = TextureImporterCompression.CompressedHQ;
+            // 4096² maps of mesh renderers: counted against the memory budget (TextureStreamingRules).
+            importer.streamingMipmaps = true;
             importer.SaveAndReimport();
             return ResourceRoot + "/" + stem + "_" + role;
         }

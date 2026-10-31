@@ -51,9 +51,40 @@ namespace RTXMnesia.EditorDev
             Check(stats.Calculate().Bottleneck == HplBenchmarkStats.Limit.Unavailable, "missing GPU");
             stats.SetTiming(0, 10, 5, 9);
             Check(stats.Calculate().Bottleneck == HplBenchmarkStats.Limit.Cpu, "10% boundary is not balanced");
-            stats.Clear(); stats.AddFrame(0, 0.025, 0.025); stats.AddFrame(0, 0.05, 0.025); stats.AddFrame(0, 0.1, 0.05);
-            Check(stats.Calculate().Stutters == 0, "stutter threshold is strictly greater");
             stats.Clear();
+            for (int i = 0; i < 20; i++) stats.AddFrame(0, 0, 0.025);
+            stats.AddFrame(0, 0, 0.05);
+            for (int i = 0; i < 20; i++) stats.AddFrame(0, 0, 0.025);
+            Check(stats.Calculate().Stutters == 0, "stutter threshold is strictly greater than twice the local median");
+            stats.Clear();
+            for (int i = 0; i < 20; i++) stats.AddFrame(0, 0, 0.005);
+            stats.AddFrame(0, 0, 0.012);
+            for (int i = 0; i < 20; i++) stats.AddFrame(0, 0, 0.005);
+            Check(stats.Calculate().Stutters == 0, "a jump under the absolute minimum is not a stutter");
+            // Slow scenes and lasting level changes (the old whole-run median counted 471 and 627 such frames).
+            stats.Clear();
+            for (int i = 0; i < 300; i++) stats.AddFrame(0, 0, 0.007);
+            for (int i = 0; i < 300; i++) stats.AddFrame(0, 0, 0.040);
+            for (int i = 0; i < 40; i++) stats.AddFrame(1, 0, 0.2);
+            for (int i = 0; i < 20; i++) stats.AddFrame(1, 0, 0.6);
+            for (int i = 0; i < 20; i++) stats.AddFrame(1, 0, 1.1);
+            m = stats.Calculate();
+            Check(m.Stutters == 0 && stats.Calculate(0).Stutters == 0 && stats.Calculate(1).Stutters == 0, "slow scene and lasting steps are no stutters: " + m.Stutters);
+            stats.AddFrame(1, 0, 3.0); for (int i = 0; i < 5; i++) stats.AddFrame(1, 0, 1.1);
+            Check(stats.Calculate(1).Stutters == 1 && stats.Calculate().Stutters == 1, "a hitch at a low frame rate");
+            stats.Clear();
+            for (int i = 0; i < 100; i++) stats.AddFrame(0, 0, 1.0 / 144);
+            stats.AddFrame(0, 0, 0.03); stats.AddFrame(0, 0, 0.03);
+            for (int i = 0; i < 100; i++) stats.AddFrame(0, 0, 1.0 / 144);
+            for (int i = 0; i < 100; i++) stats.AddFrame(1, 0, 1.0 / 30);
+            Check(stats.Calculate().Stutters == 2 && stats.Calculate(0).Stutters == 2 && stats.Calculate(1).Stutters == 0,
+                "two adjacent hitches; total equals the sum of scenes, a scene change is not a hitch");
+            Near(stats.ShareAtOrBelow(1000.0 / 144 * 1.05), 200.0 / 302, "share of frames at a cap");
+            stats.SetMemory(0, 3000, 200, 3800); stats.SetMemory(250, 3500, 300, 3700); stats.SetMemory(1, double.NaN, 1, 1);
+            Check(stats.Calculate().PeakLocalMb == 3500 && stats.Calculate(0).PeakLocalMb == 3000 && stats.Calculate(1).PeakSharedMb == 300
+                && stats.LocalBudgetMb == 3700 && stats[1].localMb == 0, "video memory peaks per scene and the smallest budget");
+            stats.Clear();
+            Check(stats.LocalBudgetMb == 0, "reset clears the memory budget");
             Check(stats.Count == 0 && stats.Calculate().Frames == 0 && stats.Calculate(2).AverageFps == 0, "empty and reset");
             Check(stats.AddFrame(0, 0, 0) == -1 && stats.AddFrame(0, 0, double.NaN) == -1 && stats.AddFrame(0, 0, double.PositiveInfinity) == -1, "reject invalid duration");
             var small = new HplBenchmarkStats(1);

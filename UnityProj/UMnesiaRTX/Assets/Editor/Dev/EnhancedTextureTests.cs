@@ -190,8 +190,8 @@ namespace RTXMnesia.EditorDev
             var choices = HplGraphicsOptions.Items(MenuControl.Textures, settings, (c, k, f) => f, out int selected);
             Check(choices.Count == 2 && choices[1].enabled && selected == 1, "existing textures dropdown enables enhanced set");
             var budgetChoices = HplGraphicsOptions.Items(MenuControl.TextureMemoryBudget, settings, (c, k, f) => f, out int budgetSelected);
-            Check(budgetSelected == 0 && budgetChoices.Select(c => c.label).SequenceEqual(new[] { "2 ГБ", "4 ГБ", "8 ГБ", "10 ГБ", "12 ГБ", "16 ГБ" }),
-                "memory budget dropdown offers all six requested values, default 2 GB");
+            Check(budgetSelected == 1 && budgetChoices.Select(c => c.label).SequenceEqual(new[] { "1 ГБ", "2 ГБ", "3 ГБ", "4 ГБ", "6 ГБ", "8 ГБ", "10 ГБ", "12 ГБ", "16 ГБ" }),
+                "memory budget dropdown offers all nine values, default 2 GB");
             for (int i = 0; i < budgetChoices.Count; i++)
             {
                 var draft = settings.Copy();
@@ -476,8 +476,8 @@ namespace RTXMnesia.EditorDev
                     File.WriteAllBytes(Path.Combine(Folder, name + ".png"), image.EncodeToPNG());
                     Object.DestroyImmediate(image);
                 }
-                Capture("5_graphics_budget_dropdown", new HplMenuCombo { control = MenuControl.TextureMemoryBudget, hover = 3 });
-                ui.ChooseComboItem(3);
+                Capture("5_graphics_budget_dropdown", new HplMenuCombo { control = MenuControl.TextureMemoryBudget, hover = 6 });
+                ui.ChooseComboItem(6);
                 Check(ui.DraftSettings.textureMemoryBudgetGb == 10, "GPU menu: dropdown changes its draft to 10 GB");
                 Capture("6_graphics_budget_selected");
                 ui.Choose(MenuControl.Cancel);

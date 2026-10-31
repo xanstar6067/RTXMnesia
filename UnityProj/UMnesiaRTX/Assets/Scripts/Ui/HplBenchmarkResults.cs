@@ -24,6 +24,7 @@ namespace RTXMnesia.Ui
         readonly string[] _system;
         readonly HplUserSettings _settings;
         readonly int _dropped;
+        readonly double _budgetMb, _capShare;
         readonly double[] _boundaries;
         readonly double _scale;
         int _selected;
@@ -34,6 +35,9 @@ namespace RTXMnesia.Ui
         };
         string T(string ru, string en) => _english ? en : ru;
         string Number(double n) => HplBenchmarkStats.Valid(n) ? n.ToString("0.0") : T("н/д", "n/a");
+        string Gb(double mb) => HplBenchmarkStats.Valid(mb) ? (mb / 1024).ToString("0.0") : T("н/д", "n/a");
+        /// <summary>Past ~95% of the OS budget Windows starts moving the process's data to system memory.</summary>
+        bool MemoryShort => HplBenchmarkStats.Valid(_budgetMb) && _total.PeakLocalMb >= 0.95 * _budgetMb;
 
         /// <summary>Capture while the last benchmark camera still exists (DLSS render size is camera-owned).</summary>
         public static string[] CaptureSystem(HplUserSettings settings, bool english, Camera camera)
@@ -52,9 +56,10 @@ namespace RTXMnesia.Ui
             string Level(int n) => n switch { 0 => T("выкл", "off"), 1 => T("низкое", "low"), 2 => T("среднее", "medium"), 3 => T("высокое", "high"), _ => T("ультра", "ultra") };
             bool rt = settings.lighting != 0 && dx12 && HplRayTracing.Supported;
             string Rt(int n) => Level(rt ? n : 0);
+            long vram = HplVideoMemory.Dedicated;
             return new[]
             {
-                SystemInfo.graphicsDeviceName + " | " + SystemInfo.graphicsDeviceVersion,
+                SystemInfo.graphicsDeviceName + (vram > 0 ? " " + (vram / 1073741824.0).ToString("0.0") + T(" ГБ", " GB") : "") + " | " + SystemInfo.graphicsDeviceVersion,
                 SystemInfo.processorType + " | " + (SystemInfo.systemMemorySize / 1024f).ToString("0.0") + T(" ГБ ОЗУ | ", " GB RAM | ") + SystemInfo.operatingSystem,
                 (dx12 ? "DX12" : SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 ? "DX11" : SystemInfo.graphicsDeviceType.ToString())
                     + T(" | Вывод: ", " | Output: ") + size + T(" | Рендер: ", " | Render: ") + render + " | DLSS: " + dlss,
@@ -69,6 +74,9 @@ namespace RTXMnesia.Ui
         public HplBenchmarkResults(Canvas canvas, HplFont font, HplBenchmarkStats stats, HplUserSettings settings, bool english, string[] system)
         {
             _english = english; _settings = settings; _system = system; _dropped = stats.DroppedFrames;
+            _budgetMb = stats.LocalBudgetMb;
+            // Within 5% of the cap's frame time: the limit, not the hardware, set those frames.
+            _capShare = !settings.vSync && settings.fpsLimit > 0 ? stats.ShareAtOrBelow(1000.0 / settings.fpsLimit * 1.05) : 0;
             _total = stats.Calculate();
             _scenes = new HplBenchmarkStats.Metrics[HplBenchmarkRoute.All.Length];
             _boundaries = new double[_scenes.Length + 1];
@@ -145,8 +153,11 @@ namespace RTXMnesia.Ui
                 HplBenchmarkStats.Limit.Gpu => T("видеокарта", "GPU"), HplBenchmarkStats.Limit.Cpu => T("процессор", "CPU"),
                 HplBenchmarkStats.Limit.Balanced => T("примерно поровну", "balanced"), _ => T("н/д", "n/a")
             };
+            if (MemoryShort) limit = T("видеопамять", "video memory");
+            string memory = HplBenchmarkStats.Valid(_total.PeakLocalMb)
+                ? T(" | Видеопамять: ", " | Video memory: ") + Gb(_total.PeakLocalMb) + T(" из ", " of ") + Gb(_budgetMb) + T(" ГБ", " GB") : "";
             Label(T("Ограничение: ", "Bottleneck: ") + limit + " | P95: " + Number(_total.P95Ms) + T(" мс | Макс.: ", " ms | Max: ")
-                + Number(_total.MaxMs) + T(" мс", " ms"), 400, 97, 13, null, HplFontAlign.Center);
+                + Number(_total.MaxMs) + T(" мс", " ms") + memory, 400, 97, 13, MemoryShort ? Gold : null, HplFontAlign.Center);
             Label(T("Время кадра, мс: min / max", "Frame time, ms: min / max"), 55, 115, 12);
             Label("0 - " + _total.Seconds.ToString("0.0") + T(" с", " s"), 755, 115, 12, null, HplFontAlign.Right);
             Label("0", 50, 301, 11, null, HplFontAlign.Right);
@@ -159,23 +170,29 @@ namespace RTXMnesia.Ui
             for (int i = 0; i < _scenes.Length; i++)
                 Label((i + 1).ToString(), (float)(55 + 700 * (_boundaries[i] + _boundaries[i + 1]) / 2 / Math.Max(_total.Seconds, 0.001)), 315, 12, Gold, HplFontAlign.Center);
             Label(T("Сцена", "Scene"), 40, 337, 13, Gold);
-            Label(T("Ср. FPS", "Avg FPS"), 425, 337, 13, Gold, HplFontAlign.Right);
-            Label("1% low", 535, 337, 13, Gold, HplFontAlign.Right);
-            Label(T("P99 мс", "P99 ms"), 645, 337, 13, Gold, HplFontAlign.Right);
+            Label(T("Ср. FPS", "Avg FPS"), 380, 337, 13, Gold, HplFontAlign.Right);
+            Label("1% low", 470, 337, 13, Gold, HplFontAlign.Right);
+            Label(T("P99 мс", "P99 ms"), 560, 337, 13, Gold, HplFontAlign.Right);
+            Label(T("VRAM, ГБ", "VRAM, GB"), 660, 337, 13, Gold, HplFontAlign.Right);
             Label(T("Рывки", "Stutters"), 755, 337, 13, Gold, HplFontAlign.Right);
             for (int i = 0; i < _scenes.Length; i++)
             {
                 float y = 357 + i * 16; var m = _scenes[i];
                 Label((i + 1) + ": " + SceneTitle(i, _english), 40, y);
-                Label(Number(m.AverageFps), 425, y, 13, null, HplFontAlign.Right);
-                Label(Number(m.Low1Fps), 535, y, 13, null, HplFontAlign.Right);
-                Label(Number(m.P99Ms), 645, y, 13, null, HplFontAlign.Right);
+                Label(Number(m.AverageFps), 380, y, 13, null, HplFontAlign.Right);
+                Label(Number(m.Low1Fps), 470, y, 13, null, HplFontAlign.Right);
+                Label(Number(m.P99Ms), 560, y, 13, null, HplFontAlign.Right);
+                bool full = HplBenchmarkStats.Valid(_budgetMb) && m.PeakLocalMb >= 0.95 * _budgetMb;
+                Label(Gb(m.PeakLocalMb), 660, y, 13, full ? Gold : null, HplFontAlign.Right);
                 Label(m.Stutters.ToString(), 755, y, 13, null, HplFontAlign.Right);
             }
             for (int i = 0; i < _system.Length; i++) Label(_system[i], 40, 458 + i * 15, 11);
             string warning = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 ? T("DX11: трассировка недоступна. ", "DX11: ray tracing unavailable. ") : "";
             if (_settings.vSync) warning += T("Включена вертикальная синхронизация: возможен потолок FPS. ", "VSync enabled: FPS may be capped. ");
-            else if (_settings.fpsLimit > 0) warning += T("Ограничение FPS: ", "FPS limit: ") + _settings.fpsLimit + T(". Возможен потолок FPS. ", ". Results may be capped. ");
+            // Only when at least 2% of the frames ran at the cap: a limit far above the result changes nothing.
+            else if (_settings.fpsLimit > 0 && _capShare >= 0.02)
+                warning += T("Ограничение FPS ", "FPS limit ") + _settings.fpsLimit + T(" достигнуто: результат занижен. ", " reached: results are capped. ");
+            if (MemoryShort) warning += T("Не хватает видеопамяти: снизьте бюджет видеопамяти, текстуры или трассировку. ", "Out of video memory: lower the memory budget, textures or ray tracing. ");
             if (_dropped > 0) warning += T("Буфер заполнен, пропущено кадров: ", "Buffer full, frames omitted: ") + _dropped;
             Label(warning, 40, 522, 11, Gold);
             Label(T("Кадры генерации драйвера (Smooth Motion) не учитываются.", "Driver-generated frames (Smooth Motion) are not counted."), 40, 539, 12);

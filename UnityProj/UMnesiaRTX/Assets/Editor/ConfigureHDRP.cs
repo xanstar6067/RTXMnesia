@@ -86,6 +86,11 @@ public static class ConfigureHDRP
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.maxShadowRequests", ShadowRequests);
         // Cached shadow maps of the still lights (HplShadowCache): 8192² holds ~150 point lamps at 256 or 40 at 512.
         SetInt(serialized, "m_RenderPipelineSettings.hdShadowInitParams.cachedPunctualLightShadowAtlas", 8192);
+        // Video memory: the game has no reflection probes and no decal projectors (mesh decals use the DBuffer, not
+        // the atlas). HDRP allocates both atlases anyway; at 4096² they took ~85 MB each.
+        SetInt(serialized, "m_RenderPipelineSettings.lightLoopSettings.reflectionProbeTexCacheSize", 1024);
+        SetInt(serialized, "m_RenderPipelineSettings.decalSettings.atlasWidth", 1024);
+        SetInt(serialized, "m_RenderPipelineSettings.decalSettings.atlasHeight", 1024);
         serialized.ApplyModifiedPropertiesWithoutUndo();
 
         GraphicsSettings.defaultRenderPipeline = pipeline;

@@ -50,7 +50,7 @@ namespace RTXMnesia.World
         float _enemyWalkScale;
         double _sceneStartedAt;
         bool _skipFirstFrame, _counterVisible = true, _english;
-        double _lastSampleAt, _nextCounterAt;
+        double _lastSampleAt, _nextCounterAt, _nextMemoryAt;
         const float OverlayMargin = 20;
         static readonly Color Gold = new(232f / 255, 201f / 255, 28f / 255), Dim = new(0.82f, 0.79f, 0.72f);
         HplGuiText _counter;
@@ -145,6 +145,9 @@ namespace RTXMnesia.World
                     }
             _owner.Map.sound.SetMenuPaused(true);
             foreach (var root in _suspended) root.SetActive(false);
+            // Disabled cameras keep their HDRP buffers forever; the tour would hold both scenes' sets (video memory).
+            foreach (var root in _suspended)
+                foreach (var camera in root.GetComponentsInChildren<Camera>(true)) HplGraphics.ReleaseCameraData(camera);
             Time.timeScale = 1;
             Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
             bool repeat;
@@ -191,7 +194,7 @@ namespace RTXMnesia.World
                     float fade = 0;
                     while (fade < 0.5f && !CancelRequested) { fade += Time.unscaledDeltaTime; _black = 1 - fade / 0.5f; yield return null; }
                     _black = 0; _sceneStartedAt = Time.realtimeSinceStartupAsDouble; _playing = true;
-                    _skipFirstFrame = true;
+                    _skipFirstFrame = true; _nextMemoryAt = 0;
                     while (SceneTime < route.Duration && !CancelRequested) yield return null;
                     _playing = false;
                     fade = 0;
@@ -341,6 +344,12 @@ namespace RTXMnesia.World
             {
                 if (!_skipFirstFrame) sample = Stats.AddFrame(SceneIndex, now - _sceneStartedAt, now - _lastSampleAt);
                 _skipFirstFrame = false;
+                // A cheap OS query, still kept to 4 Hz: the peaks only need the plateaus.
+                if (sample >= 0 && now >= _nextMemoryAt && HplVideoMemory.TryQuery(out var memory))
+                {
+                    _nextMemoryAt = now + 0.25;
+                    Stats.SetMemory(sample, memory.localUsage / 1048576.0, memory.sharedUsage / 1048576.0, memory.localBudget / 1048576.0);
+                }
             }
             _lastSampleAt = now;
             // The elapsed interval belongs to the previous rendered frame. Unity returns CPU/GPU

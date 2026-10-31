@@ -5,6 +5,21 @@ namespace RTXMnesia.Importer
     /// <summary>Import settings for PNGs produced by <see cref="TextureConverter"/>, chosen by the role in the file name.</summary>
     public class TextureImportRules : AssetPostprocessor
     {
+        /// <summary>
+        /// Surfaces of the world (static objects, entities): drawn only through mesh renderers, so mipmap streaming
+        /// can size them and they count against the video memory budget (Graphics → memory budget). With the enhanced
+        /// set the scene still loads its classic textures; streamed, unused ones drop to the lowest allowed mip.
+        /// Interface, fonts, particles, billboards, light cookies and lookups stay whole: the streaming system does
+        /// not see them and would shrink them as unused.
+        /// </summary>
+        public static bool Streams(string assetPath, TextureRole role)
+        {
+            if (role is TextureRole.Gui or TextureRole.Lookup or TextureRole.Cookie or TextureRole.CubeMap) return false;
+            string relative = assetPath.Substring(AmnesiaPaths.TexturesRoot.Length + 1);
+            return relative.StartsWith("static_objects/", System.StringComparison.OrdinalIgnoreCase) ||
+                relative.StartsWith("entities/", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         // Leaves room for AI-upscaled textures later (originals are at most 2048).
         const int MaxSize = 4096;
 
@@ -23,6 +38,7 @@ namespace RTXMnesia.Importer
             importer.textureCompression = TextureImporterCompression.CompressedHQ;
             importer.alphaSource = TextureImporterAlphaSource.FromInput;
             importer.alphaIsTransparency = false;
+            importer.streamingMipmaps = Streams(assetPath, role);
 
             switch (role)
             {

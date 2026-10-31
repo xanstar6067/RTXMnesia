@@ -86,7 +86,7 @@
 | `Enemies.md` | враги (Grunt, WaterLurker), вода и плавучесть |
 | `Features.md` | верёвки/связи/липкие зоны/слизь, дополнения 6.5 в) (Sign, бочка, камни эмоций, мульти-слайдер, вода, процент прохождения, предменю, гамма, клавиши, комментарии), титры, NPC, анимации пропов, критеры |
 | `Simulation.md` | `PlayerSimulation`: флаги и команды прогона |
-| `DevTools.md` | тестовая карта dev_room, панель отладки, отчёт об ошибке (F1) |
+| `DevTools.md` | тестовая карта dev_room, панель отладки, отчёт об ошибке (F1), замеры видеопамяти (тестовый плеер) |
 | `GeometryAudit.md` | проверка импорта геометрии по `.msh` |
 
 Другие документы: `docs/ScriptPort/` (журнал портов, `api.md`), `docs/UiPort.md`, `docs/MainMenu.md`, `docs/EnhancedLighting/`, `docs/EnhancedTextures.md`, `docs/EnhancedRelief.md`, `docs/LampRendering.md`, `docs/DebugPanel.md`, `docs/DevRoom.md`, `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.
