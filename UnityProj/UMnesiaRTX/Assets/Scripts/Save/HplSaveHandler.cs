@@ -126,13 +126,8 @@ namespace RTXMnesia.Save
             Debug.Log($"[RTXMnesia] -------- BEGIN SAVE TO: {path} ---------");
             try
             {
-                var save = HplSaveGame.Create(map);
-                string json = JsonUtility.ToJson(save);
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                string temp = path + ".tmp";
-                File.WriteAllText(temp, json);
-                if (File.Exists(path)) File.Delete(path);
-                File.Move(temp, path);
+                string json = JsonUtility.ToJson(HplSaveGame.Create(map));
+                WriteFile(path, json);
                 Debug.Log($"[RTXMnesia] -------- END SAVE ({json.Length / 1024} KB) ---------");
                 return true;
             }
@@ -141,6 +136,31 @@ namespace RTXMnesia.Save
                 Debug.LogError($"[RTXMnesia] Could not save the game to '{path}': {e.Message}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// The save of this moment as text, written later (the bug report keeps the state of the frame of its key);
+        /// null where the game does not save (a debug session, the menu background, no player).
+        /// </summary>
+        public static string CreateJson(HplMap map)
+        {
+            if (Dev.HplDebugSession.Active || map == null || map.menuBackground || map.player == null) return null;
+            try { return JsonUtility.ToJson(HplSaveGame.Create(map)); }
+            catch (Exception e)
+            {
+                Debug.LogError($"[RTXMnesia] Could not create the save data: {e.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>Writes through a temporary file so a failed write never leaves a broken save.</summary>
+        public static void WriteFile(string path, string json)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            string temp = path + ".tmp";
+            File.WriteAllText(temp, json);
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(temp, path);
         }
 
         /// <summary>cLuxSaveHandler::LoadGameFromFile, the reading part: null (with an error) for an unreadable file.</summary>

@@ -250,7 +250,8 @@ namespace RTXMnesia.Ui
             var keyboard = Keyboard.current;
             if (keyboard != null)
                 foreach (var pair in KeyNames)
-                    if (keyboard[pair.Value].wasPressedThisFrame) return "Keyboard." + pair.Key;
+                    // F1 is reserved for the bug report (Dev.HplBugReport) and cannot be assigned.
+                    if (pair.Value != HplBugReportView.OpenKey && keyboard[pair.Value].wasPressedThisFrame) return "Keyboard." + pair.Key;
             var mouse = Mouse.current;
             if (mouse != null)
             {

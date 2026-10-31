@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 
 namespace RTXMnesia.Ui
 {
-    public enum UiScreen { Menu, Inventory, Journal, Debug }
+    public enum UiScreen { Menu, Inventory, Journal, Debug, BugReport }
 
     /// <summary>
     /// Runtime UI owner (cLuxInputHandler's container switching): the shared pause of the world, the screen fade and
@@ -35,6 +35,9 @@ namespace RTXMnesia.Ui
         public double RenderTime => (IsPaused ? _pauseStartedAt : Time.realtimeSinceStartupAsDouble) - _pausedDuration;
 
         public HplPauseMenu Menu { get; private set; }
+        /// <summary>The F1 bug report is being captured or its window is open (<see cref="Dev.HplBugReport"/>).</summary>
+        public bool BugReportOpen => _bugReport != null;
+        public HplBugReportView BugReportView => _bugView;
         public HplInventory Inventory => _reading?.Inventory;
         public HplJournal Journal => _reading?.Journal;
 
@@ -57,6 +60,10 @@ namespace RTXMnesia.Ui
         CursorLockMode _previousCursorLock;
         bool _previousCursorVisible, _hudWasEnabled;
         double _pauseStartedAt, _pausedDuration;
+        Dev.HplBugReport _bugReport;
+        HplBugReportView _bugView;
+        bool _bugPausedWorld, _bugCursorVisible;
+        CursorLockMode _bugCursorLock;
 
         public void Init(HplMap map, bool titleScreen = false)
         {
@@ -69,6 +76,7 @@ namespace RTXMnesia.Ui
             _menuScreen = new HplMenuScreen(this, Menu);
             _transition = new HplSceneTransition(this);
             DebugPanel = new Dev.HplDebugPanel(this, map);
+            _bugView = new HplBugReportView(map, transform);
             if (!titleScreen) _reading = new HplReadingScreens(this);
             else
             {
@@ -81,10 +89,20 @@ namespace RTXMnesia.Ui
         void Update()
         {
             Effects.HplRtxCompare.Update();
+            Dev.HplLogBuffer.TrackFrame(Time.unscaledDeltaTime);
+            if (_bugReport != null) { UpdateBugReport(); return; }
+            _bugView?.UpdateNotice();
             // The load screen between maps takes the input (cLuxInputHandler LoadScreen state).
             if (_map == null || Menu == null || IsTransitioning || HplLoadScreen.Active || HplCredits.Active) return;
             if (!IsTitleScreen && (_map.player == null || !_map.player.readDevices)) return;
             var keyboard = Keyboard.current;
+            // F1: the bug report over the game or any screen but the debug panel, a waiting key slot or name typing.
+            if (!DebugOpen && keyboard != null && keyboard[HplBugReportView.OpenKey].wasPressedThisFrame && !_menuScreen.CapturingInput &&
+                (IsPaused || _map.player == null || !_map.player.UiInputBlocked))
+            {
+                BeginBugReport();
+                return;
+            }
             if (DebugOpen)
             {
                 if (!Settings.debugPanel || (keyboard != null &&
@@ -272,7 +290,7 @@ namespace RTXMnesia.Ui
             MenuOpacity = 0.01f;
             IsClosing = false;
             _map.player?.SetUiInputBlocked(true);
-            if (screen == UiScreen.Menu || DebugOpen) _map.sound?.SetMenuPaused(true);
+            if (screen == UiScreen.Menu || DebugOpen || screen == UiScreen.BugReport) _map.sound?.SetMenuPaused(true);
             else
             {
                 _map.PhysicsWorld?.FadeOutLoopSounds(1f);
@@ -285,7 +303,7 @@ namespace RTXMnesia.Ui
             Time.timeScale = 0f;
             if (_map.hud != null && _map.hud.Canvas != null) _map.hud.Canvas.enabled = false;
             Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = DebugOpen || (screen == UiScreen.Menu ? !Menu.HasCursor : !_reading.HasCursor(screen));
+            Cursor.visible = DebugOpen || (screen == UiScreen.Menu ? !Menu.HasCursor : screen == UiScreen.BugReport ? !_bugView.HasCursor : !_reading.HasCursor(screen));
             if (screen == UiScreen.Menu) _menuScreen.Show();
         }
 
@@ -354,9 +372,67 @@ namespace RTXMnesia.Ui
             if (!focused && _map != null && _map.player != null && _map.player.readDevices) Pause();
         }
 
+        // ------------------------------------------------------------------ bug report
+
+        /// <summary>
+        /// F1: the state and the screenshot of this frame first (no report window in it yet), then the window. From
+        /// the game it pauses the world like the menu; over a menu / inventory / journal it keeps their pause.
+        /// </summary>
+        public void BeginBugReport()
+        {
+            if (_bugReport != null || _map == null) return;
+            _bugView.HideNotice();
+            _bugReport = Dev.HplBugReport.Begin(this, _map);
+        }
+
+        void UpdateBugReport()
+        {
+            if (!_bugView.IsOpen)
+            {
+                if (!_bugReport.Ready) return;
+                _bugPausedWorld = !IsPaused;
+                _bugCursorLock = Cursor.lockState;
+                _bugCursorVisible = Cursor.visible;
+                if (_bugPausedWorld) EnterScreen(UiScreen.BugReport);
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = !_bugView.HasCursor;
+                _bugView.Open();
+                return;
+            }
+            var choice = _bugView.Update();
+            if (choice == HplBugReportView.Choice.None) return;
+            string folder = null;
+            if (choice == HplBugReportView.Choice.Ok)
+            {
+                try { folder = _bugReport.Write(_bugView.Comment); }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[RTXMnesia] Could not write the bug report: " + e);
+                    _bugView.ShowError(e.Message);
+                    return;
+                }
+            }
+            CloseBugReport(folder);
+        }
+
+        void CloseBugReport(string folder)
+        {
+            _bugReport.Dispose();
+            _bugReport = null;
+            _bugView.Close(folder);
+            if (_bugPausedWorld) Resume();
+            else
+            {
+                Cursor.lockState = _bugCursorLock;
+                Cursor.visible = _bugCursorVisible;
+            }
+            _bugPausedWorld = false;
+        }
+
         // Includes stopping Play, disabling the level and unloading the scene.
         void OnDisable()
         {
+            if (_bugReport != null) CloseBugReport(null);
             // The benchmark temporarily suspends this entire world, including the open options draft.
             if (!World.HplBenchmark.Active) Resume();
         }
@@ -364,6 +440,7 @@ namespace RTXMnesia.Ui
         void OnDestroy()
         {
             Menu?.Destroy();
+            _bugView?.Destroy();
             _reading?.DestroyViews();
         }
     }

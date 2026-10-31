@@ -9,6 +9,8 @@
 **/Assets/AmnesiaImported.meta
 **/Assets/_Recovery/
 **/Assets/_Recovery.meta
+# F1 bug reports (screenshots and saves of Amnesia content), next to the game or the project
+**/BugReports/
 
 # Unity-generated folders (projects can be nested)
 **/[Ll]ibrary/
