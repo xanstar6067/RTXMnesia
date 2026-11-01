@@ -80,4 +80,43 @@
 
 ## Итоги эксперимента
 
-(заполнить после проверки)
+### 2026-11-01: обновление основного проекта пользователем, проверки агента
+
+Unity 6000.6.7f1, HDRP остался 17.6.0. Navigation 2.0.16, Input System 1.20.1,
+Rider 3.1.0. Перед batch-прогонами сохранена копия ProjectSettings:
+`UnityProj/UMnesiaRTX/Logs/Upgrade67/ProjectSettingsBefore`.
+Все запуски в batchmode, вывод звука заглушён штатным HplBatchAudio; плеер не собирался.
+
+| Проверка | Результат |
+|---|---|
+| BuildCheck (повторно после исправлений) | PASS: 33 сборки, 0 ошибок, 0 obsolete API |
+| HdrTests.RunRenderBatch | PASS: 37 проверок с GPU |
+| SaveTests | PASS: 41 проверка |
+| LampTests | PASS |
+| DlssPreview, 01_old_archives | PASS: 21 проверка, DLAA / масштабы DLSS / пресет K |
+| RtPreview, 01_old_archives | PASS: 64 проверки, RT-тени / AO / отражения / GI / path tracing / C |
+| MenuPreview | PASS: настройки, инвентарь, журнал |
+| MapChangePreview | PASS: 69 проверок переходов, переноса состояния, возврата, урона и смерти |
+| BenchmarkPreview -benchmarkQuick, повторно | PASS: шесть сцен, результаты, отмена, возврат, сохранность настроек |
+
+Найдены и исправлены:
+- `HdrTests`: после прямого изменения hdrMode надо обновить кнопки меню; иначе сохранённый
+  выключенный HDR оставляет кнопку калибровки заблокированной. Перед отменой настроек нужно
+  закрыть отдельное окно калибровки. Исправлена подготовка/последовательность теста, не игра.
+- В первом бенчмарке, несмотря на PASS самого теста, лог содержал MissingReferenceException
+  в HplRenderCamera.OnBeforeRender при обращении к уничтоженной камере. Добавлены защита
+  от вызова вне Play и повторное создание утраченной render camera с прежним источником.
+  Повторный полный прогон BenchmarkPreview: exit 0, исключений и FAIL в логе нет.
+
+Unity мигрировала сериализацию TimeManager.asset: 2352000 / 141120000 = 1/60 секунды,
+частота логики сохранена. Добавление dev_room в Windows build profile тестом отменено.
+AGENTS.md и CLAUDE.md синхронно обновлены на 6000.6.7f1.
+
+Логи: `UnityProj/UMnesiaRTX/Logs/Upgrade67/` (финальные: BuildCheckFinal.log,
+HdrTestsFinal.log, BenchmarkFinal.log); отчёты DLSS, RT, переходов и бенчмарка в штатных
+папках Logs. Итоговый визуально просмотренный кадр RTGI:
+`UnityProj/UMnesiaRTX/Logs/RtCheck/01_old_archives_gi2.png`. Промежуточные PNG прогона удалены.
+
+Проверки редактора прошли. Это не полный сквозной проход игры и не доказательство равенства
+FPS/видеопамяти версии 6.2: парное измерение плееров, 30–50 переходов LoadSceneAsync,
+физический HDR-вывод дисплея и отдельная проверка на RTX 3050 не выполнялись.

@@ -41,6 +41,8 @@ namespace RTXMnesia.Hpl
 
         static void OnBeforeRender()
         {
+            // Editor GameView can render once more after Play mode has destroyed our camera.
+            if (!Application.isPlaying) return;
             if (Camera.allCamerasCount > s_all.Length) s_all = new Camera[Camera.allCamerasCount * 2];
             int count = Camera.GetAllCameras(s_all);
             for (int i = 0; i < count; i++)
@@ -59,7 +61,7 @@ namespace RTXMnesia.Hpl
                 if (s_sources[i] == null) s_sources.RemoveAt(i);
                 else if (s_sources[i].gameObject.activeInHierarchy) source = s_sources[i];
             }
-            if (source != null && source != s_source) Adopt(source);
+            if (source != null && (source != s_source || s_camera == null)) Adopt(source);
             s_source = source;
             bool on = source != null;
             if (s_camera != null && s_camera.enabled != on) s_camera.enabled = on;

@@ -76,6 +76,8 @@ namespace RTXMnesia.EditorDev
                 typeof(HplMap).GetProperty(nameof(HplMap.GameUi)).SetValue(map, ui);
                 ui.OpenOptions(HplPauseMenu.DisplayTabIndex);
                 ui.DraftSettings.hdrMode = 1;
+                // Direct draft edits do not refresh disabled buttons (saved HDR may be off).
+                ui.Menu.Refresh(false, true, HplPauseMenu.DisplayTabIndex, ui.DraftSettings, 0, 1, Vector2.zero);
                 Check(ui.Choose(MenuControl.HdrCalibrate), "HDR calibration window reachable");
                 ui.DraftSettings.hdrPeak = 1000;
                 Check(ui.Choose(MenuControl.HdrPeakMore) && ui.DraftSettings.hdrPeak == 1010 && HplHdr.Peak == 1010, "peak live preview");
@@ -112,6 +114,7 @@ namespace RTXMnesia.EditorDev
                     camera.targetTexture = null;
                     UnityEngine.Object.DestroyImmediate(target);
                 }
+                Check(ui.Choose(MenuControl.HdrCalibrationClose), "calibration closes back to options");
                 ui.Choose(MenuControl.Cancel);
                 Check(!ui.ShowingOptions && HplHdr.Peak == saved.hdrPeak && HplHdr.PaperWhite == saved.hdrPaperWhite &&
                     !HplHdr.CalibrationVisible, "cancel restores output and hides calibration");
