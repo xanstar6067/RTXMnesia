@@ -26,6 +26,8 @@ namespace RTXMnesia.Dev
             var args = Environment.GetCommandLineArgs();
             int i = Array.IndexOf(args, "-benchmarkAuto");
             if (i < 0 || i + 1 >= args.Length) return;
+            // Chain tests enter ordinary maps whose OnEnter calls AutoSave: isolate all test saves.
+            Save.HplSaveHandler.FolderOverride = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[i + 1])), "Saves");
             typeof(HplPreMenu).GetProperty(nameof(HplPreMenu.ShownThisRun)).GetSetMethod(true).Invoke(null, new object[] { true });
             // As HplBatchAudio: sound logic and timings run, only the output is silent; the volume stays as saved.
             AudioListener.pause = true;
@@ -56,6 +58,8 @@ namespace RTXMnesia.Dev
                     field.SetValue(settings, Convert.ChangeType(kv[1].Trim(), field.FieldType, CultureInfo.InvariantCulture));
                 }
             settings.Validate();
+            // Apply the initial test preset without changing the title owner's saved preset for the return.
+            ApplySettings(owner.Map, settings);
             log.AppendLine("settings " + JsonUtility.ToJson(settings));
             log.AppendLine($"adapter {SystemInfo.graphicsDeviceName}, dedicated {HplVideoMemory.Dedicated / 1048576} MB");
             var census = new System.Collections.Generic.Dictionary<string, int>();
@@ -77,9 +81,12 @@ namespace RTXMnesia.Dev
                 while (!first.isDone) yield return null;
                 for (int k = 0; k <= 8; k++)
                 {
+                    while (ScriptApi.HplMap.Current == null) yield return null;
+                    ApplySettings(ScriptApi.HplMap.Current, settings);
                     float t = 0;
                     while (t < 10 || ScriptApi.HplMap.Current == null) { t += Time.unscaledDeltaTime; AudioListener.pause = true; yield return null; }
                     log.AppendLine($"  chain {k} {ScriptApi.HplMap.Current.MapName}: {Memory()}");
+                    Write(log.ToString());
                     Shot($"chain {k}");
                     if (k == 8) break;
                     var next = HplBenchmarkRoute.All[(k + 1) % 4];
@@ -131,9 +138,18 @@ namespace RTXMnesia.Dev
                 yield return Title(log, $"title after tour {tour + 1}", census);
                 yield return new WaitForSecondsRealtime(20);
                 log.AppendLine("  30 s later: " + Memory());
+                Write(log.ToString());
             }
             Write(log.ToString());
             Application.Quit(0);
+        }
+
+        /// <summary>Test settings stay in memory; loading a map must not restore the saved graphics preset.</summary>
+        static void ApplySettings(ScriptApi.HplMap map, HplUserSettings settings)
+        {
+            if (map.GameUi != null)
+                JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(settings), map.GameUi.Settings);
+            settings.Apply(map);
         }
 
         /// <summary>Title frame rate, video memory and live objects; the second call lists what grew since the first.</summary>
