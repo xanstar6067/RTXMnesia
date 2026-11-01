@@ -37,8 +37,8 @@
 1. Закоммитить всё нужное в `main`, рабочее дерево чистое. Записать хэш коммита.
 2. Установить 6000.6.7f1 через Hub с модулем Windows Build Support (IL2CPP, если нужен).
 3. Сделать **копию проекта** вне основного: `UnityProj/UMnesiaRTX` без `Library`, `Temp`, `Logs`
-   (Assets с `AmnesiaImported` ~23,5 ГБ + Packages + ProjectSettings), например `Z:\Unity\RTXMnesia-67\`.
-   Место есть (на Z: свободно ~2,6 ТБ); с `Library` копия займёт ~50 ГБ. Скрипты из `tools/` и `source/`
+   (Assets с `AmnesiaImported` ~23,5 ГБ + Packages + ProjectSettings), например `E:\UnityDev\RTXMnesia-67\`.
+   Место есть (на E: свободно ~3,6 ТБ); с `Library` копия займёт ~50 ГБ. Скрипты из `tools/` и `source/`
    не нужны: импортированный контент уже в `Assets/AmnesiaImported`.
 4. Основной проект на 6.2 остаётся рабочим: если эксперимент не удастся, копия просто удаляется.
 

@@ -92,7 +92,7 @@ Unity 6000.6.2f1 запускался последовательно, с про�
 
 ```powershell
 $unityExe = 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe'
-$unityProject = 'Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX'
+$unityProject = 'E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX'
 & $unityExe -batchmode -nographics -quit -projectPath $unityProject -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/05_wine_cellar.map -logFile "$unityProject/Logs/Import_05_wine_cellar.log"
 ```
 
@@ -222,12 +222,12 @@ call GetLocalVarInt EnemyEventDone
 ```
 
 ```text
-PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 В завершение первой партии повторена сверка всех трёх портов, без изменения предыдущих карт:

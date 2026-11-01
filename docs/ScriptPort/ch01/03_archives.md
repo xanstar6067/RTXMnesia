@@ -225,7 +225,7 @@ body shelf_secret_door_1; shot shelf
 `MapChangePreview` завершился с кодом 0:
 
 ```text
-PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 ```
 
 `MainMenuPreview` завершился с кодом 0:
@@ -235,7 +235,7 @@ PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, 
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Все обязательные проверки прошли. `MainMenuPreview` автоматически пересохранил `ProjectSettings/TimeManager.asset`; файл возвращён командой из задания. Другие посторонние настройки проекта не менялись.

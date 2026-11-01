@@ -80,7 +80,7 @@ Unity 6000.6.2f1 запускался последовательно, с про�
 ### Импорт
 
 ```text
-Unity.exe -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/07_archives_cellar.map -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Import_07_archives_cellar.log
+Unity.exe -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/07_archives_cellar.map -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Import_07_archives_cellar.log
 ```
 
 ```text
@@ -108,7 +108,7 @@ powershell -ExecutionPolicy Bypass -File tools/Check-ScriptPort.ps1 -Map 07_arch
 
 ```powershell
 # Unity.exe: C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe
-Unity.exe -batchmode -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch01/07_archives_cellar.map -seed 1 -script "$script" -logFile <полный путь к логу>
+Unity.exe -batchmode -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch01/07_archives_cellar.map -seed 1 -script "$script" -logFile <полный путь к логу>
 ```
 
 Все четыре запуска — без `-scriptDebug`, с обычным входом и исходными чекпоинтами:
@@ -158,17 +158,17 @@ call UseHollowNeedleOnDoor hollow_needle_1 level_wood_1
 Выполнена с GPU, без `-quit` и `-nographics`. Ожидаемое число проверок переходов обновлено пользователем до 66; проверки не менялись.
 
 ```text
-Unity.exe -batchmode -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MapChangePreview.RunBatch -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_07_archives_cellar_MapChange.log
-Unity.exe -batchmode -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MainMenuPreview.RunBatch -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_07_archives_cellar_MainMenu.log
+Unity.exe -batchmode -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MapChangePreview.RunBatch -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_07_archives_cellar_MapChange.log
+Unity.exe -batchmode -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MainMenuPreview.RunBatch -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_07_archives_cellar_MainMenu.log
 ```
 
 ```text
-PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Оба запуска завершены кодом 0. Финальная сверка текущей карты повторена: 30 функций, 132 строковые константы, 0 ошибок, 0 предупреждений.

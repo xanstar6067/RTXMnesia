@@ -107,7 +107,7 @@ batch-метод `RTXMnesia.EditorDev.DevRoomReliefBuilder.InstallBatch`.
 Пакетная генерация при закрытом Unity-проекте:
 
 ```powershell
-& 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe' -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.DevRoomBuilder.RunBatch
+& 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe' -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.DevRoomBuilder.RunBatch
 ```
 
 Проверка: `RTXMnesia.EditorDev.DevRoomTests.RunBatch` с теми же флагами. Дополнительный `-rebuildDevRoom` сначала пересоздаёт сцену. Проверяются полнота каталога, клипы и конечность поз, фактическое движение костей, отключение обнаружения и урона, рассудок, пауза, блокировка автосохранений и обычные настройки игровой карты. Отчёт добавляется в `UnityProj/UMnesiaRTX/Logs/AmnesiaImport.log`.

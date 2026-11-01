@@ -90,7 +90,7 @@
 
 ```powershell
 $unityExe = 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe'
-$unityProject = 'Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX'
+$unityProject = 'E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX'
 & $unityExe -batchmode -nographics -quit -projectPath $unityProject -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/04_wine_cellar_lab.map -logFile "$unityProject/Logs/Import_04_wine_cellar_lab.log"
 ```
 
@@ -240,12 +240,12 @@ body PlatformStickLift_2; call GetLocalVarString StickOneTime; shot no_jar_platf
 ```
 
 ```text
-PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Unity автоматически пересохранил `ProjectSettings/TimeManager.asset`. Во время работы внешний коммит `745febd` включил это пересохранение вместе с новым портом и первой частью журнала. После выполнения команды возврата из задания файл дополнительно возвращён к содержимому на момент начала задачи (`e105a8c`); обратное изменение формата сериализации осталось в рабочей копии. Фиксированный шаг — по-прежнему 1/60. История коммита не менялась, другие настройки проекта не изменились.

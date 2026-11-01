@@ -67,12 +67,12 @@ Sticky-области трёх колёс работают с 2026-10-17 (CLAUDE
 
 Unity 6000.6.2f1 запускался последовательно, при отсутствии Temp/UnityLockfile, с доступом к лицензии Windows. Симуляции и обе регрессии — с GPU. Все итоговые симуляции завершились кодом 0, без исключений, PortError и несовпадения числа аргументов. Предупреждения и исходные ошибки перечислены ниже. Новых предупреждений компилятора из семи портов нет; прежние предупреждения других файлов не исправлялись.
 
-Все пути `Logs/...` ниже относятся к `Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/` и не входят в git.
+Все пути `Logs/...` ниже относятся к `E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/` и не входят в git.
 
 ### Импорт
 
 ```text
-Unity.exe -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/13_machine_room.map -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Import_13_machine_room.log
+Unity.exe -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/13_machine_room.map -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Import_13_machine_room.log
 ```
 
 ```text
@@ -99,7 +99,7 @@ powershell -ExecutionPolicy Bypass -File tools/Check-ScriptPort.ps1 -Map 13_mach
 Общий запуск (полный путь Unity.exe: `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe`):
 
 ```text
-Unity.exe -batchmode -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch01/13_machine_room.map -seed 1 -script "$script" -logFile <полный путь отдельного лога>
+Unity.exe -batchmode -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch01/13_machine_room.map -seed 1 -script "$script" -logFile <полный путь отдельного лога>
 ```
 
 | Итоговый лог | Предупреждения | Ошибки отчёта | Код выхода |
@@ -190,7 +190,7 @@ WARNING: [Script] Entity 'slime_pile_large_4' does not exist!
 Дополнительная независимая проверка существующим инструментом, без изменений импортёра:
 
 ```text
-Unity.exe -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.HplMeshAudit.Run -amnesiaMap maps/main/ch01/13_machine_room.map -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Audit_13_machine_room.log
+Unity.exe -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.HplMeshAudit.Run -amnesiaMap maps/main/ch01/13_machine_room.map -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Audit_13_machine_room.log
 ```
 
 ```text
@@ -218,17 +218,17 @@ t=  3,00   health 100,00 sanity 99,91 dead False pos (2.22, 0.90, 20.25) roll 0,
 Оба запуска — без -quit и -nographics, после добавления всех семи портов; последующие контрольные повторы не меняли код:
 
 ```text
-Unity.exe -batchmode -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MapChangePreview.RunBatch -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_08_14_MapChange.log
-Unity.exe -batchmode -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MainMenuPreview.RunBatch -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_08_14_MainMenu.log
+Unity.exe -batchmode -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MapChangePreview.RunBatch -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_08_14_MapChange.log
+Unity.exe -batchmode -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MainMenuPreview.RunBatch -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_08_14_MainMenu.log
 ```
 
 ```text
-PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Оба процесса завершены кодом 0. Проверки не менялись; ожидаемые 66 учтены.

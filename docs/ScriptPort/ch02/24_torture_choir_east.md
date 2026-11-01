@@ -97,7 +97,7 @@ Grunt/brute и WaterLurker уже имеют ИИ в актуальном дви
 Unity 6000.6.2f1; запуск последовательно, только без Temp/UnityLockfile. Импортированные папки и Logs проверены через git check-ignore. Исходники и установленная игра не изменялись.
 
 ```text
-"C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe" -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch02/24_torture_choir_east.map -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_Import_24_torture_choir_east.log
+"C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe" -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch02/24_torture_choir_east.map -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_Import_24_torture_choir_east.log
 ```
 
 ExitCode=0; ошибок 0. Всего предупреждений по сохранённым секциям: 9. Полный отчёт: `Logs/Ch02_Import_24_torture_choir_east.txt`. Предупреждение No level script port yet относится к импорту до добавления C#-класса; последующие прогоны используют TortureChoirEast.
@@ -123,7 +123,7 @@ ExitCode=0; ошибок 0. Всего предупреждений по сох�
 Общая команда для каждого сценария (без -nographics):
 
 ```text
-Unity.exe -batchmode -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch02/24_torture_choir_east.map -seed 1 -script "<точная строка ниже>" -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_<имя сценария>.log
+Unity.exe -batchmode -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch02/24_torture_choir_east.map -seed 1 -script "<точная строка ниже>" -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_<имя сценария>.log
 ```
 
 Фактический результат и предел проверки: Проверены iron maiden / bull / wheel, шесть событий brute и настоящий CP/падение. Шесть быстрых InteractPoisionFungi реально разрушили гриб: poison_gland Item/Puzzle active=True. Пустой PoisonInteract callback дал исходное предупреждение. Подбор железы сохранил расхождение local IngredientCount=1 / global=0; ChoirOrbCount=3. В первом emotion-fixture передано несуществующее AreaEmotionEffectBrazenBull, отдельный fixture использует исходное AreaEmotionEffectBull. Белый снимок maiden занят исходным emotion-text overlay, для геометрии дополнительно просмотрен checkpoints.
@@ -235,7 +235,7 @@ Resource regression: checks=471, failures=0
 `Logs/Ch02_Regression_MapChange.log` — ExitCode=0:
 
 ```text
-PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 ```
 
 `Logs/Ch02_Regression_MainMenu.log` — ExitCode=0:
@@ -245,7 +245,7 @@ PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, 
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Интеграционный Play-маршрут: `Logs/Ch02_PlayRoute/Report.txt`. PASS: 82 Play route checks: both prisons, hub 16 branches, sewer, hub 21 branches, capture into chapter 3.

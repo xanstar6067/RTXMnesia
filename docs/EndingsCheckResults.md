@@ -19,13 +19,13 @@
 Базовая команда симуляции (добавить `-script "<команды ниже>"` и отдельный `-logFile`):
 
 ```powershell
-& 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe' -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch03/29_orb_chamber.map -seed 1
+& 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe' -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch03/29_orb_chamber.map -seed 1
 ```
 
 Титры: без `-quit` и `-nographics`, каждый запуск отдельно при закрытом Unity:
 
 ```powershell
-& 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe' -batchmode -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.CreditsPreview.RunBatch -endNum 0 -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/EndingsCheck/Credits0.log
+& 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe' -batchmode -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.CreditsPreview.RunBatch -endNum 0 -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/EndingsCheck/Credits0.log
 ```
 
 Повторить с `-endNum 1` и `-endNum 2`, меняя имя лога. В `Logs/EndingsCheck/RunCredits.ps1` сохранён последовательный запуск всех трёх.
@@ -86,7 +86,7 @@ Play: `Credits1.log` — 17 автоматических проверок PASS; 
 
 ## Автосохранение и повреждения
 
-Автосохранение `OnEnter` первого прогона скопировано в игнорируемый `Logs/EndingsCheck/orb-autosave.sav`. Дополнительный параметр к базовой команде: `-loadSave Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/EndingsCheck/orb-autosave.sav`.
+Автосохранение `OnEnter` первого прогона скопировано в игнорируемый `Logs/EndingsCheck/orb-autosave.sav`. Дополнительный параметр к базовой команде: `-loadSave E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/EndingsCheck/orb-autosave.sav`.
 
 ```text
 health; call SetPlayerHealth 5; call CollideFireDamage Player AreaFireDamage_1 1; health; watch 30 5; health; call SetPlayerHealth 5; call InteractActivePort AreaPortalInteractArea; health; watch 30 5; health; until AlexEndState 13 300; watch 2 1; expectvar AlexanderEnding 1

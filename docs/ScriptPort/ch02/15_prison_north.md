@@ -137,7 +137,7 @@ Grunt/brute и WaterLurker уже имеют ИИ в актуальном дви
 Unity 6000.6.2f1; запуск последовательно, только без Temp/UnityLockfile. Импортированные папки и Logs проверены через git check-ignore. Исходники и установленная игра не изменялись.
 
 ```text
-"C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe" -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch02/15_prison_north.map -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_Import_15_prison_north.log
+"C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe" -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch02/15_prison_north.map -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_Import_15_prison_north.log
 ```
 
 ExitCode=0; ошибок 0. Всего предупреждений по сохранённым секциям: 44. Полный отчёт: `Logs/Ch02_Import_15_prison_north.txt`. Предупреждение No level script port yet относится к импорту до добавления C#-класса; последующие прогоны используют PrisonNorth.
@@ -194,7 +194,7 @@ ExitCode=0; ошибок 0. Всего предупреждений по сох�
 Общая команда для каждого сценария (без -nographics):
 
 ```text
-Unity.exe -batchmode -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch02/15_prison_north.map -seed 1 -script "<точная строка ниже>" -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_<имя сценария>.log
+Unity.exe -batchmode -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch02/15_prison_north.map -seed 1 -script "<точная строка ниже>" -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_<имя сценария>.log
 ```
 
 Фактический результат и предел проверки: Кислота из пустой бутылки, замена замка и его разрушение проверены: AcidOnGate=1, prison_section_2 locked=False. Проверены кухонный, коридорный и другие CP, обе ветви глобального 15CPEvent; health после возрождения положительное, dead=False. No prop padlock_acid_1 относится к диагностике уже разрушенного замка. Остановки loops/loops2 после завершения записи — не отсутствие звукового ресурса.
@@ -324,7 +324,7 @@ Resource regression: checks=471, failures=0
 `Logs/Ch02_Regression_MapChange.log` — ExitCode=0:
 
 ```text
-PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 ```
 
 `Logs/Ch02_Regression_MainMenu.log` — ExitCode=0:
@@ -334,7 +334,7 @@ PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, 
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Интеграционный Play-маршрут: `Logs/Ch02_PlayRoute/Report.txt`. PASS: 82 Play route checks: both prisons, hub 16 branches, sewer, hub 21 branches, capture into chapter 3.

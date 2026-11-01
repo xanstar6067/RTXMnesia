@@ -85,7 +85,7 @@ Grunt/brute и WaterLurker уже имеют ИИ в актуальном дви
 Unity 6000.6.2f1; запуск последовательно, только без Temp/UnityLockfile. Импортированные папки и Logs проверены через git check-ignore. Исходники и установленная игра не изменялись.
 
 ```text
-"C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe" -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch02/18_cistern.map -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_Import_18_cistern.log
+"C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe" -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch02/18_cistern.map -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_Import_18_cistern.log
 ```
 
 ExitCode=0; ошибок 0. Всего предупреждений по сохранённым секциям: 2. Полный отчёт: `Logs/Ch02_Import_18_cistern.txt`. Предупреждение No level script port yet относится к импорту до добавления C#-класса; последующие прогоны используют Cistern.
@@ -104,7 +104,7 @@ ExitCode=0; ошибок 0. Всего предупреждений по сох�
 Общая команда для каждого сценария (без -nographics):
 
 ```text
-Unity.exe -batchmode -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch02/18_cistern.map -seed 1 -script "<точная строка ниже>" -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_<имя сценария>.log
+Unity.exe -batchmode -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch02/18_cistern.map -seed 1 -script "<точная строка ниже>" -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Ch02_<имя сценария>.log
 ```
 
 Фактический результат и предел проверки: Три исходных клапана дали PumpWaterCount=3 и WaterHasBeenDrained=1. Четвёртый PumpWater прерван на исходной ошибке массива; счётчик остался 3. Проверены пар/урон, сломанный мост, постановочные всплески и настоящий CP после смерти. Активация WaterLurker в этом сценарии не заменяет полный тест его ИИ.
@@ -183,7 +183,7 @@ Resource regression: checks=471, failures=0
 `Logs/Ch02_Regression_MapChange.log` — ExitCode=0:
 
 ```text
-PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 ```
 
 `Logs/Ch02_Regression_MainMenu.log` — ExitCode=0:
@@ -193,7 +193,7 @@ PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, 
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Интеграционный Play-маршрут: `Logs/Ch02_PlayRoute/Report.txt`. PASS: 82 Play route checks: both prisons, hub 16 branches, sewer, hub 21 branches, capture into chapter 3.

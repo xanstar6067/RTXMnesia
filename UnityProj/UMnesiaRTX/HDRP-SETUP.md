@@ -28,8 +28,8 @@ Batch setup:
 
 ```powershell
 & 'C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe' `
-  -batchmode -nographics -quit -projectPath 'Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX' `
-  -executeMethod ConfigureHDRP.Apply -logFile 'Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/HDRP-Setup.log'
+  -batchmode -nographics -quit -projectPath 'E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX' `
+  -executeMethod ConfigureHDRP.Apply -logFile 'E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/HDRP-Setup.log'
 ```
 
 Setup completion is recorded in `Logs/HDRP-Setup-Result.txt`.

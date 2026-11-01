@@ -524,12 +524,12 @@ watch 1 1; call SetWheelStuckState phonograph_1 1 true; watch 130 2; sounds; cal
 Финальные регрессии: оба ExitCode=0, GPU/DX11, без -quit/-nographics; фактические строки:
 
 ```text
-PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 19 main menu model checks (localization, controls, confirmation, preferences, live world, continue / load game, build scene order).
-PASS: 23 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game, exit and save, continue, load game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 23 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game, exit and save, continue, load game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Отдельный реальный Play-маршрут Justine: `Logs/Justine_PlayRoute/Report.txt`, PASS: 57 / ExitCode=0; меню → 01 → исходные level doors → 02/03/04 → своё меню → новая попытка → летальный урон → выход из Play после английской записи. Проверены перенос предмета и результатов предыдущих испытаний, свои ресурсы/отсутствие основных рецептов, сброс таймеров/голоса/прогресса. Это маршрут загрузок с диагностическими флагами/предметом, а не полное пешее решение загадок. Ошибки подготовки первых Play fixtures, ограничение сохранений в DLC и пределы Application.Quit описаны в README.

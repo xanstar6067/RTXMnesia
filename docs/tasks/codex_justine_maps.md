@@ -113,7 +113,7 @@ Check-ScriptPort на дату плана строит `source/maps/main/$Chapte
 
 Перед выполнением прочитать актуальные CLAUDE.md, AGENTS.md, docs/ScriptPort/README.md, исходный .hps целиком и соответствующую .map. Движок мог измениться после составления плана; приоритет имеют актуальные инструкции пользователя и проекта.
 
-- Рабочая папка: `Z:/Unity/RTXMnesia`. Unity-проект: `UnityProj/UMnesiaRTX`, версия на дату плана — Unity 6000.6.2f1.
+- Рабочая папка: `E:/UnityDev/RTXMnesia`. Unity-проект: `UnityProj/UMnesiaRTX`, версия на дату плана — Unity 6000.6.2f1.
 - Источники, установленная игра и src/AmnesiaTheDarkDescent — только для чтения. Ресурсы и импортированные сцены всегда вне git, в игнорируемых папках.
 - Не коммитить, не пушить, не удалять и не переименовывать чужие файлы. Не менять готовые порты других частей, InventoryScript.cs, их журналы и старые планы.
 - До работы зафиксировать исходный git status --short; различать свои и чужие изменения. Не делать checkout/reset/clean/stash чужой работы. Если карта уже перенесена другим агентом, прочитать её код и журнал; не создавать второй класс с тем же HplMapScript.
@@ -157,7 +157,7 @@ Check-ScriptPort на дату плана строит `source/maps/main/$Chapte
 
 Сначала целиком прочитать скрипт, затем импортировать карту существующим методом. При уже существующей сцене переимпорт допустим только при согласованном доступе к Unity-проекту. До запуска проверить игнорирование импортируемой папки.
 
-Обозначения команд: Unity.exe — `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe`; Project — `Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX`; MapRel — `maps/ptest/<карта>.map`. Placeholders заменить реальными значениями. Все логи — по абсолютным путям внутри Project/Logs.
+Обозначения команд: Unity.exe — `C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe`; Project — `E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX`; MapRel — `maps/ptest/<карта>.map`. Placeholders заменить реальными значениями. Все логи — по абсолютным путям внутри Project/Logs.
 
 ```text
 Unity.exe -batchmode -nographics -quit -projectPath <Project> -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap <MapRel> -logFile <Project>/Logs/Import_<карта>.log

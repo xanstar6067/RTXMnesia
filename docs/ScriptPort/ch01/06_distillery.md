@@ -85,7 +85,7 @@ Unity 6000.6.2f1 запускался последовательно, с про�
 Команда (пути от корня репозитория; лог фактически задан абсолютным путём внутри Unity-проекта):
 
 ```text
-Unity.exe -batchmode -nographics -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/06_distillery.map -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Import_06_distillery.log
+Unity.exe -batchmode -nographics -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.Importer.ImportMenu.ConvertLevelBatch -amnesiaMap maps/main/ch01/06_distillery.map -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Import_06_distillery.log
 ```
 
 ```text
@@ -115,7 +115,7 @@ powershell -ExecutionPolicy Bypass -File tools/Check-ScriptPort.ps1 -Map 06_dist
 
 ```powershell
 # Unity.exe: C:/Program Files/Unity/Hub/Editor/6000.6.2f1/Editor/Unity.exe
-Unity.exe -batchmode -quit -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch01/06_distillery.map -seed 1 -script "$script" -logFile <полный путь к логу>
+Unity.exe -batchmode -quit -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.PlayerSimulation.RunBatch -amnesiaMap maps/main/ch01/06_distillery.map -seed 1 -script "$script" -logFile <полный путь к логу>
 ```
 
 | Лог в `UnityProj/UMnesiaRTX/Logs/` | Доп. флаг | Предупреждения | Ошибки | Результат |
@@ -161,19 +161,19 @@ call InteractHatch hatch_large_1
 Оба запуска выполнены с GPU, без `-quit` и без `-nographics`; каждый завершился кодом 0:
 
 ```text
-Unity.exe -batchmode -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MapChangePreview.RunBatch -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_06_distillery_MapChange.log
-Unity.exe -batchmode -projectPath Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MainMenuPreview.RunBatch -logFile Z:/Unity/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_06_distillery_MainMenu.log
+Unity.exe -batchmode -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MapChangePreview.RunBatch -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_06_distillery_MapChange.log
+Unity.exe -batchmode -projectPath E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX -executeMethod RTXMnesia.EditorDev.MainMenuPreview.RunBatch -logFile E:/UnityDev/RTXMnesia/UnityProj/UMnesiaRTX/Logs/Regression_06_distillery_MainMenu.log
 ```
 
 Строки результатов из логов:
 
 ```text
-PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 60 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 14 main menu model checks (localization, controls, confirmation, preferences, live world, build scene order).
-PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 14 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Сверка текущей карты повторена после симуляций: 34 функции, 180 строковых констант, 0 ошибок, 0 предупреждений. Карты 07/08 остаются за пределами текущего задания пользователя; их импорт/порт не запускался.

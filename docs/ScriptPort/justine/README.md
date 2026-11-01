@@ -121,12 +121,12 @@
 `Logs/Justine_Final_MapChange.log` и `Logs/Justine_Final_MainMenu.log`: оба Unity ExitCode=0, без -quit/-nographics, -force-d3d11. Фактические строки:
 
 ```text
-PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
+PASS: 66 Play-mode map change checks (level door, fade, load screen, carry-over, exit, same map, return visit, hub 02 and guardian, damage and death); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MapChangeCheck
 PASS: 27 pause lifecycle checks (world, input, script lock, HUD, cursor, audio, disable cleanup).
 PASS: 50 inventory checks (pickups, stacks, consumables, audio, recipes, occlusion, use callbacks, tinder regression).
 PASS: 36 journal checks (series, callbacks, pages, narration, quests, recent text, inventory transitions, sound, UI cleanup).
 PASS: 19 main menu model checks (localization, controls, confirmation, preferences, live world, continue / load game, build scene order).
-PASS: 23 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game, exit and save, continue, load game); screenshots Z:\Unity\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
+PASS: 23 Play-mode main menu checks (startup, live background / music, options, new game, cleanup, return, cancellation, second new game, exit and save, continue, load game); screenshots E:\UnityDev\RTXMnesia\UnityProj\UMnesiaRTX\Logs\MainMenuCheck
 ```
 
 Числа main menu 19/23 выросли после отдельного этапа сохранений относительно исторических 14/14. Тесты и ожидания не понижались и не менялись в этой работе. После всех прогонов снова выполнены штатный checker четырёх карт (0 ошибок) и независимая сверка фактических .cs (26891 токен / 980 комментариев, точное совпадение).
