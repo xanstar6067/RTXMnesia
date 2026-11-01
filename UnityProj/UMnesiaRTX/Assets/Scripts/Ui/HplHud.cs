@@ -180,6 +180,13 @@ namespace RTXMnesia.Ui
 
         void LateUpdate() => Refresh();
 
+        // DontSave materials outlive the map otherwise (one pair per loaded map).
+        void OnDestroy()
+        {
+            if (_alphaMaterial != null) Destroy(_alphaMaterial);
+            if (_modulativeMaterial != null) Destroy(_modulativeMaterial);
+        }
+
         public void Refresh()
         {
             if (_canvas == null) return;

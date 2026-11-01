@@ -79,7 +79,7 @@
 | `SoundParticles.md` | звук и музыка, частицы |
 | `ScriptRuntime.md` | порт уровня, `HplMap` (порядок шага 60 Гц), коллбэки, общее состояние `HplGame`, смена карты, экран загрузки |
 | `EffectsUi.md` | экранные эффекты, HUD и шрифты, интерфейс игры, меню паузы, инвентарь, журнал, главное меню |
-| `Graphics.md` | настройки графики, окно настроек |
+| `Graphics.md` | настройки графики, окно настроек, одна камера отрисовки |
 | `RayTracing.md` | DLSS и вкладка «Изображение», улучшенное освещение, трассировка лучей (RT-тени, RTAO, RT-отражения, RTGI, path tracing, клавиша C) |
 | `SaveProfiles.md` | сохранения, профили, сложный режим, флешбэки |
 | `PlayerSystems.md` | руки и фонарь, рассудок и темнота, события безумия, урон и смерть |
@@ -89,4 +89,4 @@
 | `DevTools.md` | тестовая карта dev_room, панель отладки, отчёт об ошибке (F1), замеры видеопамяти (тестовый плеер) |
 | `GeometryAudit.md` | проверка импорта геометрии по `.msh` |
 
-Другие документы: `docs/ScriptPort/` (журнал портов, `api.md`), `docs/UiPort.md`, `docs/MainMenu.md`, `docs/EnhancedLighting/`, `docs/EnhancedTextures.md`, `docs/EnhancedRelief.md`, `docs/LampRendering.md`, `docs/DebugPanel.md`, `docs/DevRoom.md`, `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.
+Другие документы: `docs/ScriptPort/` (журнал портов, `api.md`), `docs/UiPort.md`, `docs/MainMenu.md`, `docs/EnhancedLighting/`, `docs/EnhancedTextures.md`, `docs/EnhancedRelief.md`, `docs/LampRendering.md`, `docs/DebugPanel.md`, `docs/DevRoom.md`, `docs/UnityUpgrade.md`, `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.

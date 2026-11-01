@@ -14,6 +14,9 @@ namespace RTXMnesia.World
     {
         static readonly int ColorId = Shader.PropertyToID("_EmissiveColor");
         readonly Dictionary<Material, Material> _copies = new();
+        // OnDestroy never runs for an object that was never active (commentary icons, hidden props): their copies
+        // are released when their scene unloads.
+        static readonly List<HplEmission> s_live = new();
         Renderer _renderer;
         Material[] _sources;
         public float Amount { get; private set; } = 1f;
@@ -25,6 +28,8 @@ namespace RTXMnesia.World
             if (_sources != null) return;
             _renderer = renderer;
             _sources = renderer.sharedMaterials;
+            if (s_live.Count == 0) UnityEngine.SceneManagement.SceneManager.sceneUnloaded += ReleaseDestroyed;
+            s_live.Add(this);
             for (int i = 0; i < _sources.Length; i++) _sources[i] = HplEnhancedTextures.ClassicMaterial(_sources[i]);
             hideFlags = HideFlags.DontSave;
             ApplyTextureSet(HplGraphics.Textures == 1);
@@ -74,9 +79,22 @@ namespace RTXMnesia.World
         {
             // Also safe when a diagnostic removes the component while leaving its renderer alive.
             if (_renderer != null && _sources != null) _renderer.sharedMaterials = _sources;
+            ReleaseCopies();
+            s_live.Remove(this);
+        }
+
+        void ReleaseCopies()
+        {
             foreach (var copy in _copies.Values)
                 Release(copy);
             _copies.Clear();
+        }
+
+        static void ReleaseDestroyed(UnityEngine.SceneManagement.Scene scene)
+        {
+            for (int i = s_live.Count - 1; i >= 0; i--)
+                if (s_live[i] == null) { s_live[i].ReleaseCopies(); s_live.RemoveAt(i); }
+            if (s_live.Count == 0) UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= ReleaseDestroyed;
         }
 
         static void Release(Material material)

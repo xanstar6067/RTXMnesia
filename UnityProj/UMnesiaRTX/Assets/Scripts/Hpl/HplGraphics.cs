@@ -105,7 +105,6 @@ namespace RTXMnesia.Hpl
             if (changed) Changed?.Invoke();
         }
 
-        /// <summary>The window / screen: mode, then the resolution (0 × 0 — the desktop). Not in the editor.</summary>
         /// <summary>
         /// Frees HDRP's per-camera data (history buffers of TAA, denoisers, RT shadows/GI/reflections, volumetrics) of
         /// a camera that stays disabled for a while. HDRP never releases disabled Game cameras (HDCamera.CleanUnused),
@@ -133,6 +132,7 @@ namespace RTXMnesia.Hpl
             catch (Exception e) { Debug.LogWarning("[HplGraphics] Camera data not released: " + e.Message); }
         }
 
+        /// <summary>The window / screen: mode, then the resolution (0 × 0 — the desktop). Not in the editor.</summary>
         static void ApplyScreen(HplUserSettings s)
         {
             if (Application.isEditor) return;
