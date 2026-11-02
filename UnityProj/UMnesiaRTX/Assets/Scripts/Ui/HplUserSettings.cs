@@ -79,6 +79,8 @@ namespace RTXMnesia.Ui
         public bool commentary;
         /// <summary>Technical map testing panel on the physical grave/Ё key. Global, outside profiles.</summary>
         public bool debugPanel;
+        /// <summary>In-game FPS overlay. Global, outside profiles; off by default.</summary>
+        public bool showFps;
         /// <summary>Darkness by the visible light with the enhanced lighting (Player.PlayerLightLevel). Global, outside profiles.</summary>
         public bool visibleDarkness = true;
 
@@ -232,6 +234,7 @@ namespace RTXMnesia.Ui
             map.hud.showSubtitles = subtitles;
             map.hud.showHints = hints;
             map.hud.showCrossHair = crosshair;
+            map.hud.showFps = showFps;
             AudioListener.volume = masterVolume;
             Gamma = gamma;
             // cLuxMapHandler::SetShowCommentary: turning it off stops the playing commentary.

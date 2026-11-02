@@ -294,6 +294,7 @@ namespace RTXMnesia.Ui
             ScrollToggle(T("OptionsMenu", "ShowSubtitles", "Субтитры"), settings.subtitles, MenuControl.Subtitles);
             ScrollToggle(T("OptionsMenu", "ShowHints", "Подсказки"), settings.hints, MenuControl.Hints);
             ScrollToggle(T("OptionsMenu", "ShowCrosshair", "Прицел"), settings.crosshair, MenuControl.Crosshair);
+            ScrollToggle(OwnText("Счётчик FPS", "FPS counter"), settings.showFps, MenuControl.ShowFps);
             ScrollToggle("включить панель отладки", settings.debugPanel, MenuControl.DebugPanel);
             ScrollToggle("Темнота по видимому свету", settings.visibleDarkness, MenuControl.VisibleDarkness, settings.lightingSet != 1);
             Note(settings.lightingSet != 1 ? "Темнота по видимому свету: только с «Улучшенным» освещением (вкладка «Графика»)."

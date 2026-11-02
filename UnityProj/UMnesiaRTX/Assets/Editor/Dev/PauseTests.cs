@@ -93,18 +93,30 @@ namespace RTXMnesia.EditorDev
 
                 ui.Pause();
                 float originalSensitivity = ui.Settings.mouseSensitivity;
-                ui.OpenOptions();
+                bool originalShowFps = ui.Settings.showFps;
+                ui.OpenOptions(HplPauseMenu.GameTabIndex);
+                Check(ui.Choose(MenuControl.ShowFps) && ui.DraftSettings.showFps != originalShowFps,
+                    "FPS counter option is missing or does not toggle");
+                Check(ui.Settings.showFps == originalShowFps && map.hud.showFps == originalShowFps,
+                    "Editing the FPS option changed the active HUD");
                 ui.DraftSettings.mouseSensitivity = 4.5f;
                 Check(ui.Settings.mouseSensitivity == originalSensitivity, "Editing options modified applied settings");
                 ui.Resume();
                 Check(!ui.ShowingOptions && ui.Settings.mouseSensitivity == originalSensitivity, "Discarded options were applied");
+                Check(ui.Settings.showFps == originalShowFps && map.hud.showFps == originalShowFps,
+                    "Discarded FPS option was applied");
+                Check(!new HplUserSettings().showFps && !JsonUtility.FromJson<HplUserSettings>("{}").showFps,
+                    "FPS counter should be off for new and legacy settings");
+                Check(JsonUtility.FromJson<HplUserSettings>(JsonUtility.ToJson(new HplUserSettings { showFps = true })).showFps,
+                    "FPS counter preference did not survive serialization");
                 var invalidSettings = new HplUserSettings { mouseSensitivity = float.NaN, masterVolume = float.PositiveInfinity };
                 invalidSettings.Validate();
                 Check(invalidSettings.mouseSensitivity == 1f && invalidSettings.masterVolume == 1f, "Invalid preference values were not sanitized");
-                var applied = new HplUserSettings { mouseSensitivity = 2.2f, masterVolume = 0.25f, invertMouse = true, subtitles = false, hints = false, crosshair = false, vSync = true };
+                var applied = new HplUserSettings { mouseSensitivity = 2.2f, masterVolume = 0.25f, invertMouse = true, subtitles = false, hints = false, crosshair = false, showFps = true, vSync = true };
                 applied.Apply(map);
                 Check(map.player.mouseSensitivity == 2.2f && map.player.invertMouse && !map.player.active, "Settings did not apply to input or changed the script lock");
                 Check(!map.hud.showSubtitles && !map.hud.showHints && !map.hud.showCrossHair, "HUD settings were not applied");
+                Check(map.hud.showFps, "FPS counter setting was not applied to the HUD");
                 Check(AudioListener.volume == 0.25f && QualitySettings.vSyncCount == 1, "Audio / VSync settings were not applied");
 
                 map.sound.Music.Pause();

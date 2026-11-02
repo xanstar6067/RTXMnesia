@@ -550,7 +550,7 @@ namespace RTXMnesia.Ui
                 Refresh();
             }
             else if (control >= MenuControl.Subtitles && control <= MenuControl.SmoothMouse ||
-                     control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary || control == MenuControl.DebugPanel ||
+                     control == MenuControl.GammaLess || control == MenuControl.GammaMore || control == MenuControl.Commentary || control == MenuControl.DebugPanel || control == MenuControl.ShowFps ||
                      control is MenuControl.Bloom or MenuControl.ImageTrail or MenuControl.RadialBlur or MenuControl.RtEnabled or MenuControl.SoftShadows or MenuControl.ContactShadows or MenuControl.LanternShadow or MenuControl.ShadowCache or MenuControl.VisibleDarkness ||
                      control >= MenuControl.HdrPeakLess && control <= MenuControl.HdrDefaults) Activate(_selected, direction);
         }
@@ -769,6 +769,7 @@ namespace RTXMnesia.Ui
                 case MenuControl.Subtitles: DraftSettings.subtitles = !DraftSettings.subtitles; break;
                 case MenuControl.Hints: DraftSettings.hints = !DraftSettings.hints; break;
                 case MenuControl.Crosshair: DraftSettings.crosshair = !DraftSettings.crosshair; break;
+                case MenuControl.ShowFps: DraftSettings.showFps = !DraftSettings.showFps; break;
                 case MenuControl.Commentary: DraftSettings.commentary = !DraftSettings.commentary; break;
                 case MenuControl.DebugPanel: DraftSettings.debugPanel = !DraftSettings.debugPanel; break;
                 case MenuControl.Fullscreen: DraftSettings.fullscreen = !DraftSettings.fullscreen; break;

@@ -23,6 +23,8 @@ namespace RTXMnesia.Ui
         public Texture2D[] crosshairs = new Texture2D[7];
         [Tooltip("User setting ShowCrossHair: off shows the crosshair only over things that can be interacted with.")]
         public bool showCrossHair = true;
+        /// <summary>Optional frame counter, independent of the gameplay clock and HUD fades.</summary>
+        public bool showFps;
 
         public readonly MessageHandler Messages = new();
         public readonly HintHandler Hints = new();
@@ -48,6 +50,11 @@ namespace RTXMnesia.Ui
         HplMap _map;
         Canvas _canvas;
         HplGuiText _gameText, _hintText, _focusText, _deathText, _completionText;
+        HplGuiText _fpsText;
+        double _fpsWindowStart;
+        int _fpsFrames;
+        bool _fpsSampling;
+        string _fpsLabel = "";
 
         /// <summary>The completion counter (cLuxCompletionCountHandler), a module of the map's HUD.</summary>
         public HplCompletionCount Completion { get; private set; }
@@ -178,7 +185,47 @@ namespace RTXMnesia.Ui
 
         // ------------------------------------------------------------------ drawing
 
-        void LateUpdate() => Refresh();
+        void LateUpdate()
+        {
+            UpdateFps();
+            Refresh();
+        }
+
+        void OnDisable()
+        {
+            // Additive scene transitions / the benchmark can disable the whole map between rendered updates.
+            _fpsSampling = false;
+            _fpsLabel = "";
+        }
+
+        bool FpsVisible => showFps && _canvas != null && _canvas.enabled && _map != null && _map.player != null &&
+            !_map.menuBackground && !World.HplBenchmark.Active && !HplLoadScreen.Active && !HplCredits.Active &&
+            (_map.GameUi == null || (!_map.GameUi.IsPaused && !_map.GameUi.IsTransitioning));
+
+        void UpdateFps()
+        {
+            if (!FpsVisible)
+            {
+                _fpsSampling = false;
+                _fpsLabel = "";
+                return;
+            }
+            // Count rendered updates against wall time: slow motion and timeScale do not change the result.
+            double now = Time.realtimeSinceStartupAsDouble;
+            if (!_fpsSampling)
+            {
+                _fpsSampling = true;
+                _fpsWindowStart = now;
+                _fpsFrames = 0;
+                return;
+            }
+            _fpsFrames++;
+            double elapsed = now - _fpsWindowStart;
+            if (elapsed < 0.5) return;
+            _fpsLabel = "FPS: " + (_fpsFrames / elapsed).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+            _fpsWindowStart = now;
+            _fpsFrames = 0;
+        }
 
         // DontSave materials outlive the map otherwise (one pair per loaded map).
         void OnDestroy()
@@ -196,6 +243,13 @@ namespace RTXMnesia.Ui
             _focusText.Clear();
             _deathText.Clear();
             _completionText?.Clear();
+            _fpsText?.Clear();
+            if (FpsVisible && _fpsLabel.Length > 0 && _fpsText != null)
+            {
+                var size = Vector2.one * 16;
+                _fpsText.DrawFont(_fpsLabel, new Vector2(161, 1), size, Color.black, HplFontAlign.Right);
+                _fpsText.DrawFont(_fpsLabel, new Vector2(160, 0), size, Color.white, HplFontAlign.Right);
+            }
 
             // cLuxEffect_PlayVoice::OnDraw: rows ending at y = 580, left aligned at 400 - width / 2.
             string voice = effects != null && effects.PlayVoice.Active && showSubtitles ? effects.PlayVoice.CurrentText : "";
@@ -573,6 +627,12 @@ namespace RTXMnesia.Ui
             // The completion counter: menu.cfg CompletionCounter DefaultFont (game_header.fnt, from the inventory resources).
             var inventoryAssets = Resources.Load<HplInventoryAssets>(HplInventoryAssets.ResourceName);
             _completionText = CreateText(screen, "Completion text", inventoryAssets != null ? inventoryAssets.headerFont : defaultFont);
+            // Anchor to the actual window corner, including widescreen areas outside the virtual 800x600 screen.
+            _fpsText = CreateText((RectTransform)_canvas.transform, "FPS counter", defaultFont);
+            var fpsRect = _fpsText.rectTransform;
+            fpsRect.anchorMin = fpsRect.anchorMax = fpsRect.pivot = Vector2.one;
+            fpsRect.sizeDelta = new Vector2(160, 24);
+            fpsRect.anchoredPosition = new Vector2(-12, -12);
             Refresh();
         }
 

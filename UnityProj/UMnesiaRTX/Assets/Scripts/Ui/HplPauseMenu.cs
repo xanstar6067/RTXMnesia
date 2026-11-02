@@ -34,6 +34,7 @@ namespace RTXMnesia.Ui
         // Darkness by the visible light (game options).
         VisibleDarkness,
         Benchmark,
+        ShowFps,
     }
 
     /// <summary>The state of the windows added to the menu after the first version (profiles, start game, messages).</summary>
