@@ -396,7 +396,7 @@ namespace RTXMnesia.Ui
                 if (_bugPausedWorld) EnterScreen(UiScreen.BugReport);
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = !_bugView.HasCursor;
-                _bugView.Open();
+                _bugView.Open(_bugReport.Screenshot == null);
                 return;
             }
             var choice = _bugView.Update();

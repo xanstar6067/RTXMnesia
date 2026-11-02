@@ -19,7 +19,14 @@ namespace RTXMnesia.Effects
     {
         public const string ShaderName = "Hidden/RTXMnesia/HplScreenEffects";
         const int CopyPass = 0, TrailPass = 1, CompositePass = 2, InsanityPass = 7, GammaPass = 8, HdrDisplayPass = 10;
-        const int RawCopyPass = 12, CompareWipePass = 13;
+        const int RawCopyPass = 12, CompareWipePass = 13, SdrCapturePass = 14;
+
+        /// <summary>
+        /// Bug report (HplBugReport): the next game frame, after these effects, as an SDR screenshot (sRGB values,
+        /// bottom row first, output size, without the overlay HUD). ScreenCapture writes nothing with HDR output.
+        /// Called on the main thread; null when the read back failed. Taken (set to null) by the frame that serves it.
+        /// </summary>
+        public static Action<Texture2D> CaptureRequest;
 
         public Shader shader;
         [NonSerialized] public HplEffects effects;
@@ -118,7 +125,36 @@ namespace RTXMnesia.Effects
                 CoreUtils.SetRenderTarget(ctx.cmd, ctx.cameraColorBuffer, ClearFlag.None);
                 CoreUtils.DrawFullScreen(ctx.cmd, _material, props, HdrDisplayPass);
             }
+            RenderCapture(ctx);
             RenderCalibration(ctx);
+        }
+
+        void RenderCapture(CustomPassContext ctx)
+        {
+            var done = CaptureRequest;
+            if (done == null) return;
+            CaptureRequest = null;
+            // After post-processing the frame has the output size (camera pixels), with DLSS too.
+            var camera = ctx.hdCamera.camera;
+            int width = Mathf.Max(1, camera.pixelWidth), height = Mathf.Max(1, camera.pixelHeight);
+            var target = RenderTexture.GetTemporary(width, height, 0, GraphicsFormat.R8G8B8A8_UNorm);
+            CoreUtils.SetRenderTarget(ctx.cmd, target, ClearFlag.None);
+            CoreUtils.DrawFullScreen(ctx.cmd, _material, ctx.propertyBlock, SdrCapturePass);
+            ctx.cmd.RequestAsyncReadback(target, 0, TextureFormat.RGBA32, request =>
+            {
+                RenderTexture.ReleaseTemporary(target);
+                if (request.hasError) { done(null); return; }
+                var data = request.GetData<byte>();
+                var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                var pixels = texture.GetPixelData<byte>(0);
+                // The render target's first row is the top of the image where UVs start at the top (D3D, Vulkan, Metal).
+                int row = width * 4;
+                bool flip = SystemInfo.graphicsUVStartsAtTop;
+                for (int y = 0; y < height; y++)
+                    Unity.Collections.NativeArray<byte>.Copy(data, y * row, pixels, (flip ? height - 1 - y : y) * row, row);
+                texture.Apply(false);
+                done(texture);
+            });
         }
 
         /// <summary>

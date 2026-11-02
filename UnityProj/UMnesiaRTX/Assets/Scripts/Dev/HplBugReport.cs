@@ -26,6 +26,11 @@ namespace RTXMnesia.Dev
         const float LookDistance = 100f;
 
         public Texture2D Screenshot { get; private set; }
+        /// <summary>Why there is no screenshot, or how it was taken (report.txt); null for a plain screen capture.</summary>
+        public string ScreenshotNote { get; private set; }
+        /// <summary>Tests: take the screenshot through HplScreenEffectsPass as with HDR output, also in SDR and batch.</summary>
+        public static bool ForcePassCapture;
+        const double PassCaptureTimeout = 2;
         /// <summary>The end-of-frame capture has finished (with or without a screenshot).</summary>
         public bool Ready { get; private set; }
 
@@ -54,6 +59,27 @@ namespace RTXMnesia.Dev
 
         IEnumerator Capture()
         {
+            // With HDR output ScreenCapture only logs an error: the frame comes from the screen effects pass instead.
+            if (HplHdr.Active || ForcePassCapture)
+            {
+                bool hdr = HplHdr.Active, done = false, late = false;
+                Texture2D shot = null;
+                Effects.HplScreenEffectsPass.CaptureRequest = texture =>
+                {
+                    // A read back after the timeout is released, not leaked.
+                    if (late) { if (texture != null) UnityEngine.Object.Destroy(texture); return; }
+                    shot = texture; done = true;
+                };
+                double deadline = Time.realtimeSinceStartupAsDouble + PassCaptureTimeout;
+                while (!done && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+                if (!done) { late = true; Effects.HplScreenEffectsPass.CaptureRequest = null; }
+                Screenshot = shot;
+                ScreenshotNote = shot != null ? (hdr ? "HDR-вывод: переведён в SDR по paper white, без интерфейса" : "из прохода эффектов, без интерфейса")
+                    : (hdr ? "HDR-вывод, " : "") + (done ? "ошибка чтения кадра с GPU" : "кадр не получен за " + PassCaptureTimeout + " с");
+                if (shot == null) Debug.LogWarning("[RTXMnesia] Bug report: no screenshot: " + ScreenshotNote);
+                Ready = true;
+                yield break;
+            }
             // Batch runs never reach WaitForEndOfFrame: the frame goes to a file there (written at the end of this
             // frame too), at most a second of waiting; a report never stays pending without its screenshot.
             if (Application.isBatchMode)
@@ -75,12 +101,19 @@ namespace RTXMnesia.Dev
                     }
                 }
                 catch (Exception e) { Debug.LogWarning("[RTXMnesia] Bug report: no screenshot: " + e.Message); }
+                if (Screenshot == null) ScreenshotNote = "batch-редактор: экран не снимается";
                 Ready = true;
                 yield break;
             }
             yield return new WaitForEndOfFrame();
             try { Screenshot = ScreenCapture.CaptureScreenshotAsTexture(); }
-            catch (Exception e) { Debug.LogWarning("[RTXMnesia] Bug report: no screenshot: " + e.Message); }
+            catch (Exception e) { ScreenshotNote = e.Message; }
+            // Unity reports a failed capture in the log, not by an exception.
+            if (Screenshot == null)
+            {
+                ScreenshotNote = "ScreenCapture не вернул кадр" + (ScreenshotNote != null ? ": " + ScreenshotNote : "");
+                Debug.LogWarning("[RTXMnesia] Bug report: no screenshot: " + ScreenshotNote);
+            }
             Ready = true;
         }
 
@@ -127,9 +160,9 @@ namespace RTXMnesia.Dev
             if (Screenshot != null)
             {
                 File.WriteAllBytes(Path.Combine(folder, "screen.jpg"), Screenshot.EncodeToJPG(95));
-                text.AppendLine("Снимок: screen.jpg" + (HplHdr.Active ? " (HDR-вывод: цвета снимка могут отличаться от экрана)" : ""));
+                text.AppendLine("Снимок: screen.jpg" + (ScreenshotNote != null ? " (" + ScreenshotNote + ")" : ""));
             }
-            else text.AppendLine("Снимок: нет");
+            else text.AppendLine("Снимок: нет" + (ScreenshotNote != null ? " (" + ScreenshotNote + ")" : ""));
             if (_saveJson != null)
             {
                 Save.HplSaveHandler.WriteFile(Path.Combine(folder, "save" + Save.HplSaveHandler.Extension), _saveJson);
@@ -156,6 +189,7 @@ namespace RTXMnesia.Dev
         static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
         static string V(Vector3 v) => F(v.x) + " " + F(v.y) + " " + F(v.z);
         static string YesNo(bool v) => v ? "да" : "нет";
+        static string Mb(long bytes) => (bytes / 1048576).ToString(CultureInfo.InvariantCulture);
 
         static string Describe(HplMap map)
         {
@@ -216,7 +250,9 @@ namespace RTXMnesia.Dev
             Line("Позиция Unity (ноги)", V(feet));
             Line("Камера HPL", V(player.HplCameraPosition));
             Line("Камера Unity", V(player.LogicCameraPosition));
+            // The yaw accumulates over turns: each angle into (-180, 180].
             Vector3 angles = player.HplCameraAngles * Mathf.Rad2Deg;
+            for (int i = 0; i < 3; i++) angles[i] = -Mathf.DeltaAngle(angles[i], 0f);
             Line("Углы камеры HPL, град (тангаж рыскание крен)", V(angles));
             Line("Направление HPL", V(player.HplCameraForward));
             Line("Направление Unity", V(player.LogicCameraRotation * Vector3.forward));
@@ -286,7 +322,18 @@ namespace RTXMnesia.Dev
             Line("Экран", Screen.width + " x " + Screen.height + ", " + Screen.fullScreenMode);
             Line("HDR-вывод", YesNo(HplHdr.Active));
             Line("FPS (среднее за 1 с)", HplLogBuffer.Fps.ToString("0.0", CultureInfo.InvariantCulture));
-            Line("Видеопамять, МБ", SystemInfo.graphicsMemorySize);
+            if (settings != null)
+            {
+                bool pt = HplRayTracing.Active && HplRayTracing.Supported && HplRayTracing.PathTracing > 0;
+                Line("Трассировка пути", pt ? "вкл, " + HplRayTracing.PathTracingSamples[HplRayTracing.PathTracing] + " сэмплов" : "выкл");
+                Line("Качество текстур", settings.textureQuality);
+                Line("Бюджет видеопамяти текстур, ГБ", settings.textureMemoryBudgetGb);
+            }
+            // Usage of this process (DXGI), not the size of the card (SystemInfo.graphicsMemorySize).
+            if (HplVideoMemory.TryQuery(out var memory))
+                Line("Видеопамять, МБ", "занято " + Mb(memory.localUsage) + ", бюджет " + Mb(memory.localBudget)
+                    + ", системная " + Mb(memory.sharedUsage) + ", объём карты " + Mb(memory.dedicated));
+            else Line("Видеопамять, МБ", "нет данных (DXGI), объём карты " + SystemInfo.graphicsMemorySize);
         }
 
         static void Variables(StringBuilder sb, string title, IReadOnlyDictionary<string, string> vars)

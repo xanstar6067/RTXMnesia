@@ -142,13 +142,16 @@ namespace RTXMnesia.Dev
             }
             else
             {
-                Check(report.Contains("Снимок: нет"), "No screenshot and the report does not say so");
+                Check(report.Contains("Снимок: нет ("), "No screenshot and the report does not say why");
                 Debug.Log("[BugReportCheck] no screenshot in this run (batch editor)");
             }
             string log = File.ReadAllText(Path.Combine(folder, "log.txt"));
             Check(log.Contains("[W] [BugReportCheck] log marker before F1"), "log.txt lacks the recent messages: " + log);
             Check(File.Exists(Path.Combine(folder, "save.sav")), "save.sav missing");
             var position = map.player.Body.FeetPosition;
+
+            // Stepped here, not as a nested coroutine: its failed checks must reach Start's handler.
+            for (var capture = PassCapture(map); capture.MoveNext();) yield return capture.Current;
 
             // Over the pause menu: the menu's pause stays, Esc only closes the report, nothing is written.
             yield return new WaitForSecondsRealtime(0.5f);
@@ -172,9 +175,84 @@ namespace RTXMnesia.Dev
             Check(distance < 0.5f, "The loaded save is " + distance + " m away from the report position");
         }
 
+        /// <summary>
+        /// The HDR output path (HplScreenEffectsPass), forced in SDR: output size, not black, and the same way up as a
+        /// ScreenCapture of the same view when the batch editor gives one (the live display path is checked by hand).
+        /// </summary>
+        IEnumerator PassCapture(HplMap map)
+        {
+            var plain = HplBugReport.Begin(this, map);
+            for (double end = Time.realtimeSinceStartupAsDouble + 3; !plain.Ready && Time.realtimeSinceStartupAsDouble < end;) yield return null;
+            HplBugReport.ForcePassCapture = true;
+            HplBugReport pass;
+            try { pass = HplBugReport.Begin(this, map); }
+            finally { HplBugReport.ForcePassCapture = false; }
+            // A batch editor draws no game frames on its own: the camera is rendered by hand there.
+            for (double end = Time.realtimeSinceStartupAsDouble + 4; !pass.Ready && Time.realtimeSinceStartupAsDouble < end;)
+            {
+                if (Application.isBatchMode && map.PlayerCamera != null) map.PlayerCamera.Render();
+                yield return null;
+            }
+            try
+            {
+                var shot = pass.Screenshot;
+                Check(pass.Ready && shot != null, "The effects pass gave no screenshot: " + pass.ScreenshotNote);
+                Check(shot.width == Screen.width && shot.height == Screen.height, $"Pass screenshot {shot.width}x{shot.height}, screen {Screen.width}x{Screen.height}");
+                float[] grid = Grid(shot);
+                // The start of 00_rainy_hall is dark: an image is told from black by its brightest pixels (a candle), not the mean.
+                float peak = shot.GetPixels32().Max(c => Mathf.Max(c.r, Mathf.Max(c.g, c.b))) / 255f;
+                Check(peak > 0.25f, $"The pass screenshot is black: brightest {peak:0.000}, mean {grid.Average():0.000}");
+                Debug.Log($"[BugReportCheck] pass screenshot {shot.width}x{shot.height}, mean {grid.Average():0.000}, brightest {peak:0.000}, note '{pass.ScreenshotNote}'");
+                if (plain.Screenshot != null)
+                {
+                    float[] reference = Grid(plain.Screenshot);
+                    float same = Correlation(grid, reference), flipped = Correlation(Flip(grid), reference);
+                    Debug.Log($"[BugReportCheck] pass vs ScreenCapture: correlation {same:0.000}, flipped {flipped:0.000}");
+                    Check(same > flipped && same > 0.5f, $"The pass screenshot does not match ScreenCapture (correlation {same:0.000}, flipped {flipped:0.000})");
+                }
+                else Debug.Log("[BugReportCheck] no ScreenCapture reference in this run: orientation not compared");
+            }
+            finally { plain.Dispose(); pass.Dispose(); }
+        }
+
+        const int GridSize = 8;
+
+        /// <summary>Mean luminance of 8 x 8 cells, bottom row first.</summary>
+        static float[] Grid(Texture2D texture)
+        {
+            var pixels = texture.GetPixels32();
+            var sums = new float[GridSize * GridSize];
+            var counts = new int[sums.Length];
+            for (int y = 0; y < texture.height; y += 2)
+            for (int x = 0; x < texture.width; x += 2)
+            {
+                var c = pixels[y * texture.width + x];
+                int cell = y * GridSize / texture.height * GridSize + x * GridSize / texture.width;
+                sums[cell] += (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255f;
+                counts[cell]++;
+            }
+            for (int i = 0; i < sums.Length; i++) sums[i] /= Math.Max(1, counts[i]);
+            return sums;
+        }
+
+        static float[] Flip(float[] grid)
+        {
+            var flipped = new float[grid.Length];
+            for (int y = 0; y < GridSize; y++) Array.Copy(grid, y * GridSize, flipped, (GridSize - 1 - y) * GridSize, GridSize);
+            return flipped;
+        }
+
+        static float Correlation(float[] a, float[] b)
+        {
+            float ma = a.Average(), mb = b.Average(), ab = 0, aa = 0, bb = 0;
+            for (int i = 0; i < a.Length; i++) { ab += (a[i] - ma) * (b[i] - mb); aa += (a[i] - ma) * (a[i] - ma); bb += (b[i] - mb) * (b[i] - mb); }
+            return aa > 0 && bb > 0 ? ab / Mathf.Sqrt(aa * bb) : 0;
+        }
+
         void Finish(int code)
         {
             HplBugReport.RootOverride = null;
+            HplBugReport.ForcePassCapture = false;
             if (_keyboard != null) InputSystem.RemoveDevice(_keyboard);
             if (_inputSettings != null)
             {

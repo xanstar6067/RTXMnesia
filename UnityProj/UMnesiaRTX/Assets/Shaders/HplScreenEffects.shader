@@ -112,6 +112,18 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
         return float4(min(max(RotateRec709ToOutputSpace(linearValue) * _HplEffectHdr.y, 0), _HplEffectHdr.z), 1.0);
     }
 
+    // Bug report screenshot (HplBugReport): the final frame as the values an SDR screen shows. HDR: the inverse of
+    // FromEffectSpace (output-space nits over paper white, 1/2.2; brighter than paper white clips); SDR: the swap
+    // chain's piecewise encode of the Gamma pass output.
+    float4 SdrCaptureFrag(Varyings v) : SV_Target
+    {
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(v);
+        float3 color = max(CustomPassLoadCameraColor(uint2(v.positionCS.xy), 0), 0);
+        if (_HplEffectHdr.x > 0.5) color = pow(saturate(RotateOutputSpaceToRec709(color) / _HplEffectHdr.y), 1.0 / HPL_DISPLAY_GAMMA);
+        else color = LinearToSRGB(saturate(color));
+        return float4(color, 1.0);
+    }
+
     // The world fog of HPL2 for RTXMnesia.World.HplFogAreaPass (AfterOpaqueColor), kept here because this shader is
     // always in the build: cRendererDeferred::RenderFullScreenFog / deferred_fog_frag.glsl, alpha =
     // ((depth - start) / length)^falloff × color.a over the view depth; nothing drawn (sky) is not fogged.
@@ -400,6 +412,14 @@ Shader "Hidden/RTXMnesia/HplScreenEffects"
             ZWrite Off ZTest Always Blend Off Cull Off
             HLSLPROGRAM
             #pragma fragment CompareWipeFrag
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "SDR capture"
+            ZWrite Off ZTest Always Blend Off Cull Off
+            HLSLPROGRAM
+            #pragma fragment SdrCaptureFrag
             ENDHLSL
         }
     }

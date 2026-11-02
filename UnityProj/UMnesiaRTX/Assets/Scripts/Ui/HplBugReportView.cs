@@ -33,7 +33,7 @@ namespace RTXMnesia.Ui
         readonly List<char> _typed = new();
         readonly StringBuilder _comment = new();
         int _pieceIndex, _hover = -1;
-        bool _open, _typingHooked;
+        bool _open, _typingHooked, _noScreenshot;
         string _error, _notice;
         float _noticeUntil, _backspaceNext;
         Rect _ok, _cancel;
@@ -79,9 +79,11 @@ namespace RTXMnesia.Ui
 
         string T(string ru, string en) => _english ? en : ru;
 
-        public void Open()
+        /// <summary>Opens the window; without a screenshot the hint says so before the comment is typed.</summary>
+        public void Open(bool noScreenshot = false)
         {
             _open = true;
+            _noScreenshot = noScreenshot;
             _notice = null;
             _error = null;
             _comment.Clear();
@@ -255,9 +257,12 @@ namespace RTXMnesia.Ui
             }
             float y = box.yMax + 6;
             _text.DrawFont(comment.Length + " / " + MaxLength, new Vector2(box.xMax, y), Vector2.one * 12, Grey, HplFontAlign.Right);
-            string hint = _error ?? T("Сохранятся: координаты, камера, снимок экрана, сохранение и лог.",
-                                       "Saved: position, camera, screenshot, save game and log.");
-            _text.DrawFont(hint, new Vector2(box.x, y), Vector2.one * 12, _error != null ? new Color(1f, 0.45f, 0.35f, 1f) : Grey);
+            string hint = _error ?? (_noScreenshot
+                ? T("Снимок экрана не получен (причина в report.txt). Сохранятся: координаты, камера, сохранение и лог.",
+                    "No screenshot (see report.txt). Saved: position, camera, save game and log.")
+                : T("Сохранятся: координаты, камера, снимок экрана, сохранение и лог.",
+                    "Saved: position, camera, screenshot, save game and log."));
+            _text.DrawFont(hint, new Vector2(box.x, y), Vector2.one * 12, _error != null || _noScreenshot ? new Color(1f, 0.45f, 0.35f, 1f) : Grey);
             _cancel = new Rect(w.xMax - 10 - 100, w.yMax - 10 - 30, 100, 30);
             _ok = new Rect(_cancel.x - 10 - 100, _cancel.y, 100, 30);
             SkinButton(_ok, T("Ок", "OK"), !CanConfirm ? Grey : _hover == 0 ? Highlight : Color.white);
