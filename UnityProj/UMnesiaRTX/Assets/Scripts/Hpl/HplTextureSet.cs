@@ -98,6 +98,23 @@ namespace RTXMnesia.Hpl
             s_variants.Add(derived);
         }
 
+        /// <summary>
+        /// Bug report: the enhanced pair of a classic material without loading it (its Resources path); null — no pair.
+        /// Tinted copies of a level match by their albedo (<see cref="Variant"/>), reported as such.
+        /// </summary>
+        public static string EnhancedName(Material classic)
+        {
+            if (classic == null) return null;
+            Initialize();
+            if (s_entries.TryGetValue(classic, out var entry))
+                return !string.IsNullOrEmpty(entry.enhancedResource) ? "Resources/" + entry.enhancedResource : entry.enhanced?.name;
+            if (s_forward.TryGetValue(classic, out var loaded)) return loaded.name;
+            var texture = classic.HasProperty("_BaseColorMap") ? classic.GetTexture("_BaseColorMap") : null;
+            if (texture != null && s_textureEntries.TryGetValue(texture, out var candidates) && candidates.Count > 0)
+                return "вариант по текстуре " + texture.name;
+            return null;
+        }
+
         public static Material ResolveMaterial(Material original, bool enhanced)
         {
             if (original == null) return null;

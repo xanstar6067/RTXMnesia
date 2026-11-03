@@ -9,6 +9,7 @@ using RTXMnesia.Hpl;
 using RTXMnesia.Player;
 using RTXMnesia.ScriptApi;
 using RTXMnesia.Ui;
+using RTXMnesia.World;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -33,6 +34,8 @@ namespace RTXMnesia.Dev
         const double PassCaptureTimeout = 2;
         /// <summary>The end-of-frame capture has finished (with or without a screenshot).</summary>
         public bool Ready { get; private set; }
+        /// <summary>report.txt without the comment and the file list (checks).</summary>
+        public string ReportText => _report;
 
         readonly DateTime _time = DateTime.Now;
         readonly string _mapName;
@@ -268,33 +271,111 @@ namespace RTXMnesia.Dev
             Line("В фокусе", player.EntityInFocus != null ? player.EntityInFocus.Name + " (" + F(player.FocusDistance) + " м)" : "нет");
         }
 
-        /// <summary>The closest solid surface along the camera ray (the player's character body excluded).</summary>
+        /// <summary>
+        /// Along the camera ray: the first collider (the player's body and the invisible character colliders skipped)
+        /// and, apart from it, the first rendered surface (<see cref="HplVisibleHit"/>) with its HPL source, the
+        /// material of the hit sub mesh and its classic / enhanced pair.
+        /// </summary>
         static void LookAt(StringBuilder sb, Action<string, object> Line, HplMap map, AmnesiaPlayer player, Camera camera)
         {
             sb.AppendLine().AppendLine("[Взгляд]");
             Vector3 start = player != null ? player.LogicCameraPosition : camera.transform.position;
             Vector3 dir = player != null ? player.LogicCameraRotation * Vector3.forward : camera.transform.forward;
+            var ray = new Ray(start, dir);
             int mask = ~(1 << HplPhysics.CharacterLayer);
-            if (!Physics.Raycast(start, dir, out var hit, LookDistance, mask, QueryTriggerInteraction.Ignore))
+            var hits = Physics.RaycastAll(ray, LookDistance, mask, QueryTriggerInteraction.Ignore);
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            RaycastHit? solid = null;
+            int skipped = 0;
+            string firstSkipped = null;
+            foreach (var h in hits)
             {
-                Line("Луч", "ничего ближе " + F(LookDistance) + " м");
-                return;
+                // _charcollider_*: stops only the character, never drawn (HplModelBuilder.IsCharColliderName).
+                if (h.collider.name.StartsWith("_charcollider", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (skipped++ == 0) firstSkipped = HierarchyPath(h.collider.transform) + " (" + F(h.distance) + " м)";
+                    continue;
+                }
+                solid = h;
+                break;
             }
-            var body = map != null ? map.PhysicsWorld?.BodyOf(hit.collider) : null;
-            Line("Объект", HierarchyPath(hit.collider.transform));
-            Line("Сущность", body?.UserData is HplEntity entity ? entity.Name + " (" + entity.Type + ")" : "нет");
-            Line("Расстояние, м", F(hit.distance));
-            Line("Точка HPL", V(HplSpace.Position(hit.point)));
-            Line("Точка Unity", V(hit.point));
-            Line("Нормаль HPL", V(HplSpace.Direction(hit.normal)));
-            var renderer = hit.collider.GetComponentInParent<Renderer>();
-            if (renderer == null && body?.UserData is HplEntity owner) renderer = owner.GameObject.GetComponentInChildren<Renderer>();
-            if (renderer != null)
+            if (skipped > 0) Line("Пропущены коллизии персонажа", skipped + ", первая " + firstSkipped);
+            Dynamics.HplPhysicsBody body = null;
+            if (solid is RaycastHit hit)
             {
-                Line("Модель", HierarchyPath(renderer.transform));
-                if (renderer.TryGetComponent<MeshFilter>(out var filter) && filter.sharedMesh != null) Line("Меш", filter.sharedMesh.name);
-                Line("Материалы", string.Join(", ", renderer.sharedMaterials.Where(m => m != null).Select(m => m.name)));
+                body = map != null ? map.PhysicsWorld?.BodyOf(hit.collider) : null;
+                Line("Объект", HierarchyPath(hit.collider.transform));
+                Line("Сущность", body?.UserData is HplEntity entity ? entity.Name + " (" + entity.Type + ")" : "нет");
+                Line("Расстояние, м", F(hit.distance));
+                Line("Точка HPL", V(HplSpace.Position(hit.point)));
+                Line("Точка Unity", V(hit.point));
+                Line("Нормаль HPL", V(HplSpace.Direction(hit.normal)));
             }
+            else Line("Луч", "коллизий ближе " + F(LookDistance) + " м нет");
+
+            var unreadable = new List<Renderer>();
+            var scene = map != null ? map.gameObject.scene : camera.gameObject.scene;
+            var visible = HplVisibleHit.Cast(ray, LookDistance, scene, camera.cullingMask, player != null ? player.Hands?.Root : null, unreadable);
+            int opaque = visible.FindIndex(v => !v.Transparent);
+            for (int i = 0; i < (opaque < 0 ? visible.Count : opaque) && i < 3; i++)
+                Line("Прозрачное перед ним", HierarchyPath(visible[i].renderer.transform) + ", " + Name(visible[i].Material) + ", " + F(visible[i].distance) + " м");
+            if (opaque >= 0)
+            {
+                var v = visible[opaque];
+                Line("Видимое на расстоянии, м", F(v.distance) + (solid is RaycastHit h ? Mathf.Abs(h.distance - v.distance) > 0.05f ? " (коллизия " + F(h.distance) + " м)" : "" : ""));
+                Line("Видимая точка HPL", V(HplSpace.Position(v.point)));
+                Line("Видимая нормаль HPL", V(HplSpace.Direction(v.normal)) + (v.backFace ? ", луч попал в обратную сторону грани" : ""));
+                DescribeRenderer(Line, v.renderer, v.slot);
+            }
+            else
+            {
+                // No triangle on the ray (unreadable meshes): the renderer of the collider's object, as before.
+                Renderer renderer = solid is RaycastHit h ? h.collider.GetComponentInParent<Renderer>() : null;
+                if (renderer == null && body?.UserData is HplEntity owner) renderer = owner.GameObject.GetComponentInChildren<Renderer>();
+                if (renderer != null) { Line("Видимое", "не найдено лучом, модель по объекту коллизии"); DescribeRenderer(Line, renderer, -1); }
+                else Line("Видимое", "ничего ближе " + F(LookDistance) + " м");
+            }
+            if (unreadable.Count > 0)
+                Line("Без данных меша на луче (не проверены)", string.Join(", ", unreadable.Take(5).Select(r => HierarchyPath(r.transform))) + (unreadable.Count > 5 ? " ... ещё " + (unreadable.Count - 5) : ""));
+        }
+
+        static string Name(Material material) => material != null ? material.name : "нет";
+
+        /// <summary>The model, its HPL source and mesh, and the materials (the hit slot first, -1 — unknown).</summary>
+        static void DescribeRenderer(Action<string, object> Line, Renderer renderer, int slot)
+        {
+            Line("Модель", HierarchyPath(renderer.transform));
+            var entity = renderer.GetComponentInParent<AmnesiaEntity>();
+            AmnesiaRenderSources.TryFind(renderer, out string sourceMesh, out string sourceFile);
+            if (entity != null) Line("Источник HPL", "сущность " + entity.name + " (" + entity.file + ")");
+            else
+            {
+                // StaticObjects/<name>/...: the map's own object name.
+                Transform t = renderer.transform;
+                while (t.parent != null && t.parent.name != "StaticObjects" && t.parent.parent != null) t = t.parent;
+                bool isStatic = t.parent != null && t.parent.name == "StaticObjects";
+                Line("Источник HPL", (isStatic ? "статический объект " + t.name : "объект карты " + renderer.name) + (sourceFile != null ? " (" + sourceFile + ")" : ""));
+            }
+            var filter = renderer.GetComponent<MeshFilter>();
+            string mesh = renderer is SkinnedMeshRenderer skinned ? skinned.sharedMesh?.name : filter != null && filter.sharedMesh != null ? filter.sharedMesh.name : null;
+            if (HplEnhancedRelief.TryDescribe(filter, out bool detailed, out var original))
+                mesh = original.name + ", рельеф меша: " + (detailed ? "детальный" : "грубый") + " (" + mesh + ")";
+            else if (renderer.isPartOfStaticBatch) mesh = (sourceMesh ?? "?") + ", статический батч (" + mesh + ")";
+            else if (sourceMesh != null && sourceMesh != mesh) mesh = sourceMesh + " (" + mesh + ")";
+            Line("Меш", mesh ?? "нет");
+            var materials = renderer.sharedMaterials;
+            if (slot >= materials.Length) slot = materials.Length - 1;
+            if (slot >= 0)
+            {
+                var material = materials[slot];
+                Line("Материал (в точке)", Name(material) + " [слот " + slot + "]" + (material != null && material.HasProperty("_DoubleSidedEnable") && material.GetFloat("_DoubleSidedEnable") > 0 ? ", двусторонний" : ""));
+                var surface = HplEnhancedRelief.SurfaceMaterial(material);
+                var classic = HplEnhancedTextures.ClassicMaterial(surface);
+                Line("Классический материал", Name(classic) + (surface == classic ? " (в кадре)" : ""));
+                Line("Улучшенный материал", (HplEnhancedTextures.EnhancedName(classic) ?? "нет пары") + (surface != classic ? " (в кадре)" : ""));
+            }
+            var others = materials.Where((m, i) => i != slot && m != null).Select(m => m.name).ToArray();
+            if (others.Length > 0) Line(slot >= 0 ? "Остальные материалы" : "Материалы", string.Join(", ", others));
         }
 
         static void Enemies(StringBuilder sb, HplMap map, AmnesiaPlayer player)

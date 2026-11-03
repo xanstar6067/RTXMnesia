@@ -81,6 +81,17 @@ namespace RTXMnesia.Hpl
         public static int ActiveMeshCount => s_states.Count;
         public static Material SurfaceMaterial(Material material) => material != null && s_sources.TryGetValue(material, out var source) ? source : material;
 
+        /// <summary>Bug report: the relief mesh shown by this filter ("detailed" / "coarse") and its original; false — none.</summary>
+        public static bool TryDescribe(MeshFilter filter, out bool detailed, out Mesh original)
+        {
+            detailed = false; original = null;
+            if (filter == null || !s_states.TryGetValue(filter, out var state)) return false;
+            if (filter.sharedMesh != state.detailed && filter.sharedMesh != state.coarse) return false;
+            detailed = filter.sharedMesh == state.detailed;
+            original = state.entry.original;
+            return true;
+        }
+
         static void Initialize()
         {
             if (s_initialized) return;
