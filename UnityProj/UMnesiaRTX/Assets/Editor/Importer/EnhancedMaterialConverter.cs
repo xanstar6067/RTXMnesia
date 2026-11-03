@@ -244,19 +244,22 @@ namespace RTXMnesia.Importer
             material.CopyPropertiesFromMaterial(classic);
             material.name = Path.GetFileNameWithoutExtension(relative) + " PBRify";
             bool metal = (src.PhysicsMaterial ?? "").StartsWith("Metal", StringComparison.OrdinalIgnoreCase);
-            material.SetFloat("_MaterialID", metal ? classic.GetFloat("_MaterialID") : (float)MaterialId.LitStandard);
+            // Matte materials keep the classic specular too (F0 0.02 or the Specular map × 0.08, Specular Color workflow):
+            // on dark red cloth the HDRP dielectric F0 0.04 of a rough surface still greyed the colour with the window light.
+            bool matte = Matte(relative, src);
+            material.SetFloat("_MaterialID", metal || matte ? classic.GetFloat("_MaterialID") : (float)MaterialId.LitStandard);
             material.SetTexture("_BaseColorMap", textures[0]);
             material.SetTexture("_NormalMap", textures[1]);
             material.SetFloat("_NormalScale", 1f);
             material.SetTexture("_MaskMap", textures[2]);
-            if (!metal) material.SetTexture("_SpecularColorMap", null);
+            if (!metal && !matte) material.SetTexture("_SpecularColorMap", null);
             material.SetFloat("_Metallic", 0f);
             material.SetFloat("_MetallicRemapMin", 0f);
             material.SetFloat("_MetallicRemapMax", 0f);
             material.SetFloat("_AORemapMin", 1f);
             material.SetFloat("_AORemapMax", 1f);
             material.SetFloat("_SmoothnessRemapMin", 0f);
-            material.SetFloat("_SmoothnessRemapMax", Matte(relative, src) ? MatteSmoothnessMax : 1f);
+            material.SetFloat("_SmoothnessRemapMax", matte ? MatteSmoothnessMax : 1f);
             // Physics "Glass" also marks opaque window walls (castlebase_wall_win: stone around the panes); see-through glass is
             // not a Solid material and never gets here.
             bool useHeight = textures[3] != null && src.Texture("Height") != null && classic.GetFloat("_AlphaCutoffEnable") == 0;
