@@ -15,7 +15,8 @@ namespace RTXMnesia.Dev
     /// The [Взгляд] section of the bug report at the places of existing reports (EditorDev.BugReportTests.RunLookBatch):
     /// each report folder's save.sav is loaded and the section is written next to the one the report has, in
     /// Logs/BugReportLook.txt. Folders: -bugReports "dir1;dir2". With -lookShots <dir>: the view of each report in
-    /// classic / enhanced textures, without and with ray tracing (the saved RT levels), as PNG files there.
+    /// classic / enhanced textures, without and with ray tracing (the saved RT levels), as PNG files there; with also
+    /// -lookSeries <n>: n classic frames a quarter second of game time apart (effects that come and go).
     /// </summary>
     public sealed class HplBugReportLookProbe : MonoBehaviour
     {
@@ -89,6 +90,9 @@ namespace RTXMnesia.Dev
                 int shots = Array.IndexOf(args, "-lookShots");
                 if (shots >= 0 && shots + 1 < args.Length)
                     yield return Shots(map, Path.Combine(args[shots + 1], Path.GetFileName(folder)), result);
+                int series = Array.IndexOf(args, "-lookSeries");
+                if (shots >= 0 && shots + 1 < args.Length && series >= 0 && series + 1 < args.Length)
+                    yield return Series(map, Path.Combine(args[shots + 1], Path.GetFileName(folder)), int.Parse(args[series + 1]), result);
             }
         }
 
@@ -125,6 +129,43 @@ namespace RTXMnesia.Dev
                     Destroy(texture);
                     camera.targetTexture = previous;
                     result.AppendLine($"снимок {tag}: RT {HplRayTracing.Active}, отражения {HplRayTracing.Reflections}, GI {HplRayTracing.Gi}");
+                }
+            }
+            finally
+            {
+                camera.targetTexture = previous;
+                target.Release();
+                Destroy(target);
+                HplGraphics.Apply(saved);
+            }
+        }
+
+        /// <summary>A series of classic frames, a quarter second of game time apart: effects that come and go.</summary>
+        static IEnumerator Series(HplMap map, string prefix, int count, StringBuilder result)
+        {
+            var saved = HplUserSettings.ReadSaved();
+            var settings = saved.Copy();
+            settings.textures = 0;
+            settings.lighting = 0;
+            HplGraphics.Apply(settings);
+            var camera = map.PlayerCamera;
+            var target = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var previous = camera.targetTexture;
+            try
+            {
+                camera.targetTexture = target;
+                for (int i = 0; i < ShotFrames; i++) { camera.Render(); yield return null; }
+                for (int n = 0; n < count; n++)
+                {
+                    for (double end = Time.timeAsDouble + 0.25; Time.timeAsDouble < end;) { camera.Render(); yield return null; }
+                    var active = RenderTexture.active;
+                    RenderTexture.active = target;
+                    var texture = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
+                    texture.ReadPixels(new Rect(0, 0, ShotWidth, ShotHeight), 0, 0);
+                    RenderTexture.active = active;
+                    File.WriteAllBytes($"{prefix}_series_{n:00}.png", texture.EncodeToPNG());
+                    Destroy(texture);
+                    result.AppendLine($"кадр {n:00}: t {Time.timeAsDouble:0.00} с");
                 }
             }
             finally

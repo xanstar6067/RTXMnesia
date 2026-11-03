@@ -337,6 +337,7 @@ namespace RTXMnesia.ScriptApi
                 foreach (var r in GetComponentsInChildren<MeshRenderer>(true))
                     if (!IsTemplate(r.transform)) renderers.Add(r);
                 WaterReflection = HplWaterReflection.Create(renderers, transform);
+                TranslucentSort = HplTranslucentSort.Create(renderers, transform);
             }
             // Fake effects out of the ray tracing structure. Also done when a scene loads, but a map opened in the editor
             // before Play is not "loaded": its Mul decals stayed in, and path tracing drew them black on the floors.
@@ -350,6 +351,8 @@ namespace RTXMnesia.ScriptApi
 
         /// <summary>The water world reflection of this map (null: no such water or not in Play mode).</summary>
         public HplWaterReflection WaterReflection { get; private set; }
+        /// <summary>The large plane order of translucent objects (water, puddles: what lies on them is drawn after).</summary>
+        public HplTranslucentSort TranslucentSort { get; private set; }
 
         void AddEntity(HplEntity entity)
         {
