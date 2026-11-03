@@ -177,7 +177,7 @@ namespace RTXMnesia.Dev
 
         /// <summary>
         /// The HDR output path (HplScreenEffectsPass), forced in SDR: output size, not black, and the same way up as a
-        /// ScreenCapture of the same view when the batch editor gives one (the live display path is checked by hand).
+        /// ScreenCapture or ReadPixels reference of the same view (the live display path is checked by hand).
         /// </summary>
         IEnumerator PassCapture(HplMap map)
         {
@@ -203,16 +203,43 @@ namespace RTXMnesia.Dev
                 float peak = shot.GetPixels32().Max(c => Mathf.Max(c.r, Mathf.Max(c.g, c.b))) / 255f;
                 Check(peak > 0.25f, $"The pass screenshot is black: brightest {peak:0.000}, mean {grid.Average():0.000}");
                 Debug.Log($"[BugReportCheck] pass screenshot {shot.width}x{shot.height}, mean {grid.Average():0.000}, brightest {peak:0.000}, note '{pass.ScreenshotNote}'");
-                if (plain.Screenshot != null)
+                // The reference the right way up: ScreenCapture, or (batch editor: none) the same view rendered into a
+                // texture and read with ReadPixels, which orders rows as a Texture2D.
+                var reference = plain.Screenshot != null ? plain.Screenshot : RenderReference(map.PlayerCamera, shot.width, shot.height);
+                string source = plain.Screenshot != null ? "ScreenCapture" : "ReadPixels";
+                try
                 {
-                    float[] reference = Grid(plain.Screenshot);
-                    float same = Correlation(grid, reference), flipped = Correlation(Flip(grid), reference);
-                    Debug.Log($"[BugReportCheck] pass vs ScreenCapture: correlation {same:0.000}, flipped {flipped:0.000}");
-                    Check(same > flipped && same > 0.5f, $"The pass screenshot does not match ScreenCapture (correlation {same:0.000}, flipped {flipped:0.000})");
+                    float[] expected = Grid(reference);
+                    float same = Correlation(grid, expected), flipped = Correlation(Flip(grid), expected);
+                    Debug.Log($"[BugReportCheck] pass vs {source}: correlation {same:0.000}, flipped {flipped:0.000}");
+                    Check(same > flipped && same > 0.5f, $"The pass screenshot does not match {source} (correlation {same:0.000}, flipped {flipped:0.000})");
                 }
-                else Debug.Log("[BugReportCheck] no ScreenCapture reference in this run: orientation not compared");
+                finally { if (reference != plain.Screenshot) Destroy(reference); }
             }
             finally { plain.Dispose(); pass.Dispose(); }
+        }
+
+        static Texture2D RenderReference(Camera camera, int width, int height)
+        {
+            var target = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var previous = camera.targetTexture;
+            var active = RenderTexture.active;
+            try
+            {
+                camera.targetTexture = target;
+                camera.Render();
+                RenderTexture.active = target;
+                var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                texture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                texture.Apply(false);
+                return texture;
+            }
+            finally
+            {
+                camera.targetTexture = previous;
+                RenderTexture.active = active;
+                RenderTexture.ReleaseTemporary(target);
+            }
         }
 
         const int GridSize = 8;

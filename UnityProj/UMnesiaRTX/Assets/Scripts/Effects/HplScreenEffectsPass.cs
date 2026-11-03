@@ -146,12 +146,9 @@ namespace RTXMnesia.Effects
                 if (request.hasError) { done(null); return; }
                 var data = request.GetData<byte>();
                 var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
-                var pixels = texture.GetPixelData<byte>(0);
-                // The render target's first row is the top of the image where UVs start at the top (D3D, Vulkan, Metal).
-                int row = width * 4;
-                bool flip = SystemInfo.graphicsUVStartsAtTop;
-                for (int y = 0; y < height; y++)
-                    Unity.Collections.NativeArray<byte>.Copy(data, y * row, pixels, (flip ? height - 1 - y : y) * row, row);
+                // HDRP's camera buffers are already bottom row first (projection flipped where UVs start at the top),
+                // as a Texture2D: copied as they are.
+                texture.GetPixelData<byte>(0).CopyFrom(data);
                 texture.Apply(false);
                 done(texture);
             });
