@@ -45,7 +45,7 @@ namespace RTXMnesia.Importer
             string stem = Path.GetFileNameWithoutExtension(relative);
             var prepared = JsonUtility.FromJson<EnhancedMaterialConverter.PreparedMaps>(File.ReadAllText(AmnesiaPaths.ToAbsolute(
                 EnhancedMaterialConverter.Root + "/" + Path.ChangeExtension(relative, null) + "__prepared.json")));
-            var result = JsonUtility.FromJson<EnhancedMaterialConverter.BatchResult>(File.ReadAllText(prepared.result));
+            var result = JsonUtility.FromJson<EnhancedMaterialConverter.BatchResult>(File.ReadAllText(EnhancedMaterialConverter.RebaseRemix(prepared.result)));
             string stand = AmnesiaPaths.ImportedAssetsRoot + "/DevRoomRelief/" + stem;
             var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(stand + "_solid.asset");
             if (mesh == null) throw new InvalidOperationException("Build the approved relief stand first: " + stem);
@@ -66,7 +66,7 @@ namespace RTXMnesia.Importer
                     Mathf.Lerp(positions[(iy + 1) * size + ix].z, positions[(iy + 1) * size + ix + 1].z, x - ix), y - iy);
             };
             Directory.CreateDirectory(AmnesiaPaths.ToAbsolute(Root));
-            string source = Path.GetDirectoryName(prepared.result);
+            string source = Path.GetDirectoryName(EnhancedMaterialConverter.RebaseRemix(prepared.result));
             var normal = Read(Path.Combine(source, result.files.normal_ogl.file), result.files.normal_ogl.sha256, out int w, out int h);
             var roughness = Read(Path.Combine(source, result.files.roughness.file), result.files.roughness.sha256, out int rw, out int rh);
             if (w != rw || h != rh) throw new InvalidOperationException("Normal/roughness dimensions differ: " + relative);

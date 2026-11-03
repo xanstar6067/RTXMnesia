@@ -475,6 +475,7 @@ namespace RTXMnesia.Importer
             }
             foreach (var c in go.GetComponentsInChildren<Collider>(true))
                 if (c.enabled) c.sharedMaterial = StaticPhysicsMaterial(c);
+            HplMapFixes.Apply(_mapRelative, go, AddGenerated, _log);
             SetStatic(go);
             Count("static objects");
         }

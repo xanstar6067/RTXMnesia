@@ -134,8 +134,8 @@ namespace RTXMnesia.EditorDev
                 source = Save(source, Folder + "/" + stem + "_flat.asset");
                 string preparedPath = EnhancedMaterialConverter.Root + "/" + Path.ChangeExtension(relative, null) + "__prepared.json";
                 var prepared = JsonUtility.FromJson<EnhancedMaterialConverter.PreparedMaps>(File.ReadAllText(preparedPath));
-                var result = JsonUtility.FromJson<EnhancedMaterialConverter.BatchResult>(File.ReadAllText(prepared.result));
-                string heightFile = Path.Combine(Path.GetDirectoryName(prepared.result), result.files.height.file);
+                var result = JsonUtility.FromJson<EnhancedMaterialConverter.BatchResult>(File.ReadAllText(EnhancedMaterialConverter.RebaseRemix(prepared.result)));
+                string heightFile = Path.Combine(Path.GetDirectoryName(EnhancedMaterialConverter.RebaseRemix(prepared.result)), result.files.height.file);
                 byte[] bytes = File.ReadAllBytes(heightFile);
                 if (EnhancedReliefConverter.Hash(bytes) != result.files.height.sha256) throw new InvalidOperationException("Height hash mismatch: " + relative);
                 var height = new Texture2D(2, 2, TextureFormat.RGBA32, false, true) { wrapMode = TextureWrapMode.Repeat };
@@ -258,7 +258,7 @@ namespace RTXMnesia.EditorDev
         // represented by the mesh. Work in normal slopes, not sRGB colours or encoded RGB averages.
         static Texture2D MicroNormal(EnhancedMaterialConverter.PreparedMaps prepared, EnhancedMaterialConverter.BatchResult result, string stem, float uvWidth)
         {
-            byte[] bytes = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(prepared.result), result.files.normal_ogl.file));
+            byte[] bytes = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(EnhancedMaterialConverter.RebaseRemix(prepared.result)), result.files.normal_ogl.file));
             if (EnhancedReliefConverter.Hash(bytes) != result.files.normal_ogl.sha256) throw new InvalidOperationException("Normal hash mismatch: " + stem);
             var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
             string path = Folder + "/" + stem + "_micro_normal.png";
@@ -318,7 +318,7 @@ namespace RTXMnesia.EditorDev
         // and bevels become rough using the same coverage field that constructed the geometry.
         static Texture2D CavityMask(EnhancedMaterialConverter.PreparedMaps prepared, EnhancedMaterialConverter.BatchResult result, string stem, Mesh mesh, Vector2 lo, Vector2 hi, out Texture2D specular)
         {
-            byte[] bytes = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(prepared.result), result.files.roughness.file));
+            byte[] bytes = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(EnhancedMaterialConverter.RebaseRemix(prepared.result)), result.files.roughness.file));
             if (EnhancedReliefConverter.Hash(bytes) != result.files.roughness.sha256) throw new InvalidOperationException("Roughness hash mismatch: " + stem);
             var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
             string path = Folder + "/" + stem + "_cavity_mask.png";

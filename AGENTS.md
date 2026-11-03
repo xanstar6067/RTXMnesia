@@ -73,7 +73,7 @@
 | `Resources.md` | ресурсы игры и их форматы (.mat/.ent/.map/.hps), структура `src/`, ключевые факты |
 | `Plan.md` | полный план этапов с датами и решения пользователя |
 | `Importers.md` | импортёры: ResourceIndex, текстуры, материалы, модели, кэш .msh, оси, Z_UP, декали Mul, вода (материал), .ent |
-| `LevelImport.md` | LevelConverter: StaticObject/Entity/Area/свет/box-свет/билборды/туман областей/окружение, PlayerStart |
+| `LevelImport.md` | LevelConverter: StaticObject/Entity/Area/свет/box-свет/билборды/туман областей/окружение, PlayerStart, правки карт (отступления: обрезка объектов) |
 | `Player.md` | игрок: `HplCharacterBody`, `AmnesiaPlayer`, состояния и взаимодействие, лестницы |
 | `PhysicsProps.md` | физика Newton→PhysX, джоинты, пропы (`PropFactory`), звуки пропов, факелы и лампы |
 | `SoundParticles.md` | звук и музыка, частицы |

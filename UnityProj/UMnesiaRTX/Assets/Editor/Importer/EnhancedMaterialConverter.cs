@@ -142,7 +142,7 @@ namespace RTXMnesia.Importer
             {
                 var prepared = JsonUtility.FromJson<PreparedMaps>(File.ReadAllText(preparedPath));
                 bool signatureMatches = (!string.IsNullOrEmpty(prepared.sourceSignature) && prepared.sourceSignature == hashes) || (string.IsNullOrEmpty(prepared.sourceSignature) &&
-                    prepared.signature == Hash(Under(RemixRoot, Path.GetRelativePath(RemixRoot, prepared.result))) + "|dds-pbrify-v3");
+                    prepared.signature == Hash(Under(RemixRoot, Path.GetRelativePath(RemixRoot, RebaseRemix(prepared.result)))) + "|dds-pbrify-v3");
                 if (!signatureMatches || !(prepared.signature ?? "").EndsWith("|dds-pbrify-v3", StringComparison.Ordinal) ||
                     prepared.files == null || prepared.files.Length != 4 || prepared.width != size[0] || prepared.height != size[1])
                     throw new InvalidOperationException("Prepared DDS out of date; run tools/Prepare-EnhancedTextures.py: " + textureStem);
@@ -218,6 +218,15 @@ namespace RTXMnesia.Importer
             string normalized = file.Replace('\\', '/');
             int at = normalized.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
             return at < 0 ? file : AmnesiaPaths.ToAbsolute(Root + "/" + normalized.Substring(at + marker.Length));
+        }
+
+        /// <summary>A PBRify result path written in another checkout of the project: the same file under this sourceRTXRemix.</summary>
+        public static string RebaseRemix(string file)
+        {
+            const string marker = "/sourceRTXRemix/";
+            string normalized = file.Replace('\\', '/');
+            int at = normalized.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            return at < 0 ? file : Path.Combine(RemixRoot, normalized.Substring(at + marker.Length));
         }
 
         static void BuildMaterial(string relative, Texture2D[] textures)

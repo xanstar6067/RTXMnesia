@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -16,7 +17,8 @@ namespace RTXMnesia.Dev
     /// each report folder's save.sav is loaded and the section is written next to the one the report has, in
     /// Logs/BugReportLook.txt. Folders: -bugReports "dir1;dir2". With -lookShots <dir>: the view of each report in
     /// classic / enhanced textures, without and with ray tracing (the saved RT levels), as PNG files there; with also
-    /// -lookSeries <n>: n classic frames a quarter second of game time apart (effects that come and go).
+    /// -lookSeries <n>: n classic frames a quarter second of game time apart (effects that come and go). With
+    /// -lookRays "u,v;u,v": the visible hits along rays through those points of the frame (0..1, from the bottom left).
     /// </summary>
     public sealed class HplBugReportLookProbe : MonoBehaviour
     {
@@ -86,6 +88,19 @@ namespace RTXMnesia.Dev
                 result.AppendLine("-- все видимые попадания луча:");
                 foreach (var hit in HplVisibleHit.Cast(ray, 100, map.gameObject.scene, camera.cullingMask, map.player.Hands?.Root, null).Take(8))
                     result.AppendLine($"{hit.distance:0.000} м {hit.renderer.name} ({hit.renderer.transform.parent?.name}) слот {hit.slot} {(hit.Transparent ? "прозрачное" : "")} {(hit.backFace ? "обратная сторона" : "")}");
+                int rays = Array.IndexOf(args, "-lookRays");
+                camera.aspect = (float)ShotWidth / ShotHeight;
+                if (rays >= 0 && rays + 1 < args.Length)
+                    foreach (string uv in args[rays + 1].Split(';').Where(t => t.Length > 0))
+                    {
+                        // A point of the frame (0..1 from the bottom left, as the shots' pixels / size with y flipped).
+                        var parts = uv.Split(',');
+                        var point = new Vector3(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
+                        result.AppendLine($"-- луч через точку кадра {point.x:0.000} {point.y:0.000}:");
+                        foreach (var hit in HplVisibleHit.Cast(camera.ViewportPointToRay(point), 100, map.gameObject.scene, camera.cullingMask, map.player.Hands?.Root, null).Take(6))
+                            result.AppendLine($"{hit.distance:0.000} м {hit.renderer.name} ({hit.renderer.transform.parent?.name}) слот {hit.slot} точка HPL {HplSpace.Position(hit.point).ToString("0.000")} {(hit.Transparent ? "прозрачное" : "")} {(hit.backFace ? "обратная сторона" : "")}");
+                    }
+                camera.ResetAspect();
                 report.Dispose();
                 int shots = Array.IndexOf(args, "-lookShots");
                 if (shots >= 0 && shots + 1 < args.Length)
