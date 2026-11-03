@@ -150,7 +150,7 @@ namespace RTXMnesia.Importer
                 for (int i = 0; i < native.Length; i++)
                 {
                     if (string.IsNullOrEmpty(prepared.files[i])) continue;
-                    string absolute = Under(AmnesiaPaths.ToAbsolute(Root), Path.GetRelativePath(AmnesiaPaths.ToAbsolute(Root), prepared.files[i]));
+                    string absolute = Under(AmnesiaPaths.ToAbsolute(Root), Path.GetRelativePath(AmnesiaPaths.ToAbsolute(Root), Rebase(prepared.files[i])));
                     string path = Root + "/" + Path.GetRelativePath(AmnesiaPaths.ToAbsolute(Root), absolute).Replace('\\', '/');
                     var importer = AssetImporter.GetAtPath(path) as IHVImageFormatImporter;
                     if (importer == null) throw new InvalidOperationException("Expected native DDS importer: " + path);
@@ -211,6 +211,15 @@ namespace RTXMnesia.Importer
             foreach (string relative in materials) BuildMaterial(relative, textures);
         }
 
+        /// <summary>A prepared DDS path written in another checkout of the project: the same file under this Root.</summary>
+        static string Rebase(string file)
+        {
+            string marker = "/" + Root.Replace('\\', '/') + "/";
+            string normalized = file.Replace('\\', '/');
+            int at = normalized.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            return at < 0 ? file : AmnesiaPaths.ToAbsolute(Root + "/" + normalized.Substring(at + marker.Length));
+        }
+
         static void BuildMaterial(string relative, Texture2D[] textures)
         {
             var classic = AssetDatabase.LoadAssetAtPath<Material>(AmnesiaPaths.MaterialsRoot + "/" + relative);
@@ -247,7 +256,7 @@ namespace RTXMnesia.Importer
             material.SetFloat("_AORemapMin", 1f);
             material.SetFloat("_AORemapMax", 1f);
             material.SetFloat("_SmoothnessRemapMin", 0f);
-            material.SetFloat("_SmoothnessRemapMax", 1f);
+            material.SetFloat("_SmoothnessRemapMax", Matte(relative, src) ? MatteSmoothnessMax : 1f);
             // Physics "Glass" also marks opaque window walls (castlebase_wall_win: stone around the panes); see-through glass is
             // not a Solid material and never gets here.
             bool useHeight = textures[3] != null && src.Texture("Height") != null && classic.GetFloat("_AlphaCutoffEnable") == 0;
@@ -274,6 +283,26 @@ namespace RTXMnesia.Importer
             entries.Add(new HplTextureSet.Entry { classic = classic, enhancedResource = "HplEnhancedMaterials/" + Path.ChangeExtension(relative, null).Replace('\\', '/') });
             catalog.entries = entries.ToArray();
             EditorUtility.SetDirty(catalog);
+        }
+
+        /// <summary>
+        /// PBRify smoothness of a matte HPL material scaled to the classic level, its spread kept: classic HPL has no
+        /// highlights without a Specular map (MaterialConverter: smoothness 0.2), and its fabrics are matte even with one
+        /// (banners, curtain02, beds: F0 ~0.002, smoothness ~0.17). PBRify gives them 0.45–0.75 (docs/EnhancedTextures.md,
+        /// «Матовые материалы»): curtains and carpets shone like plastic.
+        /// </summary>
+        public const float MatteSmoothnessMax = 0.35f;
+        static readonly string[] FabricNames = { "curtain", "carpet", "banner", "cloth", "bed_", "mattress", "sack", "bag_small", "bag02", "rope_pile", "shirt" };
+
+        public static bool Matte(string relative, AmnesiaMaterial src)
+        {
+            string physics = src.PhysicsMaterial ?? "";
+            if (physics.StartsWith("Generic_Soft", StringComparison.OrdinalIgnoreCase)) return true;
+            string name = Path.GetFileNameWithoutExtension(relative);
+            if (FabricNames.Any(n => name.Contains(n, StringComparison.OrdinalIgnoreCase))) return true;
+            // Without a Specular map: all but glass panes and wet surfaces, which keep the PBRify gloss.
+            return src.Texture("Specular") == null && !physics.StartsWith("Glass", StringComparison.OrdinalIgnoreCase) &&
+                   !physics.StartsWith("Metal", StringComparison.OrdinalIgnoreCase) && !physics.EndsWith("_Water", StringComparison.OrdinalIgnoreCase);
         }
 
         static Texture2D Read(string path)
