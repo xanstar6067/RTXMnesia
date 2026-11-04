@@ -410,7 +410,17 @@
     {
       "name": "PointLight_43",
       "note": "Retain small candle-cluster / warm navigation accent unchanged. Point 28 is authored inactive and must stay inactive; points 29/41/43 are the direct shared glow of no_light candle groups."
-    }
+    },
+    {"name": "PointLight_21", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 99% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_23", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 99% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_20", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_6", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 80% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_22", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 98% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_2", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 98% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_24", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 88% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_20", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 99% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_9", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 96% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_19", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 80% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {

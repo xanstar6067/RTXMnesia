@@ -637,7 +637,8 @@
       "intensity": "0.6",
       "shadows": "off",
       "note": "Detached bounce / room fill is replaced by real lamp flames and aperture light with RTGI or SSGI. Keep weaker navigation fill without GI; preserve original colors and all lamp connections, including initially dark chase torches."
-    }
+    },
+    {"name": "PointLight_34", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {

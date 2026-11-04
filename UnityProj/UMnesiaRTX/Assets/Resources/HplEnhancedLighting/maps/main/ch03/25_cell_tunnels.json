@@ -120,7 +120,11 @@
     {"name": "PointLight_78", "note": "Keep authored guardian red wave / blue reset, cell ending, puzzle or item accent at full strength. Colours, radii and continuing fades are story state, not disposable GI fill."},
     {"name": "PointLight_79", "note": "Keep authored guardian red wave / blue reset, cell ending, puzzle or item accent at full strength. Colours, radii and continuing fades are story state, not disposable GI fill."},
     {"name": "PointLight_80", "note": "Keep authored guardian red wave / blue reset, cell ending, puzzle or item accent at full strength. Colours, radii and continuing fades are story state, not disposable GI fill."},
-    {"name": "PointLight_81", "note": "Keep authored guardian red wave / blue reset, cell ending, puzzle or item accent at full strength. Colours, radii and continuing fades are story state, not disposable GI fill."}
+    {"name": "PointLight_81", "note": "Keep authored guardian red wave / blue reset, cell ending, puzzle or item accent at full strength. Colours, radii and continuing fades are story state, not disposable GI fill."},
+    {"name": "SpotLight_19", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_21", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_18", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_20", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {"name": "Sky_cell_window_1", "type": "rect", "position": "0.031945 20.7 -6.5", "target": "0.031945 16 -6.5", "size": "1.7 1.7", "color": "0.55 0.65 0.85", "intensity": "150", "range": "28", "shadows": "on", "note": "Measured high window: source below glass at local y4.7 of ceiling model at y16. Stone shaft and original grating cast real shadows. No specular."},

@@ -80,7 +80,8 @@
     {"name": "PointLight_36", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Room/lamp fill, including initially black ConnectedLight targets. Preserve original lamp colours and radius. Weaker original fill without RTGI."},
     {"name": "SpotLight_8", "intensity": "0", "note": "Detached torch/candle cone or old roof-hole projector. Real flame lights and measured roof apertures supply direct light. Preserve original shadow flag, pose, colour and gameplay frustum."},
     {"name": "PointLight_37", "intensity": "0.7", "shadows": "off", "note": "Weak original navigation ambience in a windowless side passage/cell, often with extinguished lamps. Retain in both GI modes; no invented permanent fire or sky source."},
-    {"name": "PointLight_38", "note": "Scripted checkpoint/Grunt flash, warm torch scare accent or cell reveal. Preserve original HDRP brightness and every colour/radius/visibility fade, also with RTGI."}
+    {"name": "PointLight_38", "note": "Scripted checkpoint/Grunt flash, warm torch scare accent or cell reveal. Preserve original HDRP brightness and every colour/radius/visibility fade, also with RTGI."},
+    {"name": "PointLight_6", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {"name": "Sky_CellRoof", "type": "rect", "position": "30.219 5.8 16.95", "target": "30.219 0.36 19.49", "size": "0.45 1.3", "color": "0.55 0.65 0.78", "intensity": "110", "range": "14", "shadows": "on", "specular": "off", "note": "Concave broken ceiling at (30.25,4,16.5). Mesh pPlaneShape13 inner opening x[-0.299204,0.237186], y[1.07726,2.50124], z[-0.428596,1.24303]; narrow tilted area aligned with the original downward/inward aperture direction."},

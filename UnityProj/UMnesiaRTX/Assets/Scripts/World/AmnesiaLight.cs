@@ -77,6 +77,12 @@ namespace RTXMnesia.World
         [System.NonSerialized] public float tracedSourceRadius = -1f;
         /// <summary>A fill light: never ray-traced shadows, also not by "shadows from all lights".</summary>
         [System.NonSerialized] public bool noTracedShadows;
+        /// <summary>
+        /// A fill light of the enhanced lighting with a shadow map of the map's level geometry only (walls, floors):
+        /// it does not light the next room through a wall, props cast no shadow from its imaginary point.
+        /// <see cref="castShadows"/> stays false (light level, ray-traced slots).
+        /// </summary>
+        [System.NonSerialized] public bool geometryShadows;
         /// <summary>A light the enhanced lighting added: drawn only, no light level.</summary>
         [System.NonSerialized] public bool enhancedAdded;
         /// <summary>The map's local pose while the enhanced lighting moves the light (the light level is measured from it; it follows a swinging parent).</summary>

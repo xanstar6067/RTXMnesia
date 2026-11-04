@@ -83,6 +83,11 @@ namespace RTXMnesia.World
             public string range;
             /// <summary>"on", "off" (a fill light: no shadows, also no ray-traced ones) or "" (unchanged / off for added lights).</summary>
             public string shadows;
+            /// <summary>
+            /// "off": a fill light keeps no shadows at all, also not of the level geometry (GeometryShadows): it stands
+            /// behind the geometry it lights (a water projector under the floor, a light above the ceiling).
+            /// </summary>
+            public string geometryShadows;
             /// <summary>The source radius of soft (ray-traced) shadows, m.</summary>
             public string sourceRadius;
             /// <summary>
@@ -108,6 +113,9 @@ namespace RTXMnesia.World
             public ShadowUpdateMode updateMode;
             public float normalBias, slopeBias, nearPlane, shapeRadius;
             public bool contactOverride, contactUsesOverride;
+            public bool linkShadowLayers = true, shadowLevelOverride;
+            public uint lightLayers = HplLighting.LightLayersMask;
+            public int renderingLayerMask = -1, shadowLevel = -1;
         }
 
         static HplMap s_map;
@@ -162,6 +170,8 @@ namespace RTXMnesia.World
         public static bool Applied { get; private set; }
         /// <summary>Lights of the map changed and lights added (checks).</summary>
         public static int ChangedLights => s_changed.Count;
+        /// <summary>Fill lights with shadows of the level geometry only (GeometryShadows).</summary>
+        public static int GeometryShadowLights => new HashSet<AmnesiaLight>(s_changed.FindAll(c => c.light != null && c.light.geometryShadows).ConvertAll(c => c.light)).Count;
         public static int AddedLights => s_addedRoot != null ? s_addedRoot.transform.childCount : 0;
         /// <summary>Candle meshes whose wax was given the translucent material (checks).</summary>
         public static int WaxCandles => s_wax.Count;
@@ -239,8 +249,53 @@ namespace RTXMnesia.World
             if (s_overlay.add != null)
                 foreach (var e in s_overlay.add)
                     if (When(e.when)) Add(e);
+            GeometryShadows();
             ConfigureShadowMaps();
             HplRayTracing.Reselect();
+        }
+
+        /// <summary>Debug: off keeps the fill lights without shadows (HplEnhancedLightingProbe mode "nogeo").</summary>
+        public static bool FillGeometryShadows = true;
+
+        /// <summary>
+        /// The fill lights of the map (its own lights without CastShadows, also those the overlay keeps without shadows)
+        /// get a low resolution shadow map that only the level geometry casts (StaticObjects, Primitives: shadow layers).
+        /// HPL2's fill light went through walls: a torch's connected light (01_old_archives extra_3, 4 m) or the hall's
+        /// LightOff_3 lit the faces of a pillar in the next room that turn to the hall (a bright strip on its narrow
+        /// face). Props cast no shadow from the fill's imaginary point; the light level and the ray-traced slots are
+        /// unchanged (castShadows stays false).
+        /// </summary>
+        static void GeometryShadows()
+        {
+            if (!FillGeometryShadows) return;
+            var through = new HashSet<string>(StringComparer.Ordinal);
+            if (s_overlay.lights != null)
+                foreach (var e in s_overlay.lights)
+                    if (When(e.when) && (e.geometryShadows ?? "").Trim().ToLowerInvariant() == "off") through.Add(e.name);
+            foreach (string group in new[] { "StaticObjects", "Primitives" })
+                if (s_map.transform.Find(group) is { } root)
+                    foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
+                        r.renderingLayerMask |= HplLighting.MapGeometryLayerMask;
+            foreach (var light in s_map.GetComponentsInChildren<AmnesiaLight>(true))
+            {
+                if (light.box || light.handHeld || light.castShadows || light.enhancedAdded || s_map.GetLight(light.name) != light) continue;
+                if (through.Contains(light.name) || light.GetComponentInParent<AmnesiaEntity>(true) != null) continue;
+                if (!light.TryGetComponent(out Light unityLight) || !light.TryGetComponent(out HDAdditionalLightData hd)) continue;
+                if (unityLight.type is not (LightType.Point or LightType.Spot or LightType.Pyramid)) continue;
+                if (!s_changed.Exists(c => c.light == light)) Record(light);
+                light.geometryShadows = true;
+                uint layers = HplLighting.GetLightLayers(unityLight);
+                hd.linkShadowLayers = false;
+                hd.lightlayersMask = (UnityEngine.Rendering.HighDefinition.RenderingLayerMask)layers;
+                unityLight.renderingLayerMask = (int)HplLighting.MapGeometryLayerMask;
+                hd.shadowUpdateMode = ShadowUpdateMode.EveryFrame;
+                hd.normalBias = ShadowNormalBias;
+                hd.slopeBias = ShadowSlopeBias;
+                hd.shadowNearPlane = ShadowNearPlane;
+                hd.SetShadowResolutionOverride(false);
+                hd.SetShadowResolutionLevel(0);
+                HplGraphics.ApplyShadows(light);
+            }
         }
 
         /// <summary>
@@ -251,7 +306,8 @@ namespace RTXMnesia.World
         /// chandelier), its reach grows by the distance moved, the flame's size makes the shadow soft, and lamps
         /// always cast shadows (low resolution shadow maps; ray traced when there is a slot).
         /// Fill lights — lights of the map itself (not of an entity) without CastShadows are fill light without a
-        /// source: no shadows, also not by "shadows from all lights", so the ray-traced slots go to real sources.
+        /// source: no ray-traced shadows, also not by "shadows from all lights", so the ray-traced slots go to real
+        /// sources; only the level geometry casts their shadows (GeometryShadows, after the overlay).
         /// </summary>
         static void ApplyRules()
         {
@@ -570,6 +626,11 @@ namespace RTXMnesia.World
                 shapeRadius = unityLight != null ? unityLight.shapeRadius : 0f,
                 contactUsesOverride = hd != null && hd.useContactShadow.useOverride,
                 contactOverride = hd != null && hd.useContactShadow.@override,
+                linkShadowLayers = hd == null || hd.linkShadowLayers,
+                lightLayers = unityLight != null ? HplLighting.GetLightLayers(unityLight) : HplLighting.LightLayersMask,
+                renderingLayerMask = unityLight != null ? unityLight.renderingLayerMask : -1,
+                shadowLevel = hd != null ? hd.shadowResolution.level : -1,
+                shadowLevelOverride = hd != null && hd.shadowResolution.useOverride,
             };
             s_changed.Add(record);
             return record;
@@ -747,7 +808,17 @@ namespace RTXMnesia.World
                     hd.slopeBias = r.slopeBias;
                     hd.shadowNearPlane = r.nearPlane;
                     hd.affectSpecular = r.affectSpecular;
+                    if (light.geometryShadows)
+                    {
+                        // Linked first: setting the light layers then writes the shadow layers back as well.
+                        hd.linkShadowLayers = r.linkShadowLayers;
+                        hd.lightlayersMask = (UnityEngine.Rendering.HighDefinition.RenderingLayerMask)r.lightLayers;
+                        if (unityLight != null && r.renderingLayerMask != -1) unityLight.renderingLayerMask = r.renderingLayerMask;
+                        if (r.shadowLevel >= 0) hd.SetShadowResolutionLevel(r.shadowLevel);
+                        hd.SetShadowResolutionOverride(r.shadowLevelOverride);
+                    }
                 }
+                light.geometryShadows = false;
                 HplGraphics.ApplyShadows(light);
                 light.Apply(light.CurrentColor, light.CurrentRadius);
             }

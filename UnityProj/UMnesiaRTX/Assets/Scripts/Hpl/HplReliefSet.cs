@@ -323,6 +323,21 @@ namespace RTXMnesia.Hpl
             return true;
         }
 
+        /// <summary>Debug (probe mode "walls"): the relief growth past the original bounds per local axis and the back plane found.</summary>
+        public static string DescribeWall(MeshFilter filter)
+        {
+            if (filter == null || !s_states.TryGetValue(filter, out var state)) return "no relief";
+            Bounds original = state.entry.original.bounds, relief = state.coarse.bounds;
+            if (state.detailed != null) relief.Encapsulate(state.detailed.bounds);
+            var text = new System.Text.StringBuilder();
+            for (int k = 0; k < 3; k++)
+                text.Append($"{"xyz"[k]} -{original.min[k] - relief.min[k]:0.0000}/+{relief.max[k] - original.max[k]:0.0000} ");
+            bool found = BackPlane(state, out var normal, out float plane, out float depth);
+            bool lifted = s_lifts.Exists(l => l.transform == state.renderer.transform);
+            text.Append(found ? $"back n={normal:F3} d={plane:0.0000} depth={depth:0.0000}" : "no back plane").Append(lifted ? " lifted" : "");
+            return text.ToString();
+        }
+
         static void RestoreLifts()
         {
             foreach (var (transform, position) in s_lifts)

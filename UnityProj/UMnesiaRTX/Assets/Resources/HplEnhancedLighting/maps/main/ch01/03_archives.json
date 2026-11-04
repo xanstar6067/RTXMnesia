@@ -88,7 +88,8 @@
     {"name": "PointLight_6", "note": "Exterior backdrop fill outside the playable mansion: preserved until exterior sky/environment rework."},
     {"name": "PointLight_7", "note": "Exterior backdrop fill outside the playable mansion: preserved until exterior sky/environment rework."},
     {"name": "PointLight_30", "note": "Script-controlled blue light: preserve colour/radius/intensity and the story fade to black."},
-    {"name": "OrbLight", "note": "Supernatural orb flashback light: preserve script radius 0..20, colour changes and flicker."}
+    {"name": "OrbLight", "note": "Supernatural orb flashback light: preserve script radius 0..20, colour changes and flicker."},
+    {"name": "PointLight_41", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 68% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {"name": "Sky_wall_window_blue_7", "type": "rect", "position": "44.1750 2.4470 -5.2040", "target": "44.1750 2.4470 2.7960", "size": "2.05 1.8", "color": "0.6 0.7 0.66", "intensity": "90", "range": "14", "shadows": "on", "note": "Sky from the actual mansion window glass (DAE bounds and map rotation); broad light replaces a local cone and supports rooms with unlit lamps."},

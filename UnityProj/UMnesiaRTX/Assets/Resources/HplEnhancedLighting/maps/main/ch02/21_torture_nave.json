@@ -137,7 +137,9 @@
     {"name": "light_prison_1", "note": "Original scripted red cell-door pulse: .2 s to (.9,.15,.05,1), .4 s back to black. Preserve drawing, fades and gameplay light; this is a horror accent, not room bounce."},
     {"name": "light_prison_2", "note": "Original scripted red cell-door pulse: .2 s to (.9,.15,.05,1), .4 s back to black. Preserve drawing, fades and gameplay light; this is a horror accent, not room bounce."},
     {"name": "light_prison_3", "note": "Original scripted red cell-door pulse: .2 s to (.9,.15,.05,1), .4 s back to black. Preserve drawing, fades and gameplay light; this is a horror accent, not room bounce."},
-    {"name": "light_prison_4", "note": "Original scripted red cell-door pulse: .2 s to (.9,.15,.05,1), .4 s back to black. Preserve drawing, fades and gameplay light; this is a horror accent, not room bounce."}
+    {"name": "light_prison_4", "note": "Original scripted red cell-door pulse: .2 s to (.9,.15,.05,1), .4 s back to black. Preserve drawing, fades and gameplay light; this is a horror accent, not room bounce."},
+    {"name": "PointLight_9", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 98% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_34", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 59% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {"name": "Sky_spiral_roof_shaft", "type": "rect", "position": "20.85712 33.98 53.18544", "target": "20.85715 24 53.18547", "size": "0.16 1.1", "color": "0.55 0.65 0.78", "intensity": "150", "range": "24", "shadows": "on", "specular": "off", "note": "Upper aperture of ceiling_default_broken02_1 at (20.75,28,53.25), including its full Euler transform. Six-metre damaged shaft, upper local x[-.359,.145], z[-.898,1.027], y5.8..5.916. Sky at local y5.98 is below black Plane_17 at y34.75; masonry/rocks clip the beam. The covered laboratory hole and wells are indoor connections, not sky openings. No rectangular specular highlight."}

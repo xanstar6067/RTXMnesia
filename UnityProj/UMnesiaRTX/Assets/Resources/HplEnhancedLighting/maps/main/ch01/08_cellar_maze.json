@@ -63,7 +63,20 @@
     {"name": "SpotLight_15", "note": "Original water-caustic projector below the water. Preserve animated gobo, colour, intensity, radius and direction; this deliberate water effect is not ordinary room fill. Remains without shadows."},
     {"name": "SpotLight_18", "note": "Original water-caustic projector below the water. Preserve animated gobo, colour, intensity, radius and direction; this deliberate water effect is not ordinary room fill. Remains without shadows."},
     {"name": "SpotLight_22", "note": "Original water-caustic projector below the water. Preserve animated gobo, colour, intensity, radius and direction; this deliberate water effect is not ordinary room fill. Remains without shadows."},
-    {"name": "SpotLight_6", "note": "Red gobo beam from the organic blocked branch, aimed along the passage rather than from a sky opening. Preserve this supernatural accent, including its shadow flag and gameplay frustum."}
+    {"name": "SpotLight_6", "note": "Red gobo beam from the organic blocked branch, aimed along the passage rather than from a sky opening. Preserve this supernatural accent, including its shadow flag and gameplay frustum."},
+    {"name": "SpotLight_15", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 89% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_31", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 98% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_5", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 98% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_32", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 75% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_14", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 85% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_22", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 89% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_18", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 76% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_11", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 90% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_7", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 96% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_37", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 87% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_1", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 98% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_30", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 99% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_33", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 77% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {"name": "Sky_WestRoof", "type": "rect", "position": "-31.75 7 -3.75", "target": "-31.75 0 -3.75", "size": "1.5 2.2", "color": "1 1 0.8", "intensity": "110", "range": "14", "shadows": "on", "note": "Roof well bounded by rock hole pieces at y6.25, above broken boards and planks at y6.25-6.5. Light enters through the boards instead of starting below them."},

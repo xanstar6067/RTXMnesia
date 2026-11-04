@@ -132,7 +132,7 @@ namespace RTXMnesia.World
             if (hd != null)
             {
                 hd.useContactShadow.useOverride = true;
-                hd.useContactShadow.@override = Contact && shadowed && !light.handHeld && light.GetComponentInParent<AmnesiaEntity>(true) == null;
+                hd.useContactShadow.@override = Contact && shadowed && !light.handHeld && !light.geometryShadows && light.GetComponentInParent<AmnesiaEntity>(true) == null;
             }
         }
     }

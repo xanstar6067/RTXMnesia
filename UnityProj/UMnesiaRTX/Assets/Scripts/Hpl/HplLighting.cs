@@ -35,6 +35,12 @@ namespace RTXMnesia.Hpl
         /// <summary>Rendering layer of lit candle wax in the enhanced lighting: the light inside the candle lights only it.</summary>
         public const int WaxRenderingLayer = 6;
         public const uint WaxLayerMask = 1u << WaxRenderingLayer;
+        /// <summary>
+        /// Rendering layer of the map's level geometry (StaticObjects, Primitives) in the enhanced lighting: the fill
+        /// lights' shadow maps take only it (shadow layers, HplEnhancedLighting.GeometryShadows).
+        /// </summary>
+        public const int MapGeometryRenderingLayer = 5;
+        public const uint MapGeometryLayerMask = 1u << MapGeometryRenderingLayer;
         /// <summary>The rendering layers HDRP uses for light layers (the low 8; the others are shadow / decal layers).</summary>
         public const uint LightLayersMask = 0xFFu;
 

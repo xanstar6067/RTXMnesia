@@ -181,7 +181,14 @@ namespace RTXMnesia.Hpl
         /// </summary>
         public static void ApplyShadows(AmnesiaLight light)
         {
-            if (!Application.isPlaying || light == null || !light.castShadows) return;
+            if (!Application.isPlaying || light == null) return;
+            if (!light.castShadows)
+            {
+                // A fill light's shadows of the level geometry (enhanced lighting) follow only Off.
+                if (light.geometryShadows && light.TryGetComponent(out Light fill))
+                    fill.shadows = Shadows == ShadowsOff ? LightShadows.None : LightShadows.Soft;
+                return;
+            }
             var unityLight = light.GetComponent<Light>();
             var hd = light.GetComponent<HDAdditionalLightData>();
             if (unityLight == null) return;

@@ -62,7 +62,8 @@
     {"name": "LoftLight_1", "note": "Legacy supernatural loft light, initially radius zero. The original trigger is disabled, but keep the named light, radius 0/7 animation, shadows and colour unchanged."},
     {"name": "LoftLight_2", "note": "Legacy supernatural loft light, initially radius zero. The original trigger is disabled, but keep the named light, radius 0/7 animation, shadows and colour unchanged."},
     {"name": "LoftLight_3", "note": "Legacy supernatural loft light, initially radius zero. The original trigger is disabled, but keep the named light, radius 0/7 animation, shadows and colour unchanged."},
-    {"name": "LoftLight_4", "note": "Legacy supernatural loft light, initially radius zero. The original trigger is disabled, but keep the named light, radius 0/7 animation, shadows and colour unchanged."}
+    {"name": "LoftLight_4", "note": "Legacy supernatural loft light, initially radius zero. The original trigger is disabled, but keep the named light, radius 0/7 animation, shadows and colour unchanged."},
+    {"name": "SpotLight_1", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 100% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {"name": "Sky_wall_window02_extension_blue_1", "type": "rect", "position": "12.0578 2.6162 7.7500", "target": "6.4304 0.5346 7.7500", "size": "1.87 1.11", "color": "0.55 0.6 0.8", "intensity": "110", "range": "16", "shadows": "on", "note": "Sky at the actual tilted glass inside the cellar light well. DAE alpha-glass plane pPlane2 (extension, tilt 20.3 degrees) or pPlane9 (normal, tilt 32 degrees), transformed by the map rotation. Source is 25 cm toward the room; masonry limits its reach."},

@@ -51,7 +51,9 @@
     {"name": "PointLight_27", "when": "gi", "intensity": "0", "shadows": "off", "note": "Warm room/lamp fill, including initially black ConnectedLight targets. Preserve lamp ignition contributions. Real lanterns/burner and RTGI replace this synthetic bounce; original basement box ambience remains for navigation."},
     {"name": "PointLight_27", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Warm room/lamp fill, including initially black ConnectedLight targets. Preserve lamp ignition contributions. Weaker original fill without RTGI, following the lamp state."},
     {"name": "PointLight_28", "when": "gi", "intensity": "0", "shadows": "off", "note": "Warm room/lamp fill, including initially black ConnectedLight targets. Preserve lamp ignition contributions. Real lanterns/burner and RTGI replace this synthetic bounce; original basement box ambience remains for navigation."},
-    {"name": "PointLight_28", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Warm room/lamp fill, including initially black ConnectedLight targets. Preserve lamp ignition contributions. Weaker original fill without RTGI, following the lamp state."}
+    {"name": "PointLight_28", "when": "nogi", "intensity": "0.6", "shadows": "off", "note": "Warm room/lamp fill, including initially black ConnectedLight targets. Preserve lamp ignition contributions. Weaker original fill without RTGI, following the lamp state."},
+    {"name": "SlimeLight_2", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 99% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "PointLight_20", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 96% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": []
 }

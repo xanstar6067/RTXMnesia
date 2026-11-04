@@ -175,6 +175,7 @@ namespace RTXMnesia.Dev
                     s.ssgi = !mode.Contains("ssgi") ? 0 : mode.Contains("ssgi1") ? 1 : mode.Contains("ssgi3") ? 3 : 2;
                     s.textures = mode.Contains("classictex") ? 0 : mode.Contains("tex") ? 1 : user.textures;
                     HplEnhancedRelief.SeparateWalls = !mode.Contains("nolift");
+                    HplEnhancedLighting.FillGeometryShadows = !mode.Contains("nogeo");
                     // "noemit": without the GI copies of glowing materials (what their glow adds).
                     HplEnhancedEmission.Enabled = !mode.Contains("noemit");
                     HplEnhancedEmission.GainScale = mode.Contains("emitx") ? 30f : 1f;
@@ -202,7 +203,7 @@ namespace RTXMnesia.Dev
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
                     HplEnhancedRelief.SeparateSharedWalls();
                     yield return SetLantern(map, mode.Contains("lantern"));
-                    var hidden = mode.Contains("only") ? HideOthers(map) : new List<Light>();
+                    var hidden = mode.Contains("only") ? HideOthers(map) : mode.Contains("except") ? HideLit(map) : new List<Light>();
                     if (mode.Contains("nofill")) HideFills(hidden);
                     if (mode.Contains("cull0"))
                         foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
@@ -313,6 +314,40 @@ namespace RTXMnesia.Dev
                                 cachedNames.Add($"{l.name} {l.GetComponent<Light>().type} {(l.shadowResolution.useOverride ? "override " + l.shadowResolution.@override : "level " + l.shadowResolution.level)} placed {UnityEngine.Rendering.HighDefinition.HDCachedShadowManager.instance.LightHasBeenPlacedInAtlas(l)}");
                         report.AppendLine($"    cached atlas {init.cachedPunctualLightShadowAtlas}, punctual tiers {init.shadowResolutionPunctual[0]}/{init.shadowResolutionPunctual[1]}/{init.shadowResolutionPunctual[2]}/{init.shadowResolutionPunctual[3]}; cached: {string.Join(", ", cachedNames)}");
                     }
+                    if (mode.Contains("eachoff"))
+                    {
+                        // Which light makes a spot bright: the brightest pixel of a small box right of the view's centre
+                        // (6..20 px right, 20 above .. 5 below) with each light reaching the target off in turn.
+                        float Peak()
+                        {
+                            var frame = AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32);
+                            frame.WaitForCompletion();
+                            var data = frame.GetData<Color32>();
+                            int best = 0;
+                            for (int y = rt.height / 2 - 5; y <= rt.height / 2 + 20; y++)
+                                for (int x = rt.width / 2 + 6; x <= rt.width / 2 + 20; x++)
+                                    best = Math.Max(best, data[y * rt.width + x].r);
+                            return best;
+                        }
+                        IEnumerator Settle() { for (int k = 0; k < 8; k++) { yield return null; camera.Render(); } }
+                        yield return Settle();
+                        report.AppendLine($"    eachoff baseline peak {Peak()}");
+                        foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
+                        {
+                            if (!l.isActiveAndEnabled || l.type == LightType.Directional ||
+                                (l.transform.position - target).magnitude > l.range + 0.5f) continue;
+                            l.enabled = false;
+                            yield return Settle();
+                            report.AppendLine($"    eachoff {l.name} ({HplSpace.Position(l.transform.position):F2}): peak {Peak()}");
+                            l.enabled = true;
+                        }
+                        var particles = new List<Renderer>();
+                        foreach (var r in FindObjectsByType<ParticleSystemRenderer>(FindObjectsSortMode.None))
+                            if (r.enabled) { r.enabled = false; particles.Add(r); }
+                        yield return Settle();
+                        report.AppendLine($"    eachoff particles ({particles.Count}): peak {Peak()}");
+                        foreach (var r in particles) r.enabled = true;
+                    }
                     foreach (var l in hidden) if (l != null) l.enabled = true;
                     var previous = RenderTexture.active;
                     RenderTexture.active = rt;
@@ -373,6 +408,103 @@ namespace RTXMnesia.Dev
                                               $"batched={r.isPartOfStaticBatch} shadows={r.shadowCastingMode} mesh={r.GetComponent<MeshFilter>()?.sharedMesh?.name}: {string.Join(" | ", names)}");
                         }
                     }
+                    if (mode.Contains("fills"))
+                    {
+                        // The fill lights with shadows of the level geometry (HplEnhancedLighting.GeometryShadows): rays
+                        // from each against the drawn level meshes; "back" — the share of rays within its range whose
+                        // first hit is the back of a face (the light stands outside a room or in a wall: with the
+                        // geometry shadows it no longer lights what is in front of that face).
+                        var temp = new List<GameObject>();
+                        var combined = new HashSet<Mesh>();
+                        foreach (string group in new[] { "StaticObjects", "Primitives" })
+                            if (map.transform.Find(group) is { } root)
+                                foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
+                                {
+                                    if (!r.TryGetComponent<MeshFilter>(out var mf) || mf.sharedMesh == null || r.shadowCastingMode == ShadowCastingMode.Off) continue;
+                                    // A statically batched renderer shows the scene's combined mesh (world space): one
+                                    // collider for it at the origin.
+                                    if (r.isPartOfStaticBatch && !combined.Add(mf.sharedMesh)) continue;
+                                    var go = new GameObject("fills " + r.name) { layer = 31 };
+                                    if (!r.isPartOfStaticBatch)
+                                    {
+                                        go.transform.SetPositionAndRotation(r.transform.position, r.transform.rotation);
+                                        go.transform.localScale = r.transform.lossyScale;
+                                    }
+                                    go.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+                                    temp.Add(go);
+                                }
+                        Physics.SyncTransforms();
+                        bool backfaces = Physics.queriesHitBackfaces;
+                        Physics.queriesHitBackfaces = true;
+                        const int rays = 256;
+                        int count = 0, suspicious = 0; float most = 0f; string mostName = "";
+                        foreach (var l in AmnesiaLight.All)
+                        {
+                            if (l == null || !l.geometryShadows || !l.TryGetComponent<Light>(out var u)) continue;
+                            count++;
+                            int back = 0, front = 0;
+                            for (int k = 0; k < rays; k++)
+                            {
+                                // Fibonacci sphere.
+                                float y = 1f - 2f * (k + 0.5f) / rays, ring = Mathf.Sqrt(1f - y * y), phi = k * 2.39996323f;
+                                var ray = new Vector3(Mathf.Cos(phi) * ring, y, Mathf.Sin(phi) * ring);
+                                if (u.type != LightType.Point && Vector3.Angle(ray, l.transform.forward) > u.spotAngle * 0.5f) continue;
+                                if (!Physics.Raycast(l.transform.position, ray, out var hit, u.range, 1 << 31, QueryTriggerInteraction.Ignore)) continue;
+                                // The drawn side: the mesh's interpolated vertex normal (the collider's face normal follows the winding,
+                                // which a mirrored transform flips).
+                                var n = hit.normal;
+                                if (hit.collider is MeshCollider mc && mc.sharedMesh.isReadable && hit.triangleIndex >= 0)
+                                {
+                                    var mesh = mc.sharedMesh;
+                                    if (!s_fillNormals.TryGetValue(mesh, out var nt)) s_fillNormals[mesh] = nt = (mesh.normals, mesh.triangles);
+                                    if (nt.Item1.Length > 0)
+                                    {
+                                        int t = hit.triangleIndex * 3; var b = hit.barycentricCoordinate;
+                                        var local = nt.Item1[nt.Item2[t]] * b.x + nt.Item1[nt.Item2[t + 1]] * b.y + nt.Item1[nt.Item2[t + 2]] * b.z;
+                                        n = hit.collider.transform.localToWorldMatrix.inverse.transpose.MultiplyVector(local).normalized;
+                                    }
+                                }
+                                if (Vector3.Dot(n, ray) > 0f) back++; else front++;
+                            }
+                            float share = back + front > 0 ? back / (float)(back + front) : 0f;
+                            if (share > most) { most = share; mostName = l.name; }
+                            if (share < 0.2f) continue;
+                            suspicious++;
+                            report.AppendLine($"    fills {l.name} hpl={HplSpace.Position(l.transform.position):F2} {u.type} range {u.range:0.0} intensity {u.intensity:0.###} enabled {u.enabled}: back {share:P0} of {back + front} hits");
+                        }
+                        report.AppendLine($"    fills: {count} with geometry shadows, {suspicious} with back hits >= 20%, most {most:P0} ({mostName})");
+                        Physics.queriesHitBackfaces = backfaces;
+                        foreach (var go in temp) DestroyImmediate(go);
+                    }
+                    if (mode.Contains("pick"))
+                    {
+                        // What the camera sees at the pixels around the target: rays against the drawn meshes (relief,
+                        // not the collision) of the renderers near it, on temporary colliders.
+                        var temp = new List<GameObject>();
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                        {
+                            if (r.bounds.SqrDistance(target) > 2f * 2f || !r.TryGetComponent<MeshFilter>(out var mf) || mf.sharedMesh == null) continue;
+                            var go = new GameObject("pick " + r.transform.parent?.name + "/" + r.name) { layer = 31 };
+                            go.transform.SetPositionAndRotation(r.transform.position, r.transform.rotation);
+                            go.transform.localScale = r.transform.lossyScale;
+                            go.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+                            temp.Add(go);
+                        }
+                        Physics.SyncTransforms();
+                        int w = camera.pixelWidth, h = camera.pixelHeight;
+                        for (int py = 400; py <= 480; py += 40)
+                            for (int px = 796; px <= 830; px += 2)
+                            {
+                                var ray = camera.ViewportPointToRay(new Vector3(px / 1600f, 1f - py / 900f, 0));
+                                var hits = Physics.RaycastAll(ray, 20f, 1 << 31, QueryTriggerInteraction.Ignore);
+                                Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
+                                var picked = new System.Text.StringBuilder($"    pick ({px},{py}):");
+                                for (int k = 0; k < Mathf.Min(3, hits.Length); k++)
+                                    picked.Append($" {hits[k].collider.name} hpl={HplSpace.Position(hits[k].point):F4} n={HplSpace.Direction(hits[k].normal):F2} d={hits[k].distance:0.000};");
+                                report.AppendLine(picked.ToString());
+                            }
+                        foreach (var go in temp) DestroyImmediate(go);
+                    }
                     if (mode.Contains("walls"))
                     {
                         // The castle wall modules near the target: where each side's surface lies (enhanced relief vs flat).
@@ -382,7 +514,7 @@ namespace RTXMnesia.Dev
                             var m = r.sharedMaterial != null ? HplEnhancedTextures.ClassicMaterial(HplEnhancedRelief.SurfaceMaterial(r.sharedMaterial)) : null;
                             if (m == null || !m.name.StartsWith("castlebase_wall", StringComparison.Ordinal)) continue;
                             Vector3 a = HplSpace.Position(r.bounds.min), b = HplSpace.Position(r.bounds.max);
-                            report.AppendLine($"    wall {r.transform.parent?.name}/{r.name} mesh={r.GetComponent<MeshFilter>()?.sharedMesh?.name} hpl {Vector3.Min(a, b)}..{Vector3.Max(a, b)}");
+                            report.AppendLine($"    wall {r.transform.parent?.name}/{r.name} mesh={r.GetComponent<MeshFilter>()?.sharedMesh?.name} hpl {Vector3.Min(a, b):F4}..{Vector3.Max(a, b):F4} {HplEnhancedRelief.DescribeWall(r.GetComponent<MeshFilter>())}");
                         }
                     }
                     if (name == "P")
@@ -444,7 +576,7 @@ namespace RTXMnesia.Dev
                                 report.AppendLine($"    off near torch: {r.transform.parent?.name}/{r.name} mat={r.sharedMaterial?.name} shader={r.sharedMaterial?.shader.name} size={r.bounds.size}");
                     }
                     string line = $"{name} {mode}: mean {mean:0.0}, {ms:0.0} ms, enhanced applied={HplEnhancedLighting.Applied} " +
-                                  $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} wax={HplEnhancedLighting.WaxCandles} (not generated {HplEnhancedLighting.WaxWithoutGenerated}), " +
+                                  $"changed={HplEnhancedLighting.ChangedLights} added={HplEnhancedLighting.AddedLights} fill geometry shadows={HplEnhancedLighting.GeometryShadowLights} wax={HplEnhancedLighting.WaxCandles} (not generated {HplEnhancedLighting.WaxWithoutGenerated}), " +
                                   $"RT={HplRayTracing.Active} SSGI={HplRayTracing.ScreenGi} shadow cache={HplShadowCache.CachedLights} (redraws {redraws}, no room {HplShadowCache.Fallbacks}) traced={HplRayTracing.TracedLights}/{HplRayTracing.ShadowedLights}, shared walls separated={HplEnhancedRelief.SeparatedWallCount} decals={HplEnhancedRelief.LiftedDecalCount}, gi emission copies={HplEnhancedEmission.Copies} (static batched {HplEnhancedEmission.SkippedBatched}, not pushed {HplEnhancedEmission.NotPushed})";
                     report.AppendLine(line);
                     report.AppendLine($"    camera hpl={HplSpace.Position(camera.transform.position)}; silent volume={AudioListener.volume:0.00}");
@@ -4233,6 +4365,19 @@ namespace RTXMnesia.Dev
             string line = "Thunder verification PASS: window follows bright/black fades and visibility; classic/enhanced switching preserves faded script lights.";
             report.AppendLine(line);
             Debug.Log("[EnhancedLighting] " + line);
+        }
+
+        static readonly Dictionary<Mesh, (Vector3[], int[])> s_fillNormals = new();
+
+        /// <summary>Mode "except": the lamps of -lightLit off, the rest as they are (which lamp lights a spot).</summary>
+        List<Light> HideLit(HplMap map)
+        {
+            var hidden = new List<Light>();
+            foreach (string lamp in (lit ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+                if (map.GetEntityByName(lamp.Trim()) is { } entity)
+                    foreach (var light in entity.GameObject.GetComponentsInChildren<Light>(true))
+                        if (light.enabled) { light.enabled = false; hidden.Add(light); }
+            return hidden;
         }
 
         /// <summary>Mode "only": every light off except the lit lamps (-lightLit) and the hand — one candle in a dark room.</summary>

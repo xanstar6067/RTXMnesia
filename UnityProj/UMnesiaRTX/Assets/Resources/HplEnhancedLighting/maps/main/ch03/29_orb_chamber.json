@@ -474,7 +474,10 @@
     {
       "name": "PointLight_52",
       "note": "Preserve authored magical / NPC / blue-fire / ending accent or enclosed ambient, including portal countdown, rod shutdown, red slime and flickering boxes. Names select the first original occurrence; later ending duplicates are intentionally preserved."
-    }
+    },
+    {"name": "SpotLight_18", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 96% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_14", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 85% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."},
+    {"name": "SpotLight_28", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 92% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],
   "add": [
     {
