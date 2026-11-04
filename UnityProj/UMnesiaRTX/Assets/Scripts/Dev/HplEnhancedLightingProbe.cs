@@ -673,7 +673,7 @@ namespace RTXMnesia.Dev
                 var enhanced = classic.Copy();
                 enhanced.lightingSet = 1;
                 enhanced.lighting = cycle == 1 ? 0 : 1;
-                enhanced.rtGi = cycle == 2 ? 0 : 2;
+                enhanced.rtGi = cycle == 2 ? 0 : 2; enhanced.ssgi = 0;
                 HplGraphics.Apply(enhanced);
                 Require(HplEnhancedLighting.Applied, "overlay not applied");
                 int added = HplEnhancedLighting.AddedLights;
@@ -802,12 +802,12 @@ namespace RTXMnesia.Dev
                     foreach (int gi in new[] { 2, 0 })
                     {
                         var settings = user.Copy();
-                        settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                        settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi; settings.ssgi = 0;
                         HplGraphics.Apply(settings);
                         lamp.UpdateLogic(0f);
                         float intensity = connected.GetComponent<Light>().intensity;
                         if (connected.CurrentColor != onColor || (gi > 0 ? intensity > 0.001f : intensity <= 0f))
-                            throw new InvalidOperationException("Archives: overlay breaks connected lamp contribution");
+                            throw new InvalidOperationException($"Archives: overlay breaks connected lamp contribution (gi {gi}, RT {HplRayTracing.Active}, Gi {HplRayTracing.Gi}, SSGI {HplRayTracing.ScreenGi}, color {connected.CurrentColor} vs lit {onColor}, intensity {intensity}, enhanced {connected.enhancedIntensity})");
                     }
                     lamp.SetLit(false, false);
                     lamp.UpdateLogic(0f);
@@ -978,7 +978,7 @@ namespace RTXMnesia.Dev
                             throw new InvalidOperationException("Distillery: lamp does not feed connected fill");
                         foreach (int gi in new[] { 2, 0 })
                         {
-                            var settings = user.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                            var settings = user.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi; settings.ssgi = 0;
                             HplGraphics.Apply(settings); lamp.UpdateLogic(0f);
                             float intensity = connected.GetComponent<Light>().intensity;
                             if (connected.CurrentColor != onColor || (gi > 0 ? intensity > 0.001f : intensity <= 0f))
@@ -1025,7 +1025,7 @@ namespace RTXMnesia.Dev
                     for (int mode = 0; mode < 4; mode++)
                     {
                         var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                         HplGraphics.Apply(settings);
                         if (map.FogActive != flooded) throw new InvalidOperationException("Archives cellar: switching changed teleport fog state");
                         foreach (var e in sources)
@@ -1066,7 +1066,7 @@ namespace RTXMnesia.Dev
                 for (int mode = 0; mode < 4; mode++)
                 {
                     var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                    settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                    settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                     HplGraphics.Apply(settings);
                     foreach (var e in sources)
                         if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
@@ -1121,7 +1121,7 @@ namespace RTXMnesia.Dev
                     for (int mode = 0; mode < 4; mode++)
                     {
                         var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                         HplGraphics.Apply(settings);
                         foreach (var e in expected)
                             if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
@@ -1150,7 +1150,7 @@ namespace RTXMnesia.Dev
                     if (Mathf.Max(onColor.r, onColor.g, onColor.b) <= 0f) throw new InvalidOperationException("Back hall: connected fill receives no lamp colour");
                     foreach (int gi in new[] { 2, 0 })
                     {
-                        var settings = user.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                        var settings = user.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi; settings.ssgi = 0;
                         HplGraphics.Apply(settings); connectedLamp.UpdateLogic(0f);
                         float intensity = connected.GetComponent<Light>().intensity;
                         if (connected.CurrentColor != onColor || (gi > 0 ? intensity > 0.001f : intensity <= 0f))
@@ -1209,7 +1209,7 @@ namespace RTXMnesia.Dev
                             for (int mode = 0; mode < 4; mode++)
                             {
                                 var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                                settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                                settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                                 HplGraphics.Apply(settings);
                                 if (lamp.Lit != burning || connected.CurrentColor != expected)
                                     throw new InvalidOperationException("Daniels room: switching changed lamp state " + lamp.Name);
@@ -1288,7 +1288,7 @@ namespace RTXMnesia.Dev
                     for (int mode = 0; mode < 4; mode++)
                     {
                         var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                         HplGraphics.Apply(settings);
                         yield return null;
                         yield return null; // Follow components have started and evaluated their source colours.
@@ -1326,7 +1326,7 @@ namespace RTXMnesia.Dev
                         Color color = fill.CurrentColor;
                         foreach (int gi in new[] { 2, 0 })
                         {
-                            var settings = classic.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                            var settings = classic.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi; settings.ssgi = 0;
                             HplGraphics.Apply(settings);
                             float value = fill.GetComponent<Light>().intensity;
                             if (fill.CurrentColor != color || (gi > 0 || !burning ? value > 0.001f : value <= 0f))
@@ -1387,7 +1387,7 @@ namespace RTXMnesia.Dev
                     for (int mode = 0; mode < 4; mode++)
                     {
                         var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                         HplGraphics.Apply(settings);
                         foreach (var e in sources)
                             if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
@@ -1421,7 +1421,7 @@ namespace RTXMnesia.Dev
                             if (!burning && color != fill.diffuseColor) throw new InvalidOperationException("Storage: extinguished lamp leaves connected colour");
                             foreach (int gi in new[] { 2, 0 })
                             {
-                                var settings = classic.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi;
+                                var settings = classic.Copy(); settings.lightingSet = 1; settings.lighting = 1; settings.rtGi = gi; settings.ssgi = 0;
                                 HplGraphics.Apply(settings);
                                 if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - (gi > 0 ? 0f : original * 0.6f)) > 1e-4f * Mathf.Max(1f, original))
                                     throw new InvalidOperationException("Storage: connected lamp loses GI fallback " + pair);
@@ -1485,7 +1485,7 @@ namespace RTXMnesia.Dev
                     for (int mode = 0; mode < 4; mode++)
                     {
                         var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                        settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                         HplGraphics.Apply(settings);
                         foreach (var e in sources)
                             if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
@@ -1519,7 +1519,7 @@ namespace RTXMnesia.Dev
                             for (int mode = 0; mode < 4; mode++)
                             {
                                 var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                                settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                                settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                                 HplGraphics.Apply(settings);
                                 float expected = original * (mode == 3 ? 1f : mode == 0 ? 0f : 0.6f);
                                 if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - expected) > 1e-4f * Mathf.Max(1f, original))
@@ -1571,7 +1571,7 @@ namespace RTXMnesia.Dev
                 for (int mode = 0; mode < 4; mode++)
                 {
                     var settings = classic.Copy(); settings.lightingSet = mode == 3 ? 0 : 1;
-                    settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2;
+                    settings.lighting = mode == 2 ? 0 : 1; settings.rtGi = mode == 1 ? 0 : 2; settings.ssgi = 0;
                     HplGraphics.Apply(settings);
                     foreach (var e in sources)
                         if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
@@ -1669,7 +1669,7 @@ namespace RTXMnesia.Dev
                 foreach (var (lamp, _) in lamps) burning.Add(lamp.Lit);
                 for (int mode = 0; mode < 4; mode++)
                 {
-                    var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                    var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2; s.ssgi = 0;
                     HplGraphics.Apply(s);
                     foreach (var e in sources)
                         if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
@@ -1732,7 +1732,7 @@ namespace RTXMnesia.Dev
                         if (!burning && color != fill.diffuseColor) throw new InvalidOperationException("Prison south: connected torch leaves colour after extinction");
                         for (int mode = 0; mode < 4; mode++)
                         {
-                            var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                            var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2; s.ssgi = 0;
                             HplGraphics.Apply(s);
                             float expected = intensity * (mode == 3 ? 1f : mode == 0 ? 0f : 0.6f);
                             if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - expected) > 1e-4f * Mathf.Max(1f, intensity))
@@ -1789,7 +1789,7 @@ namespace RTXMnesia.Dev
                 foreach (var (holder, _) in holders) empty.Add(holder.Active);
                 for (int mode = 0; mode < 4; mode++)
                 {
-                    var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                    var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2; s.ssgi = 0;
                     HplGraphics.Apply(s);
                     foreach (var e in sources)
                         if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius || e.light.Visible != e.visible ||
@@ -1862,7 +1862,7 @@ namespace RTXMnesia.Dev
                         if (!lit && color != fill.diffuseColor) throw new InvalidOperationException("Prison north: extinguished torch leaves connected colour");
                         for (int mode = 0; mode < 4; mode++)
                         {
-                            var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                            var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2; s.ssgi = 0;
                             HplGraphics.Apply(s);
                             float expected = intensity * (mode == 3 ? 1f : mode == 0 ? 0f : 0.6f);
                             if (fill.CurrentColor != color || Mathf.Abs(fill.GetComponent<Light>().intensity - expected) > 1e-4f * Mathf.Max(1f, intensity))
@@ -1932,7 +1932,7 @@ namespace RTXMnesia.Dev
                     foreach (var (entity, _) in water) entity.SetActive(flooded);
                     for (int mode = 0; mode < 4; mode++)
                     {
-                        var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2;
+                        var s = classic.Copy(); s.lightingSet = mode == 3 ? 0 : 1; s.lighting = mode == 2 ? 0 : 1; s.rtGi = mode == 1 ? 0 : 2; s.ssgi = 0;
                         HplGraphics.Apply(s);
                         foreach (var e in sources)
                             if (e.light.CurrentColor != e.color || e.light.CurrentRadius != e.radius ||
