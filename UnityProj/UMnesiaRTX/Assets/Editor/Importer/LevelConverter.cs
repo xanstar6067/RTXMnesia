@@ -614,9 +614,9 @@ namespace RTXMnesia.Importer
         Material DecalVariant(Material baseMaterial, Color color)
         {
             if (baseMaterial == null) return null;
-            // The multiply shader takes the HPL2 vertex color as is: values above 1 brighten the texture before the
+            // The multiply shaders take the HPL2 vertex color as is: values above 1 brighten the texture before the
             // clamp to the 8-bit target (00_rainy_hall: dirt_floor01 with color 1.5).
-            var c = baseMaterial.shader.name == MaterialConverter.MultiplyShader ? color
+            var c = baseMaterial.shader.name is MaterialConverter.MultiplyShader or MaterialConverter.MulDecalShader ? color
                 : new Color(Mathf.Clamp01(color.r), Mathf.Clamp01(color.g), Mathf.Clamp01(color.b), Mathf.Clamp01(color.a));
             if (c == Color.white || !baseMaterial.HasProperty("_BaseColor")) return baseMaterial;
             return Variant(baseMaterial, c, m => m.SetColor("_BaseColor", c));

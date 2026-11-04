@@ -220,7 +220,7 @@ namespace RTXMnesia.Dev
         }
 
         /// <summary>
-        /// Classic frames with and without the Mul decals (HplMultiply below the transparent queue), from the pose and
+        /// Classic frames with and without the Mul decals (HplMulDecal, HplMultiply below the transparent queue), from the pose and
         /// from poses 2 and 6 cm lower and a degree down: their ratio is the decals' factor, where they are covered or
         /// drawn over something it shows (-lookDecals).
         /// </summary>
@@ -233,7 +233,7 @@ namespace RTXMnesia.Dev
             HplGraphics.Apply(settings);
             var camera = map.PlayerCamera;
             var decals = FindObjectsByType<Renderer>().Where(r => r.enabled && r.sharedMaterials.Any(m => m != null && m.shader != null
-                && m.shader.name == "RTXMnesia/HplMultiply" && m.renderQueue < (int)UnityEngine.Rendering.RenderQueue.Transparent)).ToArray();
+                && (m.shader.name == "RTXMnesia/HplMulDecal" || m.shader.name == "RTXMnesia/HplMultiply" && m.renderQueue < (int)UnityEngine.Rendering.RenderQueue.Transparent))).ToArray();
             result.AppendLine($"декалей Mul: {decals.Length}");
             var target = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             var previous = camera.targetTexture;

@@ -326,7 +326,7 @@ namespace RTXMnesia.EditorDev
                     HDMaterial.ValidateMaterial(m);
                 }
                 ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_1_alpha_weighted_specular.png"));
-                var multiply = renderers.Where(r => r.enabled && r.sharedMaterials.Any(m => m != null && m.shader.name == MaterialConverter.MultiplyShader)).ToArray();
+                var multiply = renderers.Where(r => r.enabled && r.sharedMaterials.Any(m => m != null && m.shader.name is MaterialConverter.MultiplyShader or MaterialConverter.MulDecalShader)).ToArray();
                 foreach (var r in multiply) r.enabled = false;
                 ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_2_no_multiply.png"));
                 foreach (var r in multiply) r.enabled = true;

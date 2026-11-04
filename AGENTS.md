@@ -8,7 +8,7 @@
 
 | Путь | Что это | В git? |
 |---|---|---|
-| `UnityProj/UMnesiaRTX/` | Unity-проект, **Unity 6000.6.7f1**, HDRP 17.6.0, Input System, DX12 → DX11 fallback | да |
+| `UnityProj/UMnesiaRTX/` | Unity-проект, **Unity 6000.6.8f1**, HDRP 17.6.0, Input System, DX12 → DX11 fallback | да |
 | `src/AmnesiaTheDarkDescent/` | Официальный исходный код (GPLv3) — только справочник | **нет** (`/src/`) |
 | `source/` | Копия нужных ресурсов игры (~1.5 GB, 11.5k файлов). Создаётся/обновляется `tools/Copy-AmnesiaResources.ps1` | **нет** (`/source/`) |
 | `tools/` | Вспомогательные скрипты (PowerShell, Python) | да |
@@ -55,7 +55,7 @@
 - Не изменять ничего в папке установленной игры и в `src/`.
 - Перед первым импортом ресурсов: убедиться, что `.gitignore` исключает импортированные папки (`git status` не должен показывать контент Amnesia).
 - Оси: HPL `(x,y,z)` → Unity `(−x,y,z)`, повороты — отражением (X сохраняется, Y и Z меняют знак); всё это в `Assets/Scripts/Hpl/HplSpace.cs`. Логику с углами писать в пространстве HPL (`Hpl*`-аксессоры), а не переводить формулы. Подробности — `docs/Reference/Importers.md`.
-- Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.7f1/Editor/Unity.exe -batchmode -nographics -quit -projectPath ... -executeMethod ...`. Unity с проектом должен быть закрыт (lock `Temp/UnityLockfile`). Проверки с GPU запускаются без `-nographics`. Перед batch-прогонами снимать копию ProjectSettings (не делать `git checkout` поверх чужих правок).
+- Headless-запуск Unity: `C:/Program Files/Unity/Hub/Editor/6000.6.8f1/Editor/Unity.exe -batchmode -nographics -quit -projectPath ... -executeMethod ...`. Unity с проектом должен быть закрыт (lock `Temp/UnityLockfile`). Проверки с GPU запускаются без `-nographics`. Перед batch-прогонами снимать копию ProjectSettings (не делать `git checkout` поверх чужих правок).
 - Шейдеры, которые рантайм ищет по имени (`Shader.Find`), добавлять в список `Assets/Editor/EnsureRuntimeShaders.cs`, иначе их нет в сборке.
 - Быстрая проверка скриптов под сборку: `-batchmode -nographics -quit -executeMethod RTXMnesia.EditorDev.BuildCheck.RunBatch` (ошибки и устаревшие API CS0618/CS0612/CS0619).
 - Новые настройки RT — на вкладку «Трассировка»; в шрифтах игры нет «—», в текстах интерфейса — двоеточие или дефис.

@@ -1,6 +1,6 @@
 // HPL2 multiplicative blending (eMaterialBlendMode_Mul / MulX2) for HDRP, which has no such blend mode.
-// Used by Decal and Translucent materials with BlendMode="Mul" / "MulX2": dirt and moisture decals, puddles,
-// bottles, window glass.
+// Used by Translucent materials with BlendMode="Mul" / "MulX2" and by MulX2 decals (Mul decals are DBuffer decals,
+// HplMulDecal.shader, since 2026-11-04): puddles, bottles, window glass.
 //
 // HPL2 decals multiply the G-buffer color (RendererDeferred.cpp RenderDecals, deferred_decal_frag.glsl:
 // texture × vertex color, alpha test 0.01), translucent objects multiply the lit frame. Both are done here on the

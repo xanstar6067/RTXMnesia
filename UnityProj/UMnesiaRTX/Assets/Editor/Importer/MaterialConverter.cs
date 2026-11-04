@@ -201,7 +201,7 @@ namespace RTXMnesia.Importer
                         var material = plan.Source.Type == AmnesiaMaterial.Kind.Water
                             ? CreateWater(plan.Source, role => Tex(plan, role), Cube())
                             : CreateMaterial(plan.Source, role => Tex(plan, role), log);
-                        updateLevelVariants |= material.shader.name == "HDRP/Decal" ||
+                        updateLevelVariants |= material.shader.name is "HDRP/Decal" or MulDecalShader ||
                             (material.shader.name == "HDRP/Lit" && material.GetFloat("_SurfaceType") == HdrpTransparent);
                         SaveInPlace(material, plan.AssetPath);
                     }
@@ -227,8 +227,11 @@ namespace RTXMnesia.Importer
 
             switch (src.Type)
             {
-                case AmnesiaMaterial.Kind.Decal when blend is "mul" or "mulx2":
-                    return CreateMultiply(tex(TextureRole.Albedo), blend == "mulx2", true);
+                case AmnesiaMaterial.Kind.Decal when blend == "mul":
+                    return CreateMulDecal(tex(TextureRole.Albedo));
+
+                case AmnesiaMaterial.Kind.Decal when blend == "mulx2":
+                    return CreateMultiply(tex(TextureRole.Albedo), true, true);
 
                 case AmnesiaMaterial.Kind.Decal when blend == "add":
                     log.Info($"{rel}: additive decal drawn as unlit additive (HPL2 adds to the albedo)");
@@ -384,6 +387,40 @@ namespace RTXMnesia.Importer
 
         public const string MultiplyShader = "RTXMnesia/HplMultiply";
 
+        /// <summary>
+        /// Mul decals as HDRP mesh decals (Assets/Shaders/HplMulDecal.shader): the albedo of the opaque surfaces under
+        /// them is multiplied before the lighting, as HPL2 multiplies the G-buffer color (RenderDecals). MulX2 stays
+        /// on the multiply shader: brightening is no DBuffer blend.
+        /// </summary>
+        static Material CreateMulDecal(Texture2D albedo)
+        {
+            var m = new Material(FindShader(MulDecalShader));
+            if (albedo != null) m.SetTexture(BaseColorMap, albedo);
+            m.SetColor(BaseColor, Color.white);
+            ConfigureMulDecal(m);
+            return m;
+        }
+
+        public const string MulDecalShader = "RTXMnesia/HplMulDecal";
+
+        /// <summary>
+        /// What HDRP's DecalAPI.SetupCommonDecalMaterialKeywordsAndPass sets for an albedo only HDRP/Decal; it does not
+        /// run on our shader. 16 is StencilUsage.Decals (internal to HDRP).
+        /// </summary>
+        public static void ConfigureMulDecal(Material m)
+        {
+            m.SetFloat("_HplAlphaLimit", 0.01f);
+            m.SetFloat("_DecalBlend", 1f);
+            m.SetInt("_DecalColorMask0", (int)ColorWriteMask.All);
+            m.SetInt("_DecalColorMask1", 0);
+            m.SetInt("_DecalColorMask2", 0);
+            m.SetInt("_DecalColorMask3", 0);
+            m.SetInt("_DecalStencilWriteMask", 16);
+            m.SetInt("_DecalStencilRef", 16);
+            m.renderQueue = (int)RenderQueue.Geometry;
+            m.enableInstancing = true;
+        }
+
         static Material CreateDecal(Func<TextureRole, Texture2D> tex)
         {
             var m = new Material(FindShader("HDRP/Decal"));
@@ -423,7 +460,8 @@ namespace RTXMnesia.Importer
             // Update those in place as well: keep their tint, GUID and local file ID, without rebuilding maps.
             string levels = AmnesiaPaths.ImportedAssetsRoot + "/Levels";
             if (!Directory.Exists(AmnesiaPaths.ToAbsolute(levels))) return;
-            int decals = 0, transparent = 0;
+            int decals = 0, transparent = 0, mulDecals = 0;
+            var mulDecal = FindShader(MulDecalShader);
             foreach (string file in Directory.GetFiles(AmnesiaPaths.ToAbsolute(levels), "*_generated.asset", SearchOption.AllDirectories))
             {
                 string path = levels + "/" + Path.GetRelativePath(AmnesiaPaths.ToAbsolute(levels), file).Replace('\\', '/');
@@ -440,11 +478,25 @@ namespace RTXMnesia.Importer
                         ConfigureTransparentSurface(material);
                         transparent++;
                     }
+                    // Tinted Mul decals of the multiply shader (decal queue, scale 1) move to the mesh decal shader,
+                    // keeping texture and HPL color.
+                    else if (material.shader.name == MulDecalShader ||
+                             material.shader.name == MultiplyShader && material.renderQueue < (int)RenderQueue.Transparent &&
+                             material.GetFloat("_HplScale") == 1f)
+                    {
+                        var texture = material.GetTexture(BaseColorMap);
+                        var color = material.GetColor(BaseColor);
+                        material.shader = mulDecal;
+                        material.SetTexture(BaseColorMap, texture);
+                        material.SetColor(BaseColor, color);
+                        ConfigureMulDecal(material);
+                        mulDecals++;
+                    }
                     else continue;
                     EditorUtility.SetDirty(material);
                 }
             }
-            log.Info($"Level surface variants updated in place: {decals} decals, {transparent} transparent");
+            log.Info($"Level surface variants updated in place: {decals} decals, {transparent} transparent, {mulDecals} Mul decals");
         }
 
         /// <summary>
