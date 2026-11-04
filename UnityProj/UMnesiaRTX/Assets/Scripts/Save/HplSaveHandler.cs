@@ -140,11 +140,13 @@ namespace RTXMnesia.Save
 
         /// <summary>
         /// The save of this moment as text, written later (the bug report keeps the state of the frame of its key);
-        /// null where the game does not save (a debug session, the menu background, no player).
+        /// null where there is no game to save (the menu background, no player). A debug session (debug panel test run)
+        /// is saved too: the file goes only into the report folder, never among the profile's saves; loading it is an
+        /// ordinary game (loading ends the debug session).
         /// </summary>
         public static string CreateJson(HplMap map)
         {
-            if (Dev.HplDebugSession.Active || map == null || map.menuBackground || map.player == null) return null;
+            if (map == null || map.menuBackground || map.player == null) return null;
             try { return JsonUtility.ToJson(HplSaveGame.Create(map)); }
             catch (Exception e)
             {

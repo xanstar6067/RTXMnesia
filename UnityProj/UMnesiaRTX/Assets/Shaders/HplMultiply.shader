@@ -16,6 +16,9 @@
 // _HplWorldFogRadiance of HplFogAreaPass) and the fog areas (HplFogAreas.hlsl) between the camera and the fragment.
 // For decals this is HPL2's order; for translucent glass HPL2 fades the factor to 1 by the fog opacity instead,
 // which darkened the haze in front of the glass as well.
+// Depth: HPL2 tests decals LessOrEqual without a bias (RenderDecals). The offset here is only the constant unit, no
+// slope factor: at a grazing view the slope term pulled a decal over geometry millimetres above it, and the dirt
+// under the pebbles (01_old_archives, pebbles 4 mm above dirt_floor01) darkened them in a band beyond some distance.
 Shader "RTXMnesia/HplMultiply"
 {
     Properties
@@ -40,7 +43,7 @@ Shader "RTXMnesia/HplMultiply"
             ZWrite Off
             ZTest LEqual
             Cull [_Cull]
-            Offset -1, -1
+            Offset 0, -1
 
             HLSLPROGRAM
             #pragma target 4.5
@@ -151,7 +154,7 @@ Shader "RTXMnesia/HplMultiply"
             ZWrite Off
             ZTest LEqual
             Cull [_Cull]
-            Offset -1, -1
+            Offset 0, -1
 
             HLSLPROGRAM
             #pragma target 4.5

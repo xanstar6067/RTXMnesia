@@ -17,7 +17,8 @@ namespace RTXMnesia.Dev
     /// each report folder's save.sav is loaded and the section is written next to the one the report has, in
     /// Logs/BugReportLook.txt. Folders: -bugReports "dir1;dir2". With -lookShots <dir>: the view of each report in
     /// classic / enhanced textures, without and with ray tracing (the saved RT levels), as PNG files there; with also
-    /// -lookSeries <n>: n classic frames a quarter second of game time apart (effects that come and go). With
+    /// -lookSeries <n>: n classic frames from one pose a quarter second of game time apart (effects that come and go;
+    /// -lookSeriesSaved: in the saved settings instead). With
     /// -lookRays "u,v;u,v": the visible hits along rays through those points of the frame (0..1, from the bottom left).
     /// </summary>
     public sealed class HplBugReportLookProbe : MonoBehaviour
@@ -106,8 +107,10 @@ namespace RTXMnesia.Dev
                 if (shots >= 0 && shots + 1 < args.Length)
                     yield return Shots(map, Path.Combine(args[shots + 1], Path.GetFileName(folder)), result);
                 int series = Array.IndexOf(args, "-lookSeries");
+                if (shots >= 0 && shots + 1 < args.Length && Array.IndexOf(args, "-lookDecals") >= 0)
+                    yield return Decals(map, Path.Combine(args[shots + 1], Path.GetFileName(folder)), result);
                 if (shots >= 0 && shots + 1 < args.Length && series >= 0 && series + 1 < args.Length)
-                    yield return Series(map, Path.Combine(args[shots + 1], Path.GetFileName(folder)), int.Parse(args[series + 1]), result);
+                    yield return Series(map, Path.Combine(args[shots + 1], Path.GetFileName(folder)), int.Parse(args[series + 1]), Array.IndexOf(args, "-lookSeriesSaved") >= 0, result);
             }
         }
 
@@ -148,6 +151,7 @@ namespace RTXMnesia.Dev
             }
             finally
             {
+                camera.ResetAspect();
                 camera.targetTexture = previous;
                 target.Release();
                 Destroy(target);
@@ -155,13 +159,20 @@ namespace RTXMnesia.Dev
             }
         }
 
-        /// <summary>A series of classic frames, a quarter second of game time apart: effects that come and go.</summary>
-        static IEnumerator Series(HplMap map, string prefix, int count, StringBuilder result)
+        /// <summary>A series of frames from one held pose, a quarter second of game time apart: effects that come and go. Classic
+        /// textures without RT, or with <paramref name="savedSettings"/> the saved settings (-lookSeriesSaved).</summary>
+        static IEnumerator Series(HplMap map, string prefix, int count, bool savedSettings, StringBuilder result)
         {
+            var args = Environment.GetCommandLineArgs();
+            int stepAt = Array.IndexOf(args, "-lookSeriesStep");
+            double step = stepAt >= 0 && stepAt + 1 < args.Length ? double.Parse(args[stepAt + 1], CultureInfo.InvariantCulture) : 0.25;
             var saved = HplUserSettings.ReadSaved();
             var settings = saved.Copy();
-            settings.textures = 0;
-            settings.lighting = 0;
+            if (!savedSettings)
+            {
+                settings.textures = 0;
+                settings.lighting = 0;
+            }
             HplGraphics.Apply(settings);
             var camera = map.PlayerCamera;
             var target = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
@@ -169,22 +180,93 @@ namespace RTXMnesia.Dev
             try
             {
                 camera.targetTexture = target;
-                for (int i = 0; i < ShotFrames; i++) { camera.Render(); yield return null; }
+                // The pose is held: the head sway (and the insanity's field of view and aspect sway) would move every edge.
+                camera.transform.GetPositionAndRotation(out var position, out var rotation);
+                float fov = camera.fieldOfView;
+                // -lookSeriesFree: the player's own sway (the idle head bob) is kept, as in play.
+                bool hold = Array.IndexOf(args, "-lookSeriesFree") < 0;
+                void Render()
+                {
+                    if (hold)
+                    {
+                        camera.transform.SetPositionAndRotation(position, rotation);
+                        camera.fieldOfView = fov;
+                    }
+                    camera.aspect = (float)ShotWidth / ShotHeight;
+                    camera.Render();
+                }
+                for (int i = 0; i < ShotFrames; i++) { Render(); yield return null; }
                 for (int n = 0; n < count; n++)
                 {
-                    for (double end = Time.timeAsDouble + 0.25; Time.timeAsDouble < end;) { camera.Render(); yield return null; }
+                    for (double end = Time.timeAsDouble + step; Time.timeAsDouble < end;) { Render(); yield return null; }
                     var active = RenderTexture.active;
                     RenderTexture.active = target;
                     var texture = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
                     texture.ReadPixels(new Rect(0, 0, ShotWidth, ShotHeight), 0, 0);
                     RenderTexture.active = active;
-                    File.WriteAllBytes($"{prefix}_series_{n:00}.png", texture.EncodeToPNG());
+                    File.WriteAllBytes($"{prefix}_series{(savedSettings ? "_saved" : "")}_{n:00}.png", texture.EncodeToPNG());
                     Destroy(texture);
                     result.AppendLine($"кадр {n:00}: t {Time.timeAsDouble:0.00} с");
                 }
             }
             finally
             {
+                camera.ResetAspect();
+                camera.targetTexture = previous;
+                target.Release();
+                Destroy(target);
+                HplGraphics.Apply(saved);
+            }
+        }
+
+        /// <summary>
+        /// Classic frames with and without the Mul decals (HplMultiply below the transparent queue), from the pose and
+        /// from poses 2 and 6 cm lower and a degree down: their ratio is the decals' factor, where they are covered or
+        /// drawn over something it shows (-lookDecals).
+        /// </summary>
+        static IEnumerator Decals(HplMap map, string prefix, StringBuilder result)
+        {
+            var saved = HplUserSettings.ReadSaved();
+            var settings = saved.Copy();
+            settings.textures = 0;
+            settings.lighting = 0;
+            HplGraphics.Apply(settings);
+            var camera = map.PlayerCamera;
+            var decals = FindObjectsByType<Renderer>().Where(r => r.enabled && r.sharedMaterials.Any(m => m != null && m.shader != null
+                && m.shader.name == "RTXMnesia/HplMultiply" && m.renderQueue < (int)UnityEngine.Rendering.RenderQueue.Transparent)).ToArray();
+            result.AppendLine($"декалей Mul: {decals.Length}");
+            var target = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var previous = camera.targetTexture;
+            camera.transform.GetPositionAndRotation(out var position, out var rotation);
+            float fov = camera.fieldOfView;
+            try
+            {
+                camera.targetTexture = target;
+                foreach (var (drop, pitch, tag) in new[] { (0f, 0f, "a"), (0.02f, 0f, "b"), (0.06f, 1f, "c") })
+                    foreach (bool shown in new[] { true, false })
+                    {
+                        foreach (var r in decals) r.enabled = shown;
+                        for (int i = 0; i < ShotFrames; i++)
+                        {
+                            camera.transform.SetPositionAndRotation(position + Vector3.down * drop, rotation * Quaternion.Euler(pitch, 0f, 0f));
+                            camera.fieldOfView = fov;
+                            camera.aspect = (float)ShotWidth / ShotHeight;
+                            camera.Render();
+                            yield return null;
+                        }
+                        var active = RenderTexture.active;
+                        RenderTexture.active = target;
+                        var texture = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
+                        texture.ReadPixels(new Rect(0, 0, ShotWidth, ShotHeight), 0, 0);
+                        RenderTexture.active = active;
+                        File.WriteAllBytes($"{prefix}_decals_{tag}_{(shown ? "on" : "off")}.png", texture.EncodeToPNG());
+                        Destroy(texture);
+                    }
+            }
+            finally
+            {
+                foreach (var r in decals) r.enabled = true;
+                camera.ResetAspect();
                 camera.targetTexture = previous;
                 target.Release();
                 Destroy(target);
