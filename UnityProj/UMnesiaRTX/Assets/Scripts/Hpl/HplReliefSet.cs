@@ -173,11 +173,19 @@ namespace RTXMnesia.Hpl
                     }
                     Map("_NormalMap", slot.normalResource);
                     Map("_MaskMap", slot.maskResource);
-                    Map("_SpecularColorMap", slot.specularResource);
+                    // The enhanced materials carry the classic specular (LitSpecular, its F0 colour and Specular map:
+                    // EnhancedMaterialConverter). The relief keeps that map: its own coverage map (faces 1 on light stone)
+                    // under the classic colour still left a blue sheen on 00_rainy_hall's castlebase_wall_extension with RT
+                    // (saturation 0.21, classic 0.29; with the classic map 0.29). The coverage map serves only materials
+                    // without a Specular map, or older Lit ones.
+                    bool classicSpecular = copy.GetFloat("_MaterialID") == (float)MaterialId.LitSpecular;
+                    if (!classicSpecular || copy.GetTexture("_SpecularColorMap") == null)
+                        Map("_SpecularColorMap", slot.specularResource);
                     if (!string.IsNullOrEmpty(slot.specularResource))
                     {
-                        // Standard Lit ignores specular coverage. Preserve its dielectric F0 when enabling it.
-                        if (slot.specularF0 > 0)
+                        // Standard Lit ignores specular coverage; an older Lit material gets the slot's F0 with it.
+                        if (classicSpecular) { }
+                        else if (slot.specularF0 > 0)
                             copy.SetColor("_SpecularColor", new Color(slot.specularF0, slot.specularF0, slot.specularF0, 1).gamma);
                         else if (copy.GetFloat("_MaterialID") == (float)MaterialId.LitStandard)
                             copy.SetColor("_SpecularColor", new Color(.04f, .04f, .04f, 1));

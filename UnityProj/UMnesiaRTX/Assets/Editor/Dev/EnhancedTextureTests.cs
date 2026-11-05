@@ -158,9 +158,9 @@ namespace RTXMnesia.EditorDev
             var material = Enhanced;
             Check(material != null && material != Classic && material.shader.name == "HDRP/Lit", "separate HDRP/Lit material");
             Check(material.GetFloat("_SurfaceType") == 0 && material.GetFloat("_AlphaCutoffEnable") == 0 &&
-                  material.GetFloat("_MaterialID") == (float)MaterialId.LitStandard, "opaque dielectric metallic workflow");
-            Check(material.GetFloat("_Metallic") == 0 && material.GetTexture("_SpecularColorMap") == null,
-                  "stone uses dielectric F0, with no legacy specular map");
+                  material.GetFloat("_MaterialID") == (float)MaterialId.LitSpecular, "opaque, specular colour workflow of the classic");
+            Check(material.GetFloat("_Metallic") == 0 && material.GetTexture("_SpecularColorMap") == Classic.GetTexture("_SpecularColorMap") &&
+                  material.GetColor("_SpecularColor") == Classic.GetColor("_SpecularColor"), "stone keeps the classic specular (no grey F0 0.04 sheen)");
             Check(material.IsKeywordEnabled("_NORMALMAP_TANGENT_SPACE") && material.IsKeywordEnabled("_MASKMAP") &&
                   material.IsKeywordEnabled("_HEIGHTMAP") && material.IsKeywordEnabled("_PIXEL_DISPLACEMENT"), "all PBR maps and POM keywords active");
             Check(Mathf.Approximately(material.GetFloat("_HeightAmplitude"), EnhancedMaterialConverter.HeightCm * 0.01f), "height amplitude in metres");

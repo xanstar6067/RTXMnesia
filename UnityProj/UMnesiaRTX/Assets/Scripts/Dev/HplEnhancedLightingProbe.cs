@@ -209,6 +209,54 @@ namespace RTXMnesia.Dev
                         foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
                             if (r.transform.parent != null && r.transform.parent.name.StartsWith("wall_default", StringComparison.Ordinal))
                                 foreach (var m in r.materials) { m.SetFloat("_CullMode", 0); m.SetFloat("_CullModeForward", 0); }
+                    // "classicspec": the enhanced materials (and their relief copies) with the specular of their classic
+                    // material (LitSpecular, its F0 colour and map), for comparing the grey sheen of F0 0.04. Copies only.
+                    var swapped = new List<(Renderer renderer, Material[] materials)>();
+                    // "classicheight": materials without mesh relief take the classic POM (HPL height map and amplitude);
+                    // "classicnormal": the classic normal map.
+                    bool useClassicSpec = mode.Contains("classicspec"), useClassicHeight = mode.Contains("classicheight"), useClassicNormal = mode.Contains("classicnormal");
+                    if (useClassicSpec || useClassicHeight || useClassicNormal)
+                    {
+                        var copies = new Dictionary<Material, Material>();
+                        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                        {
+                            var mats = r.sharedMaterials; bool any = false;
+                            for (int i = 0; i < mats.Length; i++)
+                            {
+                                var m = mats[i];
+                                var classic = m != null ? HplEnhancedTextures.ClassicMaterial(HplEnhancedRelief.SurfaceMaterial(m)) : null;
+                                if (classic == null || classic == m || classic.shader != m.shader || !classic.HasProperty("_SpecularColor")) continue;
+                                if (!copies.TryGetValue(m, out var copy))
+                                {
+                                    copy = new Material(m) { name = m.name + " (classic parts)", hideFlags = HideFlags.HideAndDontSave };
+                                    if (useClassicSpec)
+                                    {
+                                        copy.SetFloat("_MaterialID", (float)UnityEngine.Rendering.HighDefinition.MaterialId.LitSpecular);
+                                        copy.SetColor("_SpecularColor", classic.GetColor("_SpecularColor"));
+                                        copy.SetTexture("_SpecularColorMap", classic.GetTexture("_SpecularColorMap"));
+                                    }
+                                    bool relief = HplEnhancedRelief.SurfaceMaterial(m) != m;
+                                    if (useClassicHeight && !relief && classic.GetFloat("_DisplacementMode") == 2f)
+                                    {
+                                        copy.SetTexture("_HeightMap", classic.GetTexture("_HeightMap"));
+                                        foreach (string p in new[] { "_DisplacementMode", "_HeightPoMAmplitude", "_HeightAmplitude", "_HeightCenter" })
+                                            copy.SetFloat(p, classic.GetFloat(p));
+                                    }
+                                    if (useClassicNormal && !relief)
+                                    {
+                                        copy.SetTexture("_NormalMap", classic.GetTexture("_NormalMap"));
+                                        copy.SetFloat("_NormalScale", classic.GetFloat("_NormalScale"));
+                                    }
+                                    UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(copy);
+                                    copies[m] = copy;
+                                }
+                                if (!any) swapped.Add((r, r.sharedMaterials));
+                                mats[i] = copy; any = true;
+                            }
+                            if (any) r.sharedMaterials = mats;
+                        }
+                        report.AppendLine($"    classic parts: {copies.Count} materials, {swapped.Count} renderers");
+                    }
                     map.effects.Fade.FadeIn(0f);
                     player.active = true;
                     Vector3 dir0 = target - feet;
@@ -349,6 +397,7 @@ namespace RTXMnesia.Dev
                         foreach (var r in particles) r.enabled = true;
                     }
                     foreach (var l in hidden) if (l != null) l.enabled = true;
+                    foreach (var (r, mats) in swapped) if (r != null) r.sharedMaterials = mats;
                     var previous = RenderTexture.active;
                     RenderTexture.active = rt;
                     var image = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
@@ -389,7 +438,9 @@ namespace RTXMnesia.Dev
                                 if (m == null) continue;
                                 var classic = HplEnhancedTextures.ClassicMaterial(m);
                                 bool has = HplEnhancedTextures.ResolveMaterial(classic, true) != classic;
-                                string key = $"{classic.name} enhancedNow={m != classic} hasEnhanced={has} shader={m.shader.name} smooth={(m.HasProperty("_Smoothness") ? m.GetFloat("_Smoothness") : -1):0.00} height={m.IsKeywordEnabled("_HEIGHTMAP")}";
+                                string key = $"{classic.name} enhancedNow={m != classic} hasEnhanced={has} shader={m.shader.name} smooth={(m.HasProperty("_Smoothness") ? m.GetFloat("_Smoothness") : -1):0.00} height={m.IsKeywordEnabled("_HEIGHTMAP")}" +
+                                    (m.HasProperty("_DisplacementMode") ? $" disp={m.GetFloat("_DisplacementMode")} pom={m.GetFloat("_HeightPoMAmplitude"):0.0}cm id={m.GetFloat("_MaterialID")} spec={m.GetColor("_SpecularColor").r:0.000}/{(m.GetTexture("_SpecularColorMap") != null ? "map" : "-")}" : "") +
+                                    $" mesh={(r.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null ? mf.sharedMesh.name : "-")}";
                                 if (seen.Add(key)) report.AppendLine($"    mat {r.transform.parent?.name}: {key}");
                             }
                         }

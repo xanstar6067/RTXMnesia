@@ -252,16 +252,17 @@ namespace RTXMnesia.Importer
             // Preserve emission, UV mapping, culling and other non-PBR features of each individual material.
             material.CopyPropertiesFromMaterial(classic);
             material.name = Path.GetFileNameWithoutExtension(relative) + " PBRify";
-            bool metal = (src.PhysicsMaterial ?? "").StartsWith("Metal", StringComparison.OrdinalIgnoreCase);
-            // Matte materials keep the classic specular too (F0 0.02 or the Specular map × 0.08, Specular Color workflow):
-            // on dark red cloth the HDRP dielectric F0 0.04 of a rough surface still greyed the colour with the window light.
+
+            // Every enhanced material keeps the classic specular (Specular Color workflow: the Specular map × 0.08, without
+            // one F0 0.02; copied above with the other properties). The HDRP dielectric F0 0.04 (linear, ~25× the classic
+            // ~0.0015–0.007) laid a grey-blue sheen of the window and sky light over dark stone and cloth: 00_rainy_hall wall
+            // with RT saturation 0.19 against the classic 0.33, joints lighter (docs/EnhancedTextures.md, «Зеркальность»).
             bool matte = Matte(relative, src);
-            material.SetFloat("_MaterialID", metal || matte ? classic.GetFloat("_MaterialID") : (float)MaterialId.LitStandard);
+            material.SetFloat("_MaterialID", classic.GetFloat("_MaterialID"));
             material.SetTexture("_BaseColorMap", textures[0]);
             material.SetTexture("_NormalMap", textures[1]);
             material.SetFloat("_NormalScale", 1f);
             material.SetTexture("_MaskMap", textures[2]);
-            if (!metal && !matte) material.SetTexture("_SpecularColorMap", null);
             material.SetFloat("_Metallic", 0f);
             material.SetFloat("_MetallicRemapMin", 0f);
             material.SetFloat("_MetallicRemapMax", 0f);

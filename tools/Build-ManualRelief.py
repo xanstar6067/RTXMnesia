@@ -676,6 +676,10 @@ GENERIC = {
     'stone_round': ('static_objects/dungeonbase/pillar/stone_round', 'height', 7.4, 0.028, 'stone'),
     'gigantic': ('static_objects/dungeonbase/pillar/gigantic', 'height', 8.2, 0.030, 'stone'),
     'castlebase_wall_extension': ('static_objects/castlebase/wall/castlebase_wall_extension', 'alpha', 5.6, 0.020, 'stone'),
+    # Task 03: the tiled floor (planes of 01_old_archives and others, 2 m per UV): its tile joints from the alpha of the HPL
+    # normal map (classic POM: alpha x 5 cm, 1.8-2.9 cm in the joints), instead of the PBRify height (1.2 cm, joints barely
+    # visible).
+    'castlebase_tiledfloor': ('static_objects/castlebase/castlebase_tiledfloor', 'alpha', 2.0, 0.016, 'stone'),
     'castlebase_wall_win': ('static_objects/castlebase/wall/castlebase_wall_win', 'normal', 4.2, 0.020, 'stone'),
     'castlebase_wall_worn': ('static_objects/castlebase/wall/castlebase_wall_worn', 'alpha', 4.2, 0.018, 'stone'),
     'castlebase_wall_welder_convex': ('static_objects/castlebase/wall/castlebase_wall_welder_convex', 'normal', 3.7, 0.018, 'stone'),
