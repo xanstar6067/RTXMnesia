@@ -73,6 +73,15 @@ namespace RTXMnesia.Dev
                 UnityEngine.Rendering.RTHandles.ResetReferenceSize(int.Parse(wh[0]), int.Parse(wh[1]));
                 log.AppendLine("RTHandles reference reset to " + rtSize);
             }
+            // -benchmarkSpots <file>: the player stands at fixed places of one map, each place with each settings variant.
+            string spotsFile = Arg("-benchmarkSpots");
+            if (spotsFile != null)
+            {
+                yield return Spots(log, settings, File.ReadAllLines(spotsFile));
+                Write(log.ToString());
+                Application.Quit(0);
+                yield break;
+            }
             // -benchmarkChain: map changes of the game (HplMapChange, the scene replaced) round four maps of the tour.
             if (Arg("-benchmarkChain") != null)
             {
@@ -142,6 +151,92 @@ namespace RTXMnesia.Dev
             }
             Write(log.ToString());
             Application.Quit(0);
+        }
+
+        /// <summary>
+        /// The spots file: "map ch01/00_rainy_hall", "spot name feetX feetY feetZ dirX dirY dirZ" (HPL), "variant name
+        /// field=value,..." (HplUserSettings over the test settings). Every spot with every variant: settle (8 s at a new
+        /// spot, 4 s after a settings change), then 6 s measured: frame rate, 1% low, FrameTimingManager CPU / GPU, the
+        /// GPU time of HDRP passes if the player records them, ray traced lights, video memory.
+        /// </summary>
+        IEnumerator Spots(StringBuilder log, HplUserSettings baseSettings, string[] lines)
+        {
+            string mapName = null;
+            var spots = new System.Collections.Generic.List<(string name, Vector3 feet, Vector3 dir)>();
+            var variants = new System.Collections.Generic.List<(string name, string fields)>();
+            foreach (string raw in lines)
+            {
+                var p = raw.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (p.Length == 0 || p[0].StartsWith("#")) continue;
+                float F(int i) => float.Parse(p[i], CultureInfo.InvariantCulture);
+                if (p[0] == "map") mapName = p[1];
+                else if (p[0] == "spot") spots.Add((p[1], new Vector3(F(2), F(3), F(4)), new Vector3(F(5), F(6), F(7))));
+                else if (p[0] == "variant") variants.Add((p[1], p.Length > 2 ? p[2] : ""));
+            }
+            var load = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync("Assets/AmnesiaImported/Levels/maps/main/" + mapName + ".unity");
+            while (!load.isDone) yield return null;
+            while (ScriptApi.HplMap.Current == null) yield return null;
+            var map = ScriptApi.HplMap.Current;
+            yield return new WaitForSecondsRealtime(3);
+            var player = map.player;
+            player.Flashback.Disabled = true;
+            player.readDevices = false;
+            log.AppendLine($"spots on {mapName}: {Memory()}");
+
+            var names = new System.Collections.Generic.List<string>();
+            var ids = Type.GetType("UnityEngine.Rendering.HighDefinition.HDProfileId, Unity.RenderPipelines.HighDefinition.Runtime");
+            if (ids != null) names.AddRange(Enum.GetNames(ids));
+            var recorders = new System.Collections.Generic.List<UnityEngine.Profiling.Recorder>();
+            foreach (string n in names) { var r = UnityEngine.Profiling.Recorder.Get(n); r.enabled = true; recorders.Add(r); }
+            var timings = new FrameTiming[1];
+            foreach (var spot in spots)
+                for (int v = 0; v < variants.Count; v++)
+                {
+                    var s = baseSettings.Copy();
+                    foreach (var pair in variants[v].fields.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var kv = pair.Split('=');
+                        var field = typeof(HplUserSettings).GetField(kv[0].Trim());
+                        field.SetValue(s, Convert.ChangeType(kv[1].Trim(), field.FieldType, CultureInfo.InvariantCulture));
+                    }
+                    s.Validate();
+                    ApplySettings(map, s);
+                    map.effects.Fade.FadeIn(0f);
+                    player.active = true;
+                    Vector3 feet = HplSpace.Position(spot.feet), dir = HplSpace.Position(spot.feet + spot.dir) - feet;
+                    player.PlaceAt(feet, Mathf.Atan2(dir.x, dir.z));
+                    yield return new WaitForSecondsRealtime(0.3f);
+                    player.AddLook(0f, -Mathf.Atan2(dir.y, new Vector2(dir.x, dir.z).magnitude) - player.Pitch);
+                    for (float t = 0, settle = v == 0 ? 8 : 4; t < settle; t += Time.unscaledDeltaTime) { AudioListener.pause = true; yield return null; }
+
+                    var gpuPass = new double[names.Count];
+                    var frameMs = new System.Collections.Generic.List<float>();
+                    double gpu = 0, main = 0, render = 0; int timed = 0;
+                    for (float t = 0; t < 6; t += Time.unscaledDeltaTime)
+                    {
+                        AudioListener.pause = true;
+                        yield return null;
+                        frameMs.Add(Time.unscaledDeltaTime * 1000f);
+                        for (int k = 0; k < recorders.Count; k++) if (recorders[k].isValid) gpuPass[k] += recorders[k].gpuElapsedNanoseconds / 1e6;
+                        FrameTimingManager.CaptureFrameTimings();
+                        if (FrameTimingManager.GetLatestTimings(1, timings) > 0 && timings[0].gpuFrameTime > 0)
+                        { gpu += timings[0].gpuFrameTime; main += timings[0].cpuMainThreadFrameTime; render += timings[0].cpuRenderThreadFrameTime; timed++; }
+                    }
+                    float total = 0; foreach (float ms in frameMs) total += ms;
+                    frameMs.Sort();
+                    float low = frameMs[Math.Max(0, (int)(frameMs.Count * 0.99f) - 1)];
+                    var cam = map.PlayerCamera;
+                    log.AppendLine($"  {spot.name} {variants[v].name}: fps {frameMs.Count / (total / 1000f):F1}, 1% low {1000f / low:F1}, " +
+                                   (timed > 0 ? $"gpu {gpu / timed:F2} ms, cpu main {main / timed:F2}, render thread {render / timed:F2}" : "no frame timing") +
+                                   $"; render {cam.scaledPixelWidth}x{cam.scaledPixelHeight} of {Screen.width}x{Screen.height}, traced {HplRayTracing.TracedLights} of {HplRayTracing.ShadowedLights}; {Memory()}");
+                    var order = new System.Collections.Generic.List<int>();
+                    for (int k = 0; k < names.Count; k++) if (gpuPass[k] / frameMs.Count >= 0.3) order.Add(k);
+                    order.Sort((a, b) => gpuPass[b].CompareTo(gpuPass[a]));
+                    if (order.Count > 0)
+                        log.AppendLine("      passes: " + string.Join(", ", order.ConvertAll(k => $"{names[k]} {gpuPass[k] / frameMs.Count:F2}")));
+                    Write(log.ToString());
+                }
+            foreach (var r in recorders) r.enabled = false;
         }
 
         /// <summary>Test settings stay in memory; loading a map must not restore the saved graphics preset.</summary>

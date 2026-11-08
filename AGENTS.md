@@ -89,4 +89,4 @@
 | `DevTools.md` | тестовая карта dev_room, панель отладки, отчёт об ошибке (F1), замеры видеопамяти (тестовый плеер) |
 | `GeometryAudit.md` | проверка импорта геометрии по `.msh` |
 
-Другие документы: `docs/ScriptPort/` (журнал портов, `api.md`), `docs/UiPort.md`, `docs/MainMenu.md`, `docs/EnhancedLighting/`, `docs/EnhancedTextures.md`, `docs/EnhancedRelief.md`, `docs/LampRendering.md`, `docs/DebugPanel.md`, `docs/DevRoom.md`, `docs/UnityUpgrade.md`, `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.
+Другие документы: `docs/ScriptPort/` (журнал портов, `api.md`), `docs/UiPort.md`, `docs/MainMenu.md`, `docs/EnhancedLighting/`, `docs/EnhancedTextures.md`, `docs/EnhancedRelief.md`, `docs/RtPerformance.md`, `docs/LampRendering.md`, `docs/DebugPanel.md`, `docs/DevRoom.md`, `docs/UnityUpgrade.md`, `UnityProj/UMnesiaRTX/HDRP-SETUP.md`.

@@ -17,6 +17,12 @@ namespace RTXMnesia.EditorDev
     /// </summary>
     public static class VideoMemoryPlayer
     {
+        static string[] Extra(string[] args)
+        {
+            int i = Array.IndexOf(args, "-playerScenes");
+            return i >= 0 && i + 1 < args.Length ? args[i + 1].Split(';', StringSplitOptions.RemoveEmptyEntries) : Array.Empty<string>();
+        }
+
         public static void BuildBatch()
         {
             try
@@ -28,7 +34,9 @@ namespace RTXMnesia.EditorDev
                 Directory.CreateDirectory(folder);
                 var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
-                    scenes = new[] { HplGameUi.MainMenuScene }.Concat(HplBenchmarkRoute.All.Select(r => r.ScenePath)).ToArray(),
+                    // -playerScenes "a.unity;b.unity": further scenes (the maps of -benchmarkSpots).
+                    scenes = new[] { HplGameUi.MainMenuScene }.Concat(HplBenchmarkRoute.All.Select(r => r.ScenePath))
+                        .Concat(Extra(args)).Distinct().ToArray(),
                     locationPathName = Path.Combine(folder, "Bench.exe"),
                     target = BuildTarget.StandaloneWindows64,
                     options = BuildOptions.None,

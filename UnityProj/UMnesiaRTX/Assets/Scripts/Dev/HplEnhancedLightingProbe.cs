@@ -198,6 +198,19 @@ namespace RTXMnesia.Dev
                     ApplyJustineLibraryLightingPreview(map, mode);
                     ApplyJustineDungeonLightingPreview(map, mode);
                     ApplyJustineFinalLightingPreview(map, mode);
+                    // "perf": RT levels from the mode name ("sh4" shadows, "ao3" AO, "rf2" reflections, "gi3" GI, "all0" without the
+                    // shadows of all lights, "dl4" DLSS mode); the GPU time of each HDRP pass is reported (PerfReport).
+                    if (mode.Contains("perf"))
+                    {
+                        int Level(string key, int fallback)
+                        {
+                            var m = System.Text.RegularExpressions.Regex.Match(mode, key + "(\\d)");
+                            return m.Success ? m.Groups[1].Value[0] - '0' : fallback;
+                        }
+                        s.rtShadows = Level("sh", s.rtShadows); s.rtAo = Level("ao", s.rtAo);
+                        s.rtReflections = Level("rf", s.rtReflections); s.rtGi = Level("gi", s.rtGi);
+                        s.rtAllShadows = Level("all", s.rtAllShadows ? 1 : 0) == 1; s.dlssMode = Level("dl", 0);
+                    }
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -271,6 +284,11 @@ namespace RTXMnesia.Dev
                     var camera = map.PlayerCamera;
                     var rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
                     camera.targetTexture = rt;
+                    if (mode.Contains("perf"))
+                    {
+                        var perf = PerfReport(camera, report);
+                        while (perf.MoveNext()) yield return perf.Current;
+                    }
                     var watch = System.Diagnostics.Stopwatch.StartNew();
                     // "series": 120 frames from a still camera; each frame's mean brightness and which lights are ray
                     // traced are reported when they change (light that comes and goes with the RT shadow selection).
@@ -4480,6 +4498,72 @@ namespace RTXMnesia.Dev
         {
             UnityEditor.SessionState.SetInt(ExitCodeKey, code);
             UnityEditor.EditorApplication.isPlaying = false;
+        }
+
+        /// <summary>
+        /// "perf" modes: 60 frames to settle (denoiser history, shadow cache), then 120 measured frames without readback.
+        /// The GPU and CPU time of every HDRP profiling sampler (HDProfileId names, render graph pass markers) per camera
+        /// render, the frame timings (FrameTimingManager) and the wall time per frame; what is traced and the shadow maps.
+        /// The camera renders itself into its target texture each frame; if it does not, it is rendered by hand.
+        /// </summary>
+        static IEnumerator PerfReport(Camera camera, StringBuilder report)
+        {
+            int renders = 0;
+            void Count(ScriptableRenderContext _, Camera c) { if (c == camera) renders++; }
+            RenderPipelineManager.beginCameraRendering += Count;
+            yield return null; yield return null;
+            bool manual = renders == 0;
+            for (int i = 0; i < 60; i++) { yield return null; if (manual) camera.Render(); }
+
+            var names = new List<string>();
+            var ids = Type.GetType("UnityEngine.Rendering.HighDefinition.HDProfileId, Unity.RenderPipelines.HighDefinition.Runtime");
+            if (ids != null) names.AddRange(Enum.GetNames(ids));
+            foreach (string extra in new[] { "HDRenderPipeline::Render Camera", "RenderGraphExecute", "Inl_HDRenderPipeline::Render Camera" })
+                names.Add(extra);
+            var recorders = new List<UnityEngine.Profiling.Recorder>();
+            foreach (string n in names) { var r = UnityEngine.Profiling.Recorder.Get(n); r.enabled = true; recorders.Add(r); }
+            var gpu = new double[names.Count]; var cpu = new double[names.Count]; var calls = new int[names.Count];
+            var timings = new FrameTiming[1];
+            double timingGpu = 0, timingCpu = 0, timingMain = 0, timingRender = 0; int timingN = 0;
+            const int frames = 120;
+            renders = 0;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            for (int f = 0; f < frames; f++)
+            {
+                yield return null;
+                if (manual) camera.Render();
+                for (int k = 0; k < recorders.Count; k++)
+                {
+                    var r = recorders[k];
+                    if (!r.isValid) continue;
+                    gpu[k] += r.gpuElapsedNanoseconds / 1e6; cpu[k] += r.elapsedNanoseconds / 1e6; calls[k] += r.sampleBlockCount;
+                }
+                FrameTimingManager.CaptureFrameTimings();
+                if (FrameTimingManager.GetLatestTimings(1, timings) > 0 && timings[0].gpuFrameTime > 0)
+                {
+                    timingGpu += timings[0].gpuFrameTime; timingCpu += timings[0].cpuFrameTime;
+                    timingMain += timings[0].cpuMainThreadFrameTime; timingRender += timings[0].cpuRenderThreadFrameTime; timingN++;
+                }
+            }
+            double wall = watch.Elapsed.TotalMilliseconds / frames;
+            RenderPipelineManager.beginCameraRendering -= Count;
+            foreach (var r in recorders) r.enabled = false;
+            double perRender = Math.Max(1, renders) / (double)frames;
+            report.AppendLine($"    perf: {camera.pixelWidth}x{camera.pixelHeight}, {(manual ? "rendered by hand" : "camera renders itself")}, {perRender:0.##} renders per frame, " +
+                              $"gpu recorder {SystemInfo.supportsGpuRecorder}; wall {wall:0.00} ms per frame");
+            if (timingN > 0)
+                report.AppendLine($"    perf frame timing ({timingN} frames): gpu {timingGpu / timingN:0.00} ms, cpu {timingCpu / timingN:0.00}, main {timingMain / timingN:0.00}, render thread {timingRender / timingN:0.00}");
+            else report.AppendLine("    perf frame timing: none");
+            report.AppendLine($"    perf traced {HplRayTracing.TracedLights} of {HplRayTracing.ShadowedLights} shadowed (hand {HplRayTracing.TracedHandLights}); {ShadowBudget(camera)}");
+            int rtRenderers = 0, allRenderers = 0;
+            foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                if (r.enabled && r.gameObject.activeInHierarchy) { allRenderers++; if (r.rayTracingMode != UnityEngine.Experimental.Rendering.RayTracingMode.Off) rtRenderers++; }
+            report.AppendLine($"    perf renderers: {allRenderers} active, {rtRenderers} in the ray tracing structure");
+            var order = new List<int>();
+            for (int k = 0; k < names.Count; k++) if (gpu[k] / frames >= 0.03 || cpu[k] / frames >= 0.2) order.Add(k);
+            order.Sort((a, b) => gpu[b].CompareTo(gpu[a]));
+            foreach (int k in order)
+                report.AppendLine($"    perf pass {names[k]}: gpu {gpu[k] / frames:0.000} ms, cpu {cpu[k] / frames:0.000} ms, {calls[k] / (double)frames:0.#} per frame");
         }
 
         /// <summary>
