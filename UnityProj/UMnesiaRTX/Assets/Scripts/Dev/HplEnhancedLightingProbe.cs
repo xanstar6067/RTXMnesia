@@ -211,6 +211,10 @@ namespace RTXMnesia.Dev
                         s.rtReflections = Level("rf", s.rtReflections); s.rtGi = Level("gi", s.rtGi);
                         s.rtAllShadows = Level("all", s.rtAllShadows ? 1 : 0) == 1; s.dlssMode = Level("dl", 0);
                     }
+                    // "rtcullNN": the ray tracing structure keeps only objects within NN m of the camera (HDRP culling mode
+                    // Sphere) in a top priority volume; without it the volume is off (the game's own culling).
+                    var cull = System.Text.RegularExpressions.Regex.Match(mode, "rtcull(\\d+)");
+                    SetRtCulling(cull.Success ? int.Parse(cull.Groups[1].Value, CultureInfo.InvariantCulture) : 0f);
                     HplGraphics.Apply(s);
                     ApplyElevatorPreviewState(map, name);
                     map.SetFog(active: mode.Contains("nofog") ? false : previewFog);
@@ -4498,6 +4502,25 @@ namespace RTXMnesia.Dev
         {
             UnityEditor.SessionState.SetInt(ExitCodeKey, code);
             UnityEditor.EditorApplication.isPlaying = false;
+        }
+
+        static UnityEngine.Rendering.HighDefinition.RayTracingSettings s_rtCulling;
+
+        static void SetRtCulling(float radius)
+        {
+            if (s_rtCulling == null)
+            {
+                if (radius <= 0f) return;
+                var go = new GameObject("Probe RT culling") { hideFlags = HideFlags.DontSave };
+                var volume = go.AddComponent<Volume>();
+                volume.isGlobal = true; volume.priority = 1000;
+                volume.profile = ScriptableObject.CreateInstance<VolumeProfile>();
+                s_rtCulling = volume.profile.Add<UnityEngine.Rendering.HighDefinition.RayTracingSettings>();
+            }
+            s_rtCulling.cullingMode.Override(radius > 0f ? UnityEngine.Rendering.HighDefinition.RTASCullingMode.Sphere
+                                                         : UnityEngine.Rendering.HighDefinition.RTASCullingMode.ExtendedFrustum);
+            s_rtCulling.cullingDistance.Override(radius > 0f ? radius : 1000f);
+            s_rtCulling.active = radius > 0f;
         }
 
         /// <summary>

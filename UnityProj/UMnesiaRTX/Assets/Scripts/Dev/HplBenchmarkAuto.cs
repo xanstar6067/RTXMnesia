@@ -189,18 +189,40 @@ namespace RTXMnesia.Dev
             var recorders = new System.Collections.Generic.List<UnityEngine.Profiling.Recorder>();
             foreach (string n in names) { var r = UnityEngine.Profiling.Recorder.Get(n); r.enabled = true; recorders.Add(r); }
             var timings = new FrameTiming[1];
+            UnityEngine.Rendering.HighDefinition.RayTracingSettings cullSettings = null;
             foreach (var spot in spots)
                 for (int v = 0; v < variants.Count; v++)
                 {
                     var s = baseSettings.Copy();
+                    string flashback = null; bool emotion = false; float rtCull = 0f;
                     foreach (var pair in variants[v].fields.Split(',', StringSplitOptions.RemoveEmptyEntries))
                     {
                         var kv = pair.Split('=');
+                        // "@flashback=<file>": the flashback plays while measured; "@emotion=1": an emotion flash.
+                        if (kv[0] == "@flashback") { flashback = kv[1]; continue; }
+                        if (kv[0] == "@emotion") { emotion = true; continue; }
+                        // "@rtcull=<m>": the ray tracing structure keeps only objects within a sphere of that radius
+                        // (HDRP RayTracingSettings, culling mode Sphere); -1: HDRP's default (extended frustum).
+                        if (kv[0] == "@rtcull") { rtCull = float.Parse(kv[1], CultureInfo.InvariantCulture); continue; }
                         var field = typeof(HplUserSettings).GetField(kv[0].Trim());
                         field.SetValue(s, Convert.ChangeType(kv[1].Trim(), field.FieldType, CultureInfo.InvariantCulture));
                     }
                     s.Validate();
                     ApplySettings(map, s);
+                    if (cullSettings == null)
+                    {
+                        var go = new GameObject("Benchmark RT culling");
+                        DontDestroyOnLoad(go);
+                        var volume = go.AddComponent<UnityEngine.Rendering.Volume>();
+                        volume.isGlobal = true; volume.priority = 1000;
+                        volume.profile = ScriptableObject.CreateInstance<UnityEngine.Rendering.VolumeProfile>();
+                        cullSettings = volume.profile.Add<UnityEngine.Rendering.HighDefinition.RayTracingSettings>();
+                    }
+                    cullSettings.cullingMode.Override(rtCull > 0 ? UnityEngine.Rendering.HighDefinition.RTASCullingMode.Sphere
+                                                                 : UnityEngine.Rendering.HighDefinition.RTASCullingMode.ExtendedFrustum);
+                    cullSettings.cullingDistance.Override(rtCull > 0 ? rtCull : 1000f);
+                    // 0: the game's own culling (HplRayTracing.StructureRadius); below 0: HDRP's default.
+                    cullSettings.active = rtCull != 0;
                     map.effects.Fade.FadeIn(0f);
                     player.active = true;
                     Vector3 feet = HplSpace.Position(spot.feet), dir = HplSpace.Position(spot.feet + spot.dir) - feet;
@@ -208,6 +230,10 @@ namespace RTXMnesia.Dev
                     yield return new WaitForSecondsRealtime(0.3f);
                     player.AddLook(0f, -Mathf.Atan2(dir.y, new Vector2(dir.x, dir.z).magnitude) - player.Pitch);
                     for (float t = 0, settle = v == 0 ? 8 : 4; t < settle; t += Time.unscaledDeltaTime) { AudioListener.pause = true; yield return null; }
+                    if (flashback != null) { player.Flashback.Disabled = false; player.Flashback.Start(flashback, ""); }
+                    if (emotion) map.effects.EmotionFlash.Start("Benchmark", "");
+                    if (flashback != null || emotion)
+                        for (float t = 0; t < 2.5f; t += Time.unscaledDeltaTime) { AudioListener.pause = true; yield return null; }
 
                     var gpuPass = new double[names.Count];
                     var frameMs = new System.Collections.Generic.List<float>();
@@ -225,16 +251,20 @@ namespace RTXMnesia.Dev
                     float total = 0; foreach (float ms in frameMs) total += ms;
                     frameMs.Sort();
                     float low = frameMs[Math.Max(0, (int)(frameMs.Count * 0.99f) - 1)];
+                    string state = flashback != null ? $" flashback active {player.Flashback.Active}" : emotion ? $" emotion active {map.effects.EmotionFlash.Active}" : "";
+                    if (flashback != null) { player.Flashback.Reset(); player.Flashback.Disabled = true; }
                     var cam = map.PlayerCamera;
                     log.AppendLine($"  {spot.name} {variants[v].name}: fps {frameMs.Count / (total / 1000f):F1}, 1% low {1000f / low:F1}, " +
                                    (timed > 0 ? $"gpu {gpu / timed:F2} ms, cpu main {main / timed:F2}, render thread {render / timed:F2}" : "no frame timing") +
-                                   $"; render {cam.scaledPixelWidth}x{cam.scaledPixelHeight} of {Screen.width}x{Screen.height}, traced {HplRayTracing.TracedLights} of {HplRayTracing.ShadowedLights}; {Memory()}");
+                                   $"; render {cam.scaledPixelWidth}x{cam.scaledPixelHeight} of {Screen.width}x{Screen.height}, traced {HplRayTracing.TracedLights} of {HplRayTracing.ShadowedLights}; {Memory()}{state}");
                     var order = new System.Collections.Generic.List<int>();
                     for (int k = 0; k < names.Count; k++) if (gpuPass[k] / frameMs.Count >= 0.3) order.Add(k);
                     order.Sort((a, b) => gpuPass[b].CompareTo(gpuPass[a]));
                     if (order.Count > 0)
                         log.AppendLine("      passes: " + string.Join(", ", order.ConvertAll(k => $"{names[k]} {gpuPass[k] / frameMs.Count:F2}")));
                     Write(log.ToString());
+                    Shot($"{spot.name}_{variants[v].name}");
+                    yield return null; yield return null;
                 }
             foreach (var r in recorders) r.enabled = false;
         }

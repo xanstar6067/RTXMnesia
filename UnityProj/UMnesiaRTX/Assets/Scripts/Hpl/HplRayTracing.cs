@@ -51,6 +51,14 @@ namespace RTXMnesia.Hpl
         static readonly int[] SsgiRaySteps = { 0, 32, 48, 64 };
         /// <summary>Lights found by the rays (reflections, GI) within this distance of the camera (HDRP: 10 m).</summary>
         public const float LightClusterRange = 40f;
+        /// <summary>
+        /// The ray tracing structure keeps only objects within this distance of the camera (HDRP culling mode Sphere;
+        /// HDRP's default, an extended frustum as deep as the far plane, keeps almost the whole map). Each ray traced
+        /// pass (the shadows of every traced light, AO, GI, reflections) costs CPU and GPU by the size of the structure:
+        /// on 24_torture_choir_east the frame went from 30–40 to 16–23 ms (docs/RtPerformance.md). Not with path
+        /// tracing, which draws the structure itself.
+        /// </summary>
+        public const float StructureRadius = 50f;
 
         /// <summary>
         /// Path tracing choices: off, or the samples accumulated while the camera stands still (HDRP's path tracer
@@ -151,6 +159,7 @@ namespace RTXMnesia.Hpl
         static ScreenSpaceReflection s_reflection;
         static GlobalIllumination s_gi;
         static LightCluster s_cluster;
+        static RayTracingSettings s_settings;
         static UnityEngine.Rendering.HighDefinition.PathTracing s_pathTracing;
 
         /// <summary>
@@ -178,6 +187,10 @@ namespace RTXMnesia.Hpl
             }
             ApplyGi(profile);
             ApplyPathTracing(profile);
+            if (s_settings == null && !profile.TryGet(out s_settings)) s_settings = profile.Add<RayTracingSettings>();
+            s_settings.active = Active && PathTracing == 0;
+            s_settings.cullingMode.Override(RTASCullingMode.Sphere);
+            s_settings.cullingDistance.Override(StructureRadius);
             s_reflection.active = Reflections > 0;
             if (Reflections == 0) return;
             s_reflection.enabled.Override(true);
