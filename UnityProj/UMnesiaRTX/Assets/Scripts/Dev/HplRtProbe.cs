@@ -152,7 +152,7 @@ namespace RTXMnesia.Dev
                 ScreenSpaceAmbientOcclusion ao = null;
                 bool found = profile != null && profile.TryGet(out ao);
                 _report.AppendLine($"RTAO {level}: component {found}, active {ao?.active}, ray traced {ao?.rayTracing.value}, quality {ao?.quality.value}, {ms:0.00} ms/frame");
-                Check(found && ao.active == (level > 0) && (level == 0 || ao.rayTracing.value && ao.quality.value == level - 1),
+                Check(found && ao.active == (level > 0) && (level == 0 || ao.rayTracing.value && ao.quality.value == (level < HplRayTracing.AoLevels - 1 ? level - 1 : ScalableSettingLevelParameter.LevelCount)),
                       $"RTAO {level}: the settings volume {(level > 0 ? "traces AO at quality " + (level - 1) : "has no AO")}");
             }
             Check(Difference(aoOff, aoHigh) > 0.0001f, $"RTAO changes the image (mean difference {Difference(aoOff, aoHigh):0.0000})");

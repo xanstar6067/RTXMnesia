@@ -23,8 +23,24 @@ namespace RTXMnesia.Hpl
         public static readonly int[] ShadowLights = { 0, 4, 8, 12, 16 };
         static readonly int[] ShadowSamples = { 0, 1, 1, 2, 4 };
         public const int ShadowsDefault = 2;
-        /// <summary>RT ambient occlusion choices: off, low, medium, high (HDRP's RTAO quality levels).</summary>
+        /// <summary>
+        /// The rays per pixel of a traced light go by the size of its source, up to the level's count: HDRP dispatches
+        /// the rays of every light once per sample over the whole screen, and each dispatch costs the render thread
+        /// as well as the GPU (docs/RtPerformance.md: at Ultra 24 of the frame's ~27 dispatches were shadow samples).
+        /// The penumbra of a candle (1.2 cm) or a torch (6 cm) is a few pixels wide and its rays go almost the same
+        /// way: one is enough. Ovens and fires (15 cm) get two, the spread flames of a chandelier (up to 0.5 m) the
+        /// level's count.
+        /// </summary>
+        public const float OneSampleRadius = 0.08f, TwoSampleRadius = 0.2f;
+        public static int SamplesFor(float sourceRadius, int level) =>
+            Mathf.Min(ShadowSamples[level], sourceRadius <= OneSampleRadius ? 1 : sourceRadius <= TwoSampleRadius ? 2 : 4);
+        /// <summary>
+        /// RT ambient occlusion choices: off, low, medium, high. Low and medium are HDRP's RTAO quality levels (1 ray
+        /// of 0.5 m, 2 rays of 3 m); HDRP's high is 8 rays of 20 m per pixel, the high here is its own.
+        /// </summary>
         public const int AoLevels = 4, AoDefault = 2;
+        public const int AoHighSamples = 4;
+        public const float AoHighRayLength = 8f, AoHighDenoiserRadius = 0.65f;
         /// <summary>How much RTAO darkens the direct light of lamps (HDRP applies AO to indirect light only, which HPL2 maps do not have).</summary>
         public const float AoDirectLighting = 0.35f;
 
@@ -174,7 +190,16 @@ namespace RTXMnesia.Hpl
             {
                 s_ao.layerMask.Override(AllButGiOnly);
                 s_ao.rayTracing.Override(true);
-                s_ao.quality.Override(Ao - 1);
+                if (Ao < AoLevels - 1) s_ao.quality.Override(Ao - 1);
+                else
+                {
+                    // Custom quality: the values below instead of the asset's high level.
+                    s_ao.quality.Override(ScalableSettingLevelParameter.LevelCount);
+                    s_ao.rayLength = AoHighRayLength;
+                    s_ao.sampleCount = AoHighSamples;
+                    s_ao.denoise = true;
+                    s_ao.denoiserRadius = AoHighDenoiserRadius;
+                }
                 s_ao.intensity.Override(1f);
                 s_ao.directLightingStrength.Override(AoDirectLighting);
             }
@@ -418,7 +443,9 @@ namespace RTXMnesia.Hpl
                 // Area lights have their size; the enhanced lighting gives its lights their own source radius.
                 if (unityLight.type is LightType.Point or LightType.Spot or LightType.Pyramid or LightType.Box)
                     unityLight.shapeRadius = light.tracedSourceRadius >= 0f ? light.tracedSourceRadius : SourceRadius;
-                hd.numRayTracingSamples = ShadowSamples[Shadows];
+                // Area lights keep the level's count: their size is their shape.
+                bool punctual = unityLight.type is LightType.Point or LightType.Spot or LightType.Pyramid or LightType.Box;
+                hd.numRayTracingSamples = punctual ? SamplesFor(unityLight.shapeRadius, Shadows) : ShadowSamples[Shadows];
                 hd.filterTracedShadow = true;
                 if (!hd.useRayTracedShadows) hd.useRayTracedShadows = true;
             }
