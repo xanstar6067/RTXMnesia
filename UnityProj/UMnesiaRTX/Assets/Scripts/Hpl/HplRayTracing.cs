@@ -28,12 +28,16 @@ namespace RTXMnesia.Hpl
         /// the rays of every light once per sample over the whole screen, and each dispatch costs the render thread
         /// as well as the GPU (docs/RtPerformance.md: at Ultra 24 of the frame's ~27 dispatches were shadow samples).
         /// The penumbra of a candle (1.2 cm) or a torch (6 cm) is a few pixels wide and its rays go almost the same
-        /// way: one is enough. Ovens and fires (15 cm) get two, the spread flames of a chandelier (up to 0.5 m) the
-        /// level's count.
+        /// way: one is enough. Larger sources (ovens and fires 15 cm, the spread flames of a chandelier up to 0.5 m)
+        /// get two, also at Ultra: the chandeliers' 4 were 8 of the 10 shadow dispatches in the hall of 00_rainy_hall,
+        /// and the denoiser leaves no visible difference (docs/RtPerformance.md, "Люстры: 2 луча"). Area lights keep
+        /// the level's count.
         /// </summary>
-        public const float OneSampleRadius = 0.08f, TwoSampleRadius = 0.2f;
+        public const float OneSampleRadius = 0.08f;
+        /// <summary>Debug (the probe's "maxrays4" mode): the earlier 4 rays of large sources at Ultra.</summary>
+        public static int MaxPunctualSamples = 2;
         public static int SamplesFor(float sourceRadius, int level) =>
-            Mathf.Min(ShadowSamples[level], sourceRadius <= OneSampleRadius ? 1 : sourceRadius <= TwoSampleRadius ? 2 : 4);
+            Mathf.Min(ShadowSamples[level], sourceRadius <= OneSampleRadius ? 1 : MaxPunctualSamples);
         /// <summary>
         /// RT ambient occlusion choices: off, low, medium, high. Low and medium are HDRP's RTAO quality levels (1 ray
         /// of 0.5 m, 2 rays of 3 m); HDRP's high is 8 rays of 20 m per pixel, the high here is its own.

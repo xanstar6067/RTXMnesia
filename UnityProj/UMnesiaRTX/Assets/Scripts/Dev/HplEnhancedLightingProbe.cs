@@ -179,6 +179,10 @@ namespace RTXMnesia.Dev
                     // "noemit": without the GI copies of glowing materials (what their glow adds).
                     HplEnhancedEmission.Enabled = !mode.Contains("noemit");
                     HplEnhancedEmission.GainScale = mode.Contains("emitx") ? 30f : 1f;
+                    // "noparticles": the particle renderers hidden (steam and smoke move between frames and runs; a
+                    // still image to compare shadows).
+                    RTXMnesia.Particles.HplParticleSystem.RendererRoot.gameObject.SetActive(!mode.Contains("noparticles"));
+                    HplRayTracing.MaxPunctualSamples = mode.Contains("maxrays4") ? 4 : 2;
                     ApplyPrisonNorthCheckpointPreview(map, mode);
                     ApplyCisternEntranceWaterPreview(map, mode);
                     ApplyCisternLightingPreview(map, mode);
@@ -290,6 +294,7 @@ namespace RTXMnesia.Dev
                     camera.targetTexture = rt;
                     if (mode.Contains("perf"))
                     {
+                        s_profile = mode.Contains("prof");
                         var perf = PerfReport(camera, report);
                         while (perf.MoveNext()) yield return perf.Current;
                     }
@@ -340,7 +345,7 @@ namespace RTXMnesia.Dev
                         {
                             var shot = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
                             shot.SetPixelData(data, 0);
-                            File.WriteAllBytes(Path.Combine(folder, $"{mapName}_{name}_frame{i}.png"), shot.EncodeToPNG());
+                            File.WriteAllBytes(Path.Combine(folder, $"{mapName}_{name}_{mode}_frame{i}.png"), shot.EncodeToPNG());
                             Destroy(shot);
                         }
                         var traced = new List<string>();
@@ -710,6 +715,8 @@ namespace RTXMnesia.Dev
             }
             HplEnhancedRelief.SeparateWalls = true;
             HplEnhancedEmission.Enabled = true;
+            RTXMnesia.Particles.HplParticleSystem.RendererRoot.gameObject.SetActive(true);
+            HplRayTracing.MaxPunctualSamples = 2;
             HplEnhancedEmission.GainScale = 1f;
             yield return SetLantern(map, false);
             yield return VerifyThunder(map, user, report);
@@ -4550,6 +4557,15 @@ namespace RTXMnesia.Dev
             double timingGpu = 0, timingCpu = 0, timingMain = 0, timingRender = 0; int timingN = 0;
             const int frames = 120;
             renders = 0;
+            // "prof" in the mode: the editor's profiler records the measured frames; the self time of every marker
+            // per thread is reported (ThreadProfile), for the CPU cost the HDRP samplers do not show.
+            bool prof = s_profile;
+            if (prof)
+            {
+                UnityEditorInternal.ProfilerDriver.ClearAllFrames();
+                UnityEditorInternal.ProfilerDriver.enabled = true;
+                UnityEngine.Profiling.Profiler.enabled = true;
+            }
             var watch = System.Diagnostics.Stopwatch.StartNew();
             for (int f = 0; f < frames; f++)
             {
@@ -4569,6 +4585,13 @@ namespace RTXMnesia.Dev
                 }
             }
             double wall = watch.Elapsed.TotalMilliseconds / frames;
+            if (prof)
+            {
+                yield return null; yield return null;
+                UnityEngine.Profiling.Profiler.enabled = false;
+                UnityEditorInternal.ProfilerDriver.enabled = false;
+                ThreadProfile(report);
+            }
             RenderPipelineManager.beginCameraRendering -= Count;
             foreach (var r in recorders) r.enabled = false;
             double perRender = Math.Max(1, renders) / (double)frames;
@@ -4582,11 +4605,124 @@ namespace RTXMnesia.Dev
             foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
                 if (r.enabled && r.gameObject.activeInHierarchy) { allRenderers++; if (r.rayTracingMode != UnityEngine.Experimental.Rendering.RayTracingMode.Off) rtRenderers++; }
             report.AppendLine($"    perf renderers: {allRenderers} active, {rtRenderers} in the ray tracing structure");
+            report.AppendLine($"    perf structure: {StructureInstances()} instances; {StructureNear(camera)}");
             var order = new List<int>();
             for (int k = 0; k < names.Count; k++) if (gpu[k] / frames >= 0.03 || cpu[k] / frames >= 0.2) order.Add(k);
             order.Sort((a, b) => gpu[b].CompareTo(gpu[a]));
             foreach (int k in order)
                 report.AppendLine($"    perf pass {names[k]}: gpu {gpu[k] / frames:0.000} ms, cpu {cpu[k] / frames:0.000} ms, {calls[k] / (double)frames:0.#} per frame");
+        }
+
+        static bool s_profile;
+
+        /// <summary>Instances in HDRP's ray tracing structure (its HDRTASManager, by reflection), -1 if not found.</summary>
+        static int StructureInstances()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
+            var hdrp = RenderPipelineManager.currentPipeline;
+            var manager = hdrp?.GetType().GetField("m_RTASManager", F)?.GetValue(hdrp);
+            var rtas = manager?.GetType().GetField("rtas", F)?.GetValue(manager) as RayTracingAccelerationStructure;
+            return rtas != null ? (int)rtas.GetInstanceCount() : -1;
+        }
+
+        /// <summary>
+        /// Ray traced renderers within the structure's radius of the camera: how many, their sub-meshes (each one a hit
+        /// group record written at every dispatch), and how many of them are static level geometry, statically batched.
+        /// </summary>
+        static string StructureNear(Camera camera)
+        {
+            float radius = HplRayTracing.StructureRadius;
+            int renderers = 0, subMeshes = 0, statics = 0, staticSub = 0, batched = 0, relief = 0, inEntity = 0, bodies = 0, noShadow = 0;
+            var materials = new HashSet<Material>();
+            var staticMaterials = new HashSet<Material>();
+            foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsInactive.Exclude))
+            {
+                if (!r.enabled || !r.gameObject.activeInHierarchy || r.rayTracingMode == UnityEngine.Experimental.Rendering.RayTracingMode.Off) continue;
+                if (r.bounds.SqrDistance(camera.transform.position) > radius * radius) continue;
+                int sub = r.sharedMaterials.Length;
+                renderers++; subMeshes += sub;
+                foreach (var m in r.sharedMaterials) if (m != null) materials.Add(m);
+                bool isStatic = r.gameObject.isStatic || r.isPartOfStaticBatch;
+                if (r.isPartOfStaticBatch) batched++;
+                if (isStatic)
+                {
+                    statics++; staticSub += sub;
+                    if (r.TryGetComponent<MeshFilter>(out var filter) && HplEnhancedRelief.TryDescribe(filter, out _, out _)) relief++;
+                    if (r.GetComponentInParent<AmnesiaEntity>(true) != null) inEntity++;
+                }
+                else
+                {
+                    if (r.GetComponentInParent<Rigidbody>(true) != null) bodies++;
+                    if (r.shadowCastingMode == ShadowCastingMode.Off) noShadow++;
+                    foreach (var m in r.sharedMaterials) if (m != null) staticMaterials.Add(m);
+                }
+            }
+            return $"within {radius:0} m: {renderers} renderers, {subMeshes} sub-meshes, {materials.Count} materials; " +
+                   $"static {statics} ({staticSub} sub-meshes, {staticMaterials.Count} materials, {batched} statically batched, {relief} mesh relief, {inEntity} under entities); others {renderers - statics} ({bodies} under bodies, {noShadow} without shadows)";
+        }
+
+        /// <summary>
+        /// The recorded profiler frames ("prof" modes): per thread with at least 0.5 ms of samples per frame, the markers
+        /// by self time (their own time without their children) and by total time, averaged per frame.
+        /// </summary>
+        static void ThreadProfile(StringBuilder report)
+        {
+            int first = UnityEditorInternal.ProfilerDriver.firstFrameIndex, last = UnityEditorInternal.ProfilerDriver.lastFrameIndex;
+            // The first and last recorded frames may be partial.
+            first++; last--;
+            int frames = last - first + 1;
+            report.AppendLine($"    prof frames {first}..{last} ({frames})");
+            if (frames <= 0) return;
+            var threads = new Dictionary<string, (Dictionary<string, double> self, Dictionary<string, double> total, Dictionary<string, int> calls)>();
+            for (int f = first; f <= last; f++)
+            {
+                for (int t = 0; ; t++)
+                {
+                    using var view = UnityEditorInternal.ProfilerDriver.GetRawFrameDataView(f, t);
+                    if (view == null || !view.valid) break;
+                    if (view.sampleCount == 0) continue;
+                    string thread = string.IsNullOrEmpty(view.threadGroupName) ? view.threadName : view.threadGroupName + "/" + view.threadName;
+                    if (!threads.TryGetValue(thread, out var data))
+                        threads[thread] = data = (new Dictionary<string, double>(), new Dictionary<string, double>(), new Dictionary<string, int>());
+                    int i = 0;
+                    while (i < view.sampleCount) i = Walk(view, i, data.self, data.total, data.calls, out _);
+                }
+            }
+            foreach (var (thread, data) in threads)
+            {
+                double sum = 0;
+                foreach (var v in data.self.Values) sum += v;
+                if (sum / frames < 0.5) continue;
+                report.AppendLine($"    prof thread {thread}: {sum / frames:0.00} ms of samples per frame");
+                var bySelf = new List<KeyValuePair<string, double>>(data.self);
+                bySelf.Sort((a, b) => b.Value.CompareTo(a.Value));
+                for (int k = 0; k < bySelf.Count && k < 30 && bySelf[k].Value / frames >= 0.02; k++)
+                    report.AppendLine($"      self {bySelf[k].Value / frames:0.000} ms  total {data.total[bySelf[k].Key] / frames:0.000}  x{data.calls[bySelf[k].Key] / (double)frames:0.#}  {bySelf[k].Key}");
+                var byTotal = new List<KeyValuePair<string, double>>(data.total);
+                byTotal.Sort((a, b) => b.Value.CompareTo(a.Value));
+                for (int k = 0; k < byTotal.Count && k < 40 && byTotal[k].Value / frames >= 0.1; k++)
+                    report.AppendLine($"      total {byTotal[k].Value / frames:0.000} ms  x{data.calls[byTotal[k].Key] / (double)frames:0.#}  {byTotal[k].Key}");
+            }
+        }
+
+        /// <summary>One sample and its children (depth first); returns the index after them and the sample's time.</summary>
+        static int Walk(UnityEditor.Profiling.RawFrameDataView view, int i, Dictionary<string, double> self,
+                        Dictionary<string, double> total, Dictionary<string, int> calls, out double time)
+        {
+            string name = view.GetSampleName(i) ?? $"marker {view.GetSampleMarkerId(i)}";
+            time = view.GetSampleTimeMs(i);
+            int children = view.GetSampleChildrenCount(i);
+            int next = i + 1;
+            double childTime = 0;
+            for (int c = 0; c < children && next < view.sampleCount; c++)
+            {
+                next = Walk(view, next, self, total, calls, out double t);
+                childTime += t;
+            }
+            self[name] = (self.TryGetValue(name, out double s) ? s : 0) + Math.Max(0, time - childTime);
+            total[name] = (total.TryGetValue(name, out double o) ? o : 0) + time;
+            calls[name] = (calls.TryGetValue(name, out int n) ? n : 0) + 1;
+            return next;
         }
 
         /// <summary>
