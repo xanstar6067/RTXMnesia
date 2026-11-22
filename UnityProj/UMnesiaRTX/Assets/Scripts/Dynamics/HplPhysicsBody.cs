@@ -171,11 +171,44 @@ namespace RTXMnesia.Dynamics
         /// <summary>World center of mass.</summary>
         public Vector3 WorldCenterOfMass => Rigidbody.worldCenterOfMass;
 
-        public void SetLinearDamping(float damping) =>
-            Rigidbody.linearDamping = Mathf.Clamp(damping, 0.001f, 1f) * NewtonDampingPerStep / NewtonStep;
+        public void SetLinearDamping(float damping)
+        {
+            _linearDamping = damping;
+            Rigidbody.linearDamping = Damping(damping);
+        }
 
-        public void SetAngularDamping(float damping) =>
-            Rigidbody.angularDamping = Mathf.Clamp(damping, 0.001f, 1f) * NewtonDampingPerStep / NewtonStep;
+        public void SetAngularDamping(float damping)
+        {
+            _angularDamping = damping;
+            Rigidbody.angularDamping = Damping(damping);
+        }
+
+        float Damping(float damping)
+        {
+            float unity = Mathf.Clamp(damping, 0.001f, 1f) * NewtonDampingPerStep / NewtonStep;
+            return _settles && damping <= 0.001f ? Mathf.Max(unity, BallChainSettleDamping) : unity;
+        }
+
+        /// <summary>
+        /// Unity damping (1/s) for a body on a ball joint whose own damping is HPL2's minimum (0 in the .ent): hanging ropes
+        /// rope_beam02, chains chain_beam (linear), barrier_bridge, chandelier_large. Newton at the game's medium accuracy
+        /// (WorldLoaderHplMap: SetAccuracyLevel Medium → NewtonSetSolverModel 2, a two-pass iterative solver) loses the
+        /// energy of a joint chain in the solver; PhysX keeps it, and these ropes swung forever (0.5 m/s after 18 s),
+        /// redrawing the cached shadow maps around them each frame (docs/Reference/PhysicsProps.md, «Цепочки на шаровых
+        /// шарнирах»). Deviation: amplitude falls about e times in 2 s; bodies with a damping of their own keep it.
+        /// </summary>
+        public const float BallChainSettleDamping = 0.5f;
+        bool _settles;
+        float _linearDamping, _angularDamping;
+
+        /// <summary>A ball joint of this body was made (HplJoint): the minimum damping becomes BallChainSettleDamping.</summary>
+        internal void SettleOnBallJoint()
+        {
+            if (_settles || IsStatic) return;
+            _settles = true;
+            SetLinearDamping(_linearDamping);
+            SetAngularDamping(_angularDamping);
+        }
 
         /// <summary>World inertia tensor (I = R·diag·Rᵀ), as iPhysicsBody::GetInertiaMatrix.</summary>
         public Matrix4x4 InertiaMatrix

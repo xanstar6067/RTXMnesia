@@ -182,6 +182,11 @@ namespace RTXMnesia.Dynamics
             }
             Joint.enableCollision = Data.collideBodies;
             Joint.enablePreprocessing = false;
+            if (Type == HplJointType.Ball)
+            {
+                Child.SettleOnBallJoint();
+                Parent?.SettleOnBallJoint();
+            }
             ApplyLimits();
         }
 

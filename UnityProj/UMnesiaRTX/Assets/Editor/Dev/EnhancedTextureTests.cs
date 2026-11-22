@@ -90,7 +90,11 @@ namespace RTXMnesia.EditorDev
                     throw new InvalidOperationException(relative + ": emission changed");
                 Check(improved.GetTextureScale("_BaseColorMap") == original.GetTextureScale("_BaseColorMap") &&
                     improved.GetTextureOffset("_BaseColorMap") == original.GetTextureOffset("_BaseColorMap"), "alpha, emission, culling and UV preserved: " + relative);
-                foreach (var property in new[] { "_BaseColorMap", "_NormalMap", "_MaskMap", "_HeightMap" })
+                bool classicSurface = EnhancedMaterialConverter.ClassicSurface(relative);
+                if (classicSurface)
+                    Check(improved.GetTexture("_NormalMap") == original.GetTexture("_NormalMap") && improved.GetTexture("_MaskMap") == original.GetTexture("_MaskMap") &&
+                          improved.GetTexture("_HeightMap") == null, "classic normal and gloss kept, only the PBRify albedo: " + relative);
+                foreach (var property in classicSurface ? new[] { "_BaseColorMap" } : new[] { "_BaseColorMap", "_NormalMap", "_MaskMap", "_HeightMap" })
                 {
                     var texture = improved.GetTexture(property) as Texture2D;
                     if (texture == null) { if (property == "_HeightMap") continue; throw new InvalidOperationException(relative + ": missing " + property); }

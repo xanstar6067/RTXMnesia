@@ -260,6 +260,16 @@ namespace RTXMnesia.Importer
             bool matte = Matte(relative, src);
             material.SetFloat("_MaterialID", classic.GetFloat("_MaterialID"));
             material.SetTexture("_BaseColorMap", textures[0]);
+            if (ClassicSurface(relative))
+            {
+                // Only the sharper albedo: normal, gloss (Mask from the Specular map), AO and remaps stay classic as copied above.
+                material.SetTexture("_HeightMap", null);
+                material.SetFloat("_DisplacementMode", 0f);
+                HDMaterial.ValidateMaterial(material);
+                EditorUtility.SetDirty(material);
+                UpsertCatalog(classic, relative);
+                return;
+            }
             material.SetTexture("_NormalMap", textures[1]);
             material.SetFloat("_NormalScale", 1f);
             material.SetTexture("_MaskMap", textures[2]);
@@ -283,7 +293,42 @@ namespace RTXMnesia.Importer
             material.SetFloat("_PPDMaxSamples", 32);
             HDMaterial.ValidateMaterial(material);
             EditorUtility.SetDirty(material);
+            UpsertCatalog(classic, relative);
+        }
 
+        /// <summary>
+        /// Materials whose PBRify normal and roughness lost the authored surface: only the 4K albedo is taken, the classic normal
+        /// and Specular-map gloss stay. The flesh `spiderdetails.dds` (spider nets, goo piles, slime_anim): the PBRify normal is
+        /// nearly flat and the roughness matte, the wet relief of the classic disappeared (bug report 2026-11-21 10-48-37,
+        /// 08_cellar_maze; docs/EnhancedTextures.md, «Классическая поверхность»).
+        /// </summary>
+        public static readonly string[] ClassicSurfaceMaterials =
+        {
+            "static_objects/spiderdetails/spiderdetails.mat",
+            "entities/organic/slime_anim/slime_anim.mat",
+        };
+
+        public static bool ClassicSurface(string relative) =>
+            ClassicSurfaceMaterials.Contains(relative.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Rebuilds only the <see cref="ClassicSurfaceMaterials"/> from their already imported PBRify albedo.</summary>
+        [MenuItem("Tools/RTXMnesia/Import/Enhanced textures: rebuild classic-surface materials")]
+        public static void RebuildClassicSurfaceBatch()
+        {
+            foreach (string relative in ClassicSurfaceMaterials)
+            {
+                var existing = AssetDatabase.LoadAssetAtPath<Material>(MaterialPathFor(relative));
+                var albedo = existing != null ? existing.GetTexture("_BaseColorMap") as Texture2D : null;
+                if (albedo == null || !AssetDatabase.GetAssetPath(albedo).StartsWith(Root + "/", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Import the PBRify set first (ConvertReadyBatch): " + relative);
+                BuildMaterial(relative, new[] { albedo, null, null, null });
+            }
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[EnhancedTextures] CLASSIC SURFACE PASS: {ClassicSurfaceMaterials.Length} materials keep the classic normal and gloss.");
+        }
+
+        static void UpsertCatalog(Material classic, string relative)
+        {
             var catalog = AssetDatabase.LoadAssetAtPath<HplTextureSet>(CatalogPath);
             if (catalog == null)
             {

@@ -180,6 +180,22 @@ Specular-карты классика (`MaterialConverter`, `NoSpecularF0` / `NoS
 `docs/Reference/DevTools.md`): классика / улучшенные до и после, без RT и с RT. Синий блик окна на ковре
 и светлые полосы на шторах ушли. Листы `UnityProj/UMnesiaRTX/Logs/FabricGloss/sheet_<отчёт>.png`: классика / улучшенные (итог), сверху без RT, снизу с RT, яркость ×2. `sheet_curtain_closeup.png`: штора 21-13-30 крупно, ×3 — классика / до / матовость с F0 0.04 / итог.
 
+## Классическая поверхность
+
+Исправлено 2026-11-21 (отчёт 10-48-37, `08_cellar_maze`: «классические текстуры плоти лучше новых»). Плоть
+`static_objects/spiderdetails/spiderdetails.dds` (сети и наросты `static_objects/spiderdetails`, анимированная слизь
+`entities/organic/slime_anim`) в улучшенном наборе была плоской и матовой. У этого набора PBRify нормаль почти плоская
+(видны только контуры вырезов), а roughness шершавая; классическая нормаль даёт сильный рельеф, а гладкость из
+Specular-карты даёт влажный блеск. Альбедо PBRify по цвету то же, только резче.
+
+Правило `EnhancedMaterialConverter.ClassicSurfaceMaterials`: у перечисленных материалов из PBRify берётся только albedo 4K.
+Нормаль, Mask (гладкость из Specular-карты, AO), remap и зеркальность остаются как у классики, POM нет. Пересобрать только их
+без полного импорта можно так: **Tools → RTXMnesia → Import → Enhanced textures: rebuild classic-surface materials**, batch
+`RTXMnesia.Importer.EnhancedMaterialConverter.RebuildClassicSurfaceBatch`. `ConvertReadyBatch` применяет то же правило.
+Неиспользуемые теперь DDS нормали и маски этого набора в сборку не попадают (на них не ссылается ни один материал Resources).
+Проверено снимками `-lookShots` на местах отчётов 10-48-37 и 10-49-26 (RT, яркость ×2): плоть в улучшенном наборе получила
+рельеф и блеск классики. Листы классика | улучшенные: `UnityProj/UMnesiaRTX/Logs/FleshSurface/sheet_<отчёт>.png`.
+
 ## Переключение
 
 `HplEnhancedTextures` загружает каталог из Resources. В нём классические ссылки и строковые

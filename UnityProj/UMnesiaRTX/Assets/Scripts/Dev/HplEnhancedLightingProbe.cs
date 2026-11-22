@@ -295,6 +295,7 @@ namespace RTXMnesia.Dev
                     if (mode.Contains("perf"))
                     {
                         s_profile = mode.Contains("prof");
+                        s_hitch = mode.Contains("hitch");
                         var perf = PerfReport(camera, report);
                         while (perf.MoveNext()) yield return perf.Current;
                     }
@@ -311,6 +312,8 @@ namespace RTXMnesia.Dev
                     Vector3 movedFrom = default;
                     int redraws = 0;
                     HplShadowCache.MoverCounts = new Dictionary<string, int>();
+                    // "sleep": dynamic bodies that stay awake over the frames (frames awake, top speeds, sleep threshold).
+                    var awake = mode.Contains("sleep") ? new Dictionary<Rigidbody, (int frames, float v, float w)>() : null;
                     for (int i = 0; i < frames; i++)
                     {
                         if (i == frames / 2 && mode.Contains("moved"))
@@ -332,6 +335,13 @@ namespace RTXMnesia.Dev
                         }
                         yield return null;
                         redraws += HplShadowCache.Redraws;
+                        if (awake != null)
+                            foreach (var body in FindObjectsByType<Rigidbody>(FindObjectsSortMode.None))
+                            {
+                                if (body.isKinematic || body.IsSleeping()) continue;
+                                awake.TryGetValue(body, out var a);
+                                awake[body] = (a.frames + 1, Mathf.Max(a.v, body.linearVelocity.magnitude), Mathf.Max(a.w, body.angularVelocity.magnitude));
+                            }
                         camera.Render();
                         if (!series) { AsyncGPUReadback.Request(rt, 0, 0, 1, 0, 1, 0, 1).WaitForCompletion(); continue; }
                         var frame = AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32);
@@ -375,6 +385,34 @@ namespace RTXMnesia.Dev
                     }
                     double ms = watch.Elapsed.TotalMilliseconds / frames;
                     if (movedObject != null) movedObject.position = movedFrom;
+                    if (awake != null)
+                    {
+                        var list = new List<KeyValuePair<Rigidbody, (int frames, float v, float w)>>(awake);
+                        list.Sort((a, b) => b.Value.frames.CompareTo(a.Value.frames));
+                        report.AppendLine($"    sleep: {list.Count} dynamic bodies awake at some frame of {frames}; default threshold {Physics.sleepThreshold}");
+                        foreach (var a in list.GetRange(0, Math.Min(30, list.Count)))
+                        {
+                            var b = a.Key;
+                            if (b == null) continue;
+                            string owner = b.transform.parent != null ? b.transform.parent.name + "/" : "";
+                            report.AppendLine($"        {owner}{b.name}: awake {a.Value.frames}, max v {a.Value.v:0.0000} m/s, w {a.Value.w:0.0000} rad/s, " +
+                                              $"now v {b.linearVelocity.magnitude:0.0000} w {b.angularVelocity.magnitude:0.0000}, mass {b.mass:0.###}, sleep threshold {b.sleepThreshold}, " +
+                                              $"damping {b.linearDamping:0.####}/{b.angularDamping:0.####}, joints {b.GetComponents<Joint>().Length}");
+                            foreach (var j in b.GetComponents<Joint>())
+                            {
+                                // Swing of the child against its parent since the joint was made: the rotation PhysX limits.
+                                Quaternion rel = j.connectedBody != null ? Quaternion.Inverse(j.connectedBody.rotation) * b.rotation : b.rotation;
+                                report.AppendLine($"            joint to {(j.connectedBody != null ? j.connectedBody.name : "world")}: force {j.currentForce.magnitude:0.00} N, torque {j.currentTorque.magnitude:0.000} N·m" +
+                                                  (j is ConfigurableJoint cj ? $", cone {cj.angularYLimit.limit:0}°, twist {cj.highAngularXLimit.limit:0}°, motion {cj.angularYMotion}" : ""));
+                            }
+                            var touching = new List<string>();
+                            foreach (var c in b.GetComponentsInChildren<Collider>())
+                                foreach (var o in Physics.OverlapBox(c.bounds.center, c.bounds.extents * 0.98f, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+                                    if (o.attachedRigidbody != b && Physics.ComputePenetration(c, c.transform.position, c.transform.rotation, o, o.transform.position, o.transform.rotation, out _, out float depth))
+                                        touching.Add($"{(o.attachedRigidbody != null ? o.attachedRigidbody.name + "@" + o.attachedRigidbody.transform.parent?.name : o.name)} {depth * 1000:0.#} mm");
+                            if (touching.Count > 0) report.AppendLine($"            penetrates: {string.Join(", ", touching)}");
+                        }
+                    }
                     var movers = new List<KeyValuePair<string, int>>(HplShadowCache.MoverCounts);
                     movers.Sort((a, b) => b.Value.CompareTo(a.Value));
                     HplShadowCache.MoverCounts = null;
@@ -4555,7 +4593,13 @@ namespace RTXMnesia.Dev
             var gpu = new double[names.Count]; var cpu = new double[names.Count]; var calls = new int[names.Count];
             var timings = new FrameTiming[1];
             double timingGpu = 0, timingCpu = 0, timingMain = 0, timingRender = 0; int timingN = 0;
-            const int frames = 120;
+            // "hitch" in the mode: 900 measured frames, the wall time of each one; for frames over twice the median, the
+            // HDRP samplers that grew the most against their mean (freezes, docs/RtPerformance.md).
+            bool hitch = s_hitch;
+            int frames = hitch ? 900 : 120;
+            var frameMs = new double[frames];
+            var perFrameCpu = hitch ? new double[frames][] : null;
+            var perFrameGpu = hitch ? new double[frames][] : null;
             renders = 0;
             // "prof" in the mode: the editor's profiler records the measured frames; the self time of every marker
             // per thread is reported (ThreadProfile), for the CPU cost the HDRP samplers do not show.
@@ -4567,15 +4611,20 @@ namespace RTXMnesia.Dev
                 UnityEngine.Profiling.Profiler.enabled = true;
             }
             var watch = System.Diagnostics.Stopwatch.StartNew();
+            double last = 0;
             for (int f = 0; f < frames; f++)
             {
                 yield return null;
                 if (manual) camera.Render();
+                double now = watch.Elapsed.TotalMilliseconds;
+                frameMs[f] = now - last; last = now;
+                if (hitch) { perFrameCpu[f] = new double[recorders.Count]; perFrameGpu[f] = new double[recorders.Count]; }
                 for (int k = 0; k < recorders.Count; k++)
                 {
                     var r = recorders[k];
                     if (!r.isValid) continue;
                     gpu[k] += r.gpuElapsedNanoseconds / 1e6; cpu[k] += r.elapsedNanoseconds / 1e6; calls[k] += r.sampleBlockCount;
+                    if (hitch) { perFrameCpu[f][k] = r.elapsedNanoseconds / 1e6; perFrameGpu[f][k] = r.gpuElapsedNanoseconds / 1e6; }
                 }
                 FrameTimingManager.CaptureFrameTimings();
                 if (FrameTimingManager.GetLatestTimings(1, timings) > 0 && timings[0].gpuFrameTime > 0)
@@ -4600,6 +4649,32 @@ namespace RTXMnesia.Dev
             if (timingN > 0)
                 report.AppendLine($"    perf frame timing ({timingN} frames): gpu {timingGpu / timingN:0.00} ms, cpu {timingCpu / timingN:0.00}, main {timingMain / timingN:0.00}, render thread {timingRender / timingN:0.00}");
             else report.AppendLine("    perf frame timing: none");
+            {
+                var sorted = (double[])frameMs.Clone(); Array.Sort(sorted);
+                double Pct(double q) => sorted[Math.Min(sorted.Length - 1, (int)(q * sorted.Length))];
+                double median = Pct(0.5);
+                int over = 0; foreach (double v in frameMs) if (v > 2 * median) over++;
+                report.AppendLine($"    perf frames: median {median:0.00} ms, p95 {Pct(0.95):0.00}, p99 {Pct(0.99):0.00}, max {sorted[sorted.Length - 1]:0.00}; " +
+                                  $"{over} of {frames} over 2x median");
+                if (hitch)
+                {
+                    int listed = 0;
+                    for (int f = 0; f < frames && listed < 40; f++)
+                    {
+                        if (frameMs[f] <= 2 * median) continue;
+                        listed++;
+                        var grow = new List<(double d, string text)>();
+                        for (int k = 0; k < recorders.Count; k++)
+                        {
+                            double dc = perFrameCpu[f][k] - cpu[k] / frames, dg = perFrameGpu[f][k] - gpu[k] / frames;
+                            if (Math.Max(dc, dg) >= 0.5) grow.Add((Math.Max(dc, dg), $"{names[k]} cpu {perFrameCpu[f][k]:0.0} gpu {perFrameGpu[f][k]:0.0}"));
+                        }
+                        grow.Sort((a, b) => b.d.CompareTo(a.d));
+                        report.AppendLine($"    perf hitch frame {f} (t {f * median / 1000:0.0} s): {frameMs[f]:0.0} ms; " +
+                                          (grow.Count == 0 ? "no HDRP sampler grew" : string.Join("; ", grow.GetRange(0, Math.Min(5, grow.Count)).ConvertAll(g => g.text))));
+                    }
+                }
+            }
             report.AppendLine($"    perf traced {HplRayTracing.TracedLights} of {HplRayTracing.ShadowedLights} shadowed (hand {HplRayTracing.TracedHandLights}); {ShadowBudget(camera)}");
             int rtRenderers = 0, allRenderers = 0;
             foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
@@ -4613,7 +4688,7 @@ namespace RTXMnesia.Dev
                 report.AppendLine($"    perf pass {names[k]}: gpu {gpu[k] / frames:0.000} ms, cpu {cpu[k] / frames:0.000} ms, {calls[k] / (double)frames:0.#} per frame");
         }
 
-        static bool s_profile;
+        static bool s_profile, s_hitch;
 
         /// <summary>Instances in HDRP's ray tracing structure (its HDRTASManager, by reflection), -1 if not found.</summary>
         static int StructureInstances()

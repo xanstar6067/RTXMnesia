@@ -591,6 +591,8 @@ namespace RTXMnesia.ScriptApi
                 first.SetTimePosition(HplMath.RandRectf(0f, first.Length));
             }
             Map?.RegisterAnimatedProp(this);
+            // A looped decoration pose (slime_anim): its shadows follow in steps, not every frame.
+            World.HplShadowCache.MarkAmbient(AnimatedModel);
         }
 
         /// <summary>iLuxProp::PlayAnimation: a fade to the animation; a non-looping one calls back when it is over.</summary>

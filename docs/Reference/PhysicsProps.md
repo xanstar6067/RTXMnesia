@@ -16,6 +16,12 @@
 - Прогон шага: в Play FixedUpdate делает часть до симуляции, корутина `WaitForFixedUpdate` — после. В edit/batch `Physics.simulationMode = Script` и `HplMap.Step` вызывает `Physics.Simulate`.
 - Проверка: `-executeMethod RTXMnesia.EditorDev.PhysicsTests.RunBatch` — синтетические шарнир (знак угла, лимиты, закрытие [0°, 2°], мягкий лимит 120°) и слайдер [0, 0.5].
 
+### Цепочки на шаровых шарнирах (отступление, 2026-11-22)
+
+Висящие верёвки `rope_beam02`, цепи `chain_beam` (линейное затухание), мост `barrier_bridge`, люстра `chandelier_large` в `.ent` имеют затухание 0, то есть минимум HPL2 0.001 (≈ 0.0012 1/с в Unity). В HPL2 их успокаивал сам Newton: игра ставит среднюю точность (`WorldLoaderHplMap.cpp:273`, `SetAccuracyLevel(Medium)` → `NewtonSetSolverModel(2)`, итеративный решатель в два прохода), и он теряет энергию цепочки. PhysX её почти не теряет: тройной маятник `rope_beam02_1` в `21_torture_nave` через 18 с после загрузки качался со скоростью 0.58 м/с, цепи `chain_beam_6/7` — тоже, и каждый кадр перерисовывали кэш теней всех свечей в радиусе (`docs/RtPerformance.md`).
+
+Правило (`HplPhysicsBody.BallChainSettleDamping` = 0.5 1/с, `SettleOnBallJoint` из `HplJoint.CreateJoint`): у тела на шаровом шарнире затухание, которое в `.ent` на минимуме (≤ 0.001), не ниже 0.5 1/с: амплитуда падает примерно в e раз за 2 с. Затухание, заданное в `.ent` (туши 0.3–0.5, кандалы 1, люстры 0.03, висящий заключённый 0.1), не меняется; петли и ползунки (дверцы, ящики) не затронуты. Толкнуть верёвку по-прежнему можно, она успокаивается за несколько секунд. Проверка: проба освещения, флаг `sleep` (`docs/EnhancedLighting/README.md`): в `21_torture_nave` через 18 с все верёвки и цепи спят (до правки качались), `PhysicsTests` и `RopeStickySlimeTests` без изменений.
+
 ## Пропы и взаимодействие (шаг 4.3, Assets/Scripts/Props, namespace RTXMnesia.Props)
 
 - `HplProp` (ScriptApi, порт `iLuxProp` + `iLuxPropLoader::AfterLoad`): тела, джоинты, здоровье/прочность, эффекты (свет `FadeTo`, билборды и эмиссия `_EmissiveColor` через собственные runtime-материалы `HplEmission`), статическое движение, `SetDisableCollisionUntilOutsidePlayer`, связанные пропы. Переменные `.ent` — `Var*`, экземпляра карты — `InstanceVar*`, числа конфига — `ConfigFloat`.

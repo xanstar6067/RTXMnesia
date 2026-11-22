@@ -32,6 +32,13 @@ namespace RTXMnesia.World
         const float ChooseInterval = 0.5f, AtlasShare = 0.9f;
         /// <summary>A cached light keeps its place against a new one up to this much farther (m).</summary>
         const float KeepMargin = 2f;
+        /// <summary>
+        /// Seconds between the redraws of one light for the looped pose of an ambient prop (MarkAmbient: slime_anim and other
+        /// animated props, NPC props such as Agrippa and the rats included; not enemies). Every light near the 34 pulsing slimes of 08_cellar_maze redrew each frame:
+        /// ~32 point lights, RenderShadowMaps 10–12 ms CPU (docs/RtPerformance.md, «Слизь и кэш теней»). The lights are
+        /// spread over the interval, so they do not all redraw in one frame.
+        /// </summary>
+        public const float AmbientPoseInterval = 0.2f;
 
         sealed class CachedLight
         {
@@ -43,6 +50,9 @@ namespace RTXMnesia.World
             public bool cached, placed, noRoom;
             public float score;
             public long cost;
+            /// <summary>Earliest time of the next redraw for an ambient pose; a pose change waiting for it.</summary>
+            public float nextPose;
+            public bool posePending;
         }
 
         sealed class Caster
@@ -51,6 +61,12 @@ namespace RTXMnesia.World
             public bool shown;
             public Transform[] bones;
         }
+
+        /// <summary>Renderers of ambient animated props (MarkAmbient): their bone poses redraw at most every AmbientPoseInterval.</summary>
+        static readonly HashSet<Renderer> s_ambient = new();
+        static readonly List<Bounds> s_changedPose = new();
+        /// <summary>Own generator for the spread of pose redraws: the game's random sequences stay untouched.</summary>
+        static readonly System.Random s_jitter = new();
 
         static readonly List<CachedLight> s_lights = new();
         static readonly Dictionary<Renderer, Caster> s_casters = new();
@@ -69,7 +85,7 @@ namespace RTXMnesia.World
         public static int Redraws { get; private set; }
         public static int Fallbacks { get; private set; }
 
-        /// <summary>Probe: how often each caster triggered redraws, the lights the atlas had no room for.</summary>
+        /// <summary>Probe: how often each caster triggered redraws ("~" — an ambient pose, throttled), the lights the atlas had no room for.</summary>
         public static Dictionary<string, int> MoverCounts { get; set; }
         public static readonly List<string> FallbackNames = new();
 
@@ -86,7 +102,11 @@ namespace RTXMnesia.World
             // Lights HplRayTracing renders on demand already (traced without a map shadow of their own).
             if (hd.shadowUpdateMode != ShadowUpdateMode.EveryFrame) return;
             light.transform.hasChanged = false;
-            s_lights.Add(new CachedLight { light = light, unityLight = unityLight, hd = hd, range = unityLight.range });
+            s_lights.Add(new CachedLight
+            {
+                light = light, unityLight = unityLight, hd = hd, range = unityLight.range,
+                nextPose = Time.unscaledTime + (float)s_jitter.NextDouble() * AmbientPoseInterval,
+            });
             s_nextChoice = 0f;
         }
 
@@ -111,6 +131,17 @@ namespace RTXMnesia.World
                     bones = r is SkinnedMeshRenderer skinned ? skinned.bones : null,
                 };
             }
+        }
+
+        /// <summary>
+        /// The skinned model of a prop that loops its animation for decoration (HplProp.SetupAnimation): a pose of its
+        /// bones alone redraws the shadow maps around it at most every AmbientPoseInterval; moving or hiding it still at once.
+        /// </summary>
+        public static void MarkAmbient(GameObject model)
+        {
+            if (model == null) return;
+            s_ambient.RemoveWhere(r => r == null);
+            foreach (var r in model.GetComponentsInChildren<SkinnedMeshRenderer>(true)) s_ambient.Add(r);
         }
 
         /// <summary>
@@ -150,6 +181,7 @@ namespace RTXMnesia.World
             }
             Redraws = 0;
             s_changed.Clear();
+            s_changedPose.Clear();
             s_gone.Clear();
             foreach (var (r, c) in s_casters)
             {
@@ -160,7 +192,7 @@ namespace RTXMnesia.World
                     continue;
                 }
                 bool shown = Shown(r);
-                bool moved = false;
+                bool moved = false, posed = false;
                 if (r.transform.hasChanged)
                 {
                     r.transform.hasChanged = false;
@@ -170,7 +202,19 @@ namespace RTXMnesia.World
                 }
                 if (c.bones != null)
                     foreach (var bone in c.bones)
-                        if (bone != null && bone.hasChanged) { moved = true; bone.hasChanged = false; }
+                        if (bone != null && bone.hasChanged) { posed = true; bone.hasChanged = false; }
+                if (posed && !moved && shown == c.shown && s_ambient.Contains(r))
+                {
+                    // The looped pose of an ambient prop: throttled per light below.
+                    s_changedPose.Add(r.bounds);
+                    if (MoverCounts != null)
+                    {
+                        string key = "~" + (r.transform.parent != null ? r.transform.parent.name + "/" : "") + r.name;
+                        MoverCounts[key] = MoverCounts.TryGetValue(key, out int n) ? n + 1 : 1;
+                    }
+                    continue;
+                }
+                moved |= posed;
                 if (shown == c.shown && (!shown || !moved)) continue;
                 // Where it was and where it is now: both shadows change.
                 if (c.shown) s_changed.Add(c.bounds);
@@ -193,15 +237,25 @@ namespace RTXMnesia.World
                 t.hasChanged = false;
                 e.range = e.unityLight.range;
                 if (!e.cached || !e.placed && !Place(e)) continue;
+                Vector3 position = t.position;
+                float range2 = e.range * e.range;
                 if (!redraw)
-                {
-                    Vector3 position = t.position;
-                    float range2 = e.range * e.range;
                     foreach (var b in s_changed)
                         if (b.SqrDistance(position) <= range2) { redraw = true; break; }
-                }
+                if (!redraw && !e.posePending)
+                    foreach (var b in s_changedPose)
+                        if (b.SqrDistance(position) <= range2) { e.posePending = true; break; }
+                float now = Time.unscaledTime;
+                if (!redraw && e.posePending && now >= e.nextPose) redraw = true;
                 if (!redraw) continue;
                 e.hd.RequestShadowMapRendering();
+                if (e.posePending || now >= e.nextPose)
+                {
+                    // Any redraw shows the current pose. The next one waits about an interval, jittered: the lights stay spread
+                    // over the frames instead of falling into step.
+                    e.posePending = false;
+                    e.nextPose = now + (0.75f + 0.5f * (float)s_jitter.NextDouble()) * AmbientPoseInterval;
+                }
                 Redraws++;
             }
         }
