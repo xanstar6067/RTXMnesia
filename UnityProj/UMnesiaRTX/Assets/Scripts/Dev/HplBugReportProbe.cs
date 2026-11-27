@@ -58,9 +58,9 @@ namespace RTXMnesia.Dev
             _checks++;
         }
 
-        IEnumerator Press(Key key)
+        IEnumerator Press(params Key[] keys)
         {
-            InputSystem.QueueStateEvent(_keyboard, new KeyboardState(key));
+            InputSystem.QueueStateEvent(_keyboard, new KeyboardState(keys));
             yield return null;
             yield return null;
             InputSystem.QueueStateEvent(_keyboard, new KeyboardState());
@@ -103,8 +103,10 @@ namespace RTXMnesia.Dev
             Check(ui.BugReportOpen && view.IsOpen, $"F1 did not open the report window (pending {ui.BugReportOpen}, open {view.IsOpen}, paused {ui.IsPaused}, " +
                   $"readDevices {map.player.readDevices}, blocked {map.player.UiInputBlocked}, F1 {_keyboard[HplBugReportView.OpenKey].isPressed}, current {Keyboard.current == _keyboard})");
             Check(ui.IsPaused && Time.timeScale == 0 && map.player.UiInputBlocked, "The report must pause the game");
-            yield return Press(Key.Enter);
+            yield return Press(Key.LeftCtrl, Key.Enter);
             Check(view.IsOpen, "An empty comment must not be accepted");
+            yield return Press(Key.Enter);
+            Check(view.IsOpen && view.Comment.Length == 0, "Enter in an empty comment must add nothing: '" + view.Comment + "'");
             InputSystem.QueueTextEvent(_keyboard, ' ');
             InputSystem.QueueTextEvent(_keyboard, ' ');
             yield return null; yield return null;
@@ -116,10 +118,22 @@ namespace RTXMnesia.Dev
             yield return Press(Key.Backspace);
             Check(view.Comment == "O", "Backspace failed: '" + view.Comment + "'");
             yield return Press(Key.Backspace);
-            view.Type("Проверка отчёта: текстура стены мерцает возле окна, " + new string('x', 600));
-            Check(view.Comment.Length == HplBugReportView.MaxLength, "The comment must be limited to " + HplBugReportView.MaxLength);
+            // Multi-line: Enter and the numpad Enter break the line (Enter's own text character adds nothing more),
+            // a pasted \r\n too; Ctrl+Enter saves.
+            view.Type("Проверка отчёта: текстура стены мерцает ");
             yield return Press(Key.Enter);
-            Check(!ui.BugReportOpen && !view.IsOpen, "Enter did not save the report");
+            InputSystem.QueueTextEvent(_keyboard, '\r');
+            yield return null; yield return null;
+            Check(view.IsOpen && view.Comment == "Проверка отчёта: текстура стены мерцает\n", "Enter did not break the line: '" + view.Comment + "'");
+            view.Type("[Графика] вторая строка");
+            yield return Press(Key.NumpadEnter);
+            yield return Press(Key.Enter);
+            yield return Press(Key.Enter);
+            Check(view.IsOpen && view.Comment.EndsWith("строка\n\n"), "Numpad Enter / empty lines: '" + view.Comment + "'");
+            view.Type("третья\r\nчетвёртая " + new string('x', 600));
+            Check(view.Comment.Length == HplBugReportView.MaxLength, "The comment must be limited to " + HplBugReportView.MaxLength);
+            yield return Press(Key.LeftCtrl, Key.Enter);
+            Check(!ui.BugReportOpen && !view.IsOpen, "Ctrl+Enter did not save the report");
             Check(!ui.IsPaused && Time.timeScale == timeScale && !map.player.UiInputBlocked, "The game did not resume after the report");
 
             var folders = Directory.GetDirectories(Folder);
@@ -127,7 +141,9 @@ namespace RTXMnesia.Dev
             string folder = folders[0];
             string report = File.ReadAllText(Path.Combine(folder, "report.txt"));
             Debug.Log("[BugReportCheck] report.txt:\n" + report);
-            Check(report.StartsWith("Комментарий: Проверка отчёта:"), "The comment must open the report");
+            Check(report.StartsWith(string.Join(Environment.NewLine, "Комментарий: Проверка отчёта: текстура стены мерцает", "  [Графика] вторая строка", "  ", "  третья", "  четвёртая xxx")),
+                  "The multi-line comment must open the report, later lines indented");
+            Check(report.Split('\n').Count(l => l.StartsWith("[Графика]")) == 1, "A comment line must not read as a report section");
             foreach (var key in new[] { "Карта: 00_rainy_hall", "Позиция HPL (ноги): ", "Направление HPL: ", "Углы камеры HPL", "[Взгляд]", "[Графика]", "Сборка: ", "Снимок: ", "Сохранение: save.sav", "Лог: log.txt" })
                 Check(report.Contains(key), "report.txt lacks '" + key + "'");
             // A batch editor has no screen to capture (ScreenCapture writes nothing there): the screenshot is checked

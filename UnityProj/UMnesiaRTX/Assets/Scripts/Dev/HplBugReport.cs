@@ -155,7 +155,7 @@ namespace RTXMnesia.Dev
             Directory.CreateDirectory(folder);
             var utf8 = new UTF8Encoding(false);
             var text = new StringBuilder();
-            text.Append("Комментарий: ").AppendLine(comment.Trim());
+            text.Append("Комментарий: ").AppendLine(CommentText(comment));
             text.AppendLine();
             text.Append(_report);
             text.AppendLine();
@@ -177,6 +177,25 @@ namespace RTXMnesia.Dev
             File.WriteAllText(Path.Combine(folder, "report.txt"), text.ToString(), utf8);
             Debug.Log("[RTXMnesia] Bug report saved: " + folder);
             return folder;
+        }
+
+        /// <summary>
+        /// The comment for report.txt: a multi-line comment keeps its lines, each one after the first indented by two
+        /// spaces, so a user line never reads as a "[Section]" header or a "Key: value" line of the report, and an
+        /// empty one does not look like the end of the comment.
+        /// </summary>
+        public static string CommentText(string comment)
+        {
+            var lines = comment.Replace("\r\n", "\n").Replace('\r', '\n').Trim().Split('\n');
+            var text = new StringBuilder();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                // An empty line of the comment keeps its indent too: the first truly empty line ends the comment.
+                if (i > 0) text.AppendLine().Append("  ");
+                text.Append(line);
+            }
+            return text.ToString();
         }
 
         static string SafeName(string name)

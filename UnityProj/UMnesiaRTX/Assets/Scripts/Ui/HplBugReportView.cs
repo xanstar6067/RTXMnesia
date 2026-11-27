@@ -11,7 +11,8 @@ namespace RTXMnesia.Ui
     /// <summary>
     /// The bug report window (own feature, <see cref="Dev.HplBugReport"/>): a required comment, OK / Cancel, in the
     /// gui_main_menu.skin look of the menu windows, on its own canvas over every other screen; after OK a short
-    /// notice with the report folder. Enter — OK, Esc — Cancel, Ctrl+V pastes.
+    /// notice with the report folder. The comment is multi-line: Enter (and the numpad Enter) breaks the line,
+    /// Ctrl+Enter — OK, Esc — Cancel, Ctrl+V pastes (line breaks kept).
     /// </summary>
     public sealed class HplBugReportView
     {
@@ -152,12 +153,18 @@ namespace RTXMnesia.Ui
         {
             if (!_open) return Choice.None;
             var keyboard = Keyboard.current;
-            foreach (char c in _typed) Append(c.ToString());
+            // Enter's own text characters ('\r', Ctrl+Enter's '\n') are dropped: the key itself breaks the line below.
+            foreach (char c in _typed)
+                if (c != '\r' && c != '\n') Append(c.ToString());
             _typed.Clear();
             if (keyboard != null)
             {
                 if (keyboard.escapeKey.wasPressedThisFrame) return Choice.Cancel;
-                if ((keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame) && CanConfirm) return Choice.Ok;
+                if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
+                {
+                    if (keyboard.ctrlKey.isPressed) { if (CanConfirm) return Choice.Ok; }
+                    else Append("\n");
+                }
                 if (keyboard.ctrlKey.isPressed && keyboard.vKey.wasPressedThisFrame) Append(GUIUtility.systemCopyBuffer);
                 // Backspace repeats while held: 0.4 s, then every 40 ms.
                 if (keyboard.backspaceKey.wasPressedThisFrame)
@@ -182,18 +189,28 @@ namespace RTXMnesia.Ui
             return Choice.None;
         }
 
-        /// <summary>Tests: the text as if typed.</summary>
+        /// <summary>Tests: the text as if typed or pasted ('\n' breaks the line as Enter does).</summary>
         public void Type(string text) { Append(text); Draw(); }
 
         void Append(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
+            // Pasted line breaks (\r\n, \r) become '\n', tabs spaces; other control characters (Ctrl+V's own) are dropped.
+            text = text.Replace("\r\n", "\n").Replace('\r', '\n');
             foreach (char raw in text)
             {
-                // Pasted line breaks and tabs become spaces; other control characters (Ctrl+V's own) are dropped.
-                char c = raw is '\n' or '\r' or '\t' ? ' ' : raw;
-                if (char.IsControl(c) || _comment.Length >= MaxLength) continue;
-                if (c == ' ' && (_comment.Length == 0 || _comment[_comment.Length - 1] == ' ')) continue;
+                char c = raw == '\t' ? ' ' : raw;
+                if ((char.IsControl(c) && c != '\n') || _comment.Length >= MaxLength) continue;
+                char last = _comment.Length > 0 ? _comment[_comment.Length - 1] : '\n';
+                // No spaces at the start of a line or doubled; a space before a line break is dropped.
+                if (c == ' ' && (last == ' ' || last == '\n')) continue;
+                if (c == '\n')
+                {
+                    if (_comment.Length == 0) continue;
+                    if (last == ' ') _comment.Length--;
+                    // At most one empty line in a row.
+                    if (_comment.Length >= 2 && _comment[_comment.Length - 1] == '\n' && _comment[_comment.Length - 2] == '\n') continue;
+                }
                 _comment.Append(c);
             }
             _error = null;
@@ -204,8 +221,10 @@ namespace RTXMnesia.Ui
             if (_comment.Length == 0) return;
             if (!word) { _comment.Length--; return; }
             int i = _comment.Length;
+            // Ctrl+Backspace: the word before the caret, or the line break right before it.
+            if (_comment[i - 1] == '\n') { _comment.Length = i - 1; return; }
             while (i > 0 && _comment[i - 1] == ' ') i--;
-            while (i > 0 && _comment[i - 1] != ' ') i--;
+            while (i > 0 && _comment[i - 1] is not ' ' and not '\n') i--;
             _comment.Length = i;
         }
 
@@ -267,7 +286,9 @@ namespace RTXMnesia.Ui
             _ok = new Rect(_cancel.x - 10 - 100, _cancel.y, 100, 30);
             SkinButton(_ok, T("Ок", "OK"), !CanConfirm ? Grey : _hover == 0 ? Highlight : Color.white);
             SkinButton(_cancel, T("Отмена", "Cancel"), _hover == 1 ? Highlight : Color.white);
-            _text.DrawFont(T("Enter - Ок, Esc - Отмена", "Enter - OK, Esc - Cancel"), new Vector2(w.x + 10, w.yMax - 10 - 30 + 8), Vector2.one * 12, Grey);
+            // Two rows: one would run under the OK button.
+            _text.DrawFont(T("Enter - новая строка", "Enter - new line"), new Vector2(w.x + 10, w.yMax - 10 - 30 + 1), Vector2.one * 12, Grey);
+            _text.DrawFont(T("Ctrl+Enter - Ок, Esc - Отмена", "Ctrl+Enter - OK, Esc - Cancel"), new Vector2(w.x + 10, w.yMax - 10 - 30 + 15), Vector2.one * 12, Grey);
         }
 
         /// <summary>cWidgetWindow: WindowBackground and its borders / corners outside the rect (HplPauseMenu.Window).</summary>
