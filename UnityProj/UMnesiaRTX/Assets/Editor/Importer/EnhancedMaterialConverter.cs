@@ -306,6 +306,9 @@ namespace RTXMnesia.Importer
         {
             "static_objects/spiderdetails/spiderdetails.mat",
             "entities/organic/slime_anim/slime_anim.mat",
+            // Spider web flesh (02_entrance_hall and others): SurfaceAudit relief 0.04, shine 0.30; the user found the
+            // enhanced one flat next to the classic (2026-11-22, sheet s01_web).
+            "entities/special/web/web.mat",
         };
 
         public static bool ClassicSurface(string relative) =>
