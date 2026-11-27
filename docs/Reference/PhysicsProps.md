@@ -41,6 +41,10 @@
 
 `PhysicsTests` дают те же результаты. Исключённые пары видны командой симуляции `restoverlaps`, а `nocollide A B [коллайдер]` и `sticky Сущность on|off` помогают проверять похожие случаи.
 
+### Поза тел неактивной сущности (исправление, 2026-11-27)
+
+`HplPhysicsBody.Position` / `Rotation` у тела на выключенном GameObject берутся из `Transform`: `Rigidbody.position` вне физической сцены равен нулю, а в HPL2 тела неактивной сущности хранят свою матрицу. Раньше `PropSwingDoor.SetupDoorPhysics` (`LuxProp_SwingDoor.cpp:690`) у неактивной при загрузке двери поворачивал створку вокруг петли из нулевой позы, а проверка закрытия видела угол 0 и ставила предел 2°. В `03_archives` `mansion_8` (`Active=false`, `OpenAmount=0.8`, включается вместо `mansion_1` в `TimerEGrunt`, шаг 3) появлялась в 19 м от петли, и шарнир швырял её через комнату (отчёт F1 2026-11-27 18-59-55: створка у `68.98 1.17 −4.62` при петле `68.5 · 11.9`). После правки при включении угол 72° (0.8 × 90°), за 4 с створка доходит до 76.8° и засыпает на петле. Двери, активные с загрузки (`mansion_2/4/7`: 18°/63°/36°), и обычное открытие и автозакрытие `mansion_3` не изменились. Проверка: `PlayerSimulation` `-amnesiaMap maps/main/ch01/03_archives.map` со сценарием `call TimerEGrunt TimerEGrunt; idle 0.85; body mansion_8; …`.
+
 ## Пропы и взаимодействие (шаг 4.3, Assets/Scripts/Props, namespace RTXMnesia.Props)
 
 - `HplProp` (ScriptApi, порт `iLuxProp` + `iLuxPropLoader::AfterLoad`): тела, джоинты, здоровье/прочность, эффекты (свет `FadeTo`, билборды и эмиссия `_EmissiveColor` через собственные runtime-материалы `HplEmission`), статическое движение, `SetDisableCollisionUntilOutsidePlayer`, связанные пропы. Переменные `.ent` — `Var*`, экземпляра карты — `InstanceVar*`, числа конфига — `ConfigFloat`.

@@ -156,8 +156,10 @@ namespace RTXMnesia.Dynamics
         /// <summary>Awake (not frozen by Newton's auto sleep / PhysX sleeping).</summary>
         public bool Enabled => !Rigidbody.isKinematic ? !Rigidbody.IsSleeping() : _staticMovement;
 
-        public Vector3 Position => Rigidbody.position;
-        public Quaternion Rotation => Rigidbody.rotation;
+        // A rigidbody on an inactive GameObject is out of the physics scene and reports a zero pose; HPL2 bodies of an
+        // inactive entity keep their matrix (03_archives mansion_8: OpenAmount turned the door about the origin).
+        public Vector3 Position => Data.gameObject.activeInHierarchy ? Rigidbody.position : Data.transform.position;
+        public Quaternion Rotation => Data.gameObject.activeInHierarchy ? Rigidbody.rotation : Data.transform.rotation;
         public Vector3 LinearVelocity
         {
             get => Rigidbody.isKinematic ? _staticLinearVel : Rigidbody.linearVelocity;
