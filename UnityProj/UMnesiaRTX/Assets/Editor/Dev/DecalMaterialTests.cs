@@ -32,6 +32,14 @@ namespace RTXMnesia.EditorDev
 
         static void Surface(Material m)
         {
+            if (m != null && m.shader.name == MaterialConverter.TranslucentShader)
+            {
+                bool premul = m.GetFloat("_HplBlendMode") > 3.5f;
+                Check(m.GetFloat("_SrcBlend") == (float)(premul ? BlendMode.One : BlendMode.SrcAlpha) &&
+                      m.GetFloat("_DstBlend") == (float)BlendMode.OneMinusSrcAlpha && m.renderQueue == (int)RenderQueue.Transparent,
+                      m.name + ": unlit translucent (HplTranslucent) with the HPL2 blend factors");
+                return;
+            }
             if (m != null && m.shader.name == "HDRP/Lit" && m.GetFloat("_SurfaceType") == 1)
             {
                 Check(m.GetFloat("_EnableBlendModePreserveSpecularLighting") == 0,
@@ -70,7 +78,7 @@ namespace RTXMnesia.EditorDev
             {
                 string path = root + "/" + Path.GetRelativePath(AmnesiaPaths.ToAbsolute(root), file).Replace('\\', '/');
                 foreach (var m in AssetDatabase.LoadAllAssetsAtPath(path).OfType<Material>())
-                    if (m.shader.name == "HDRP/Decal" || (m.shader.name == "HDRP/Lit" && m.GetFloat("_SurfaceType") == 1)) yield return m;
+                    if (m.shader.name is "HDRP/Decal" or MaterialConverter.TranslucentShader || (m.shader.name == "HDRP/Lit" && m.GetFloat("_SurfaceType") == 1)) yield return m;
             }
         }
 
@@ -110,7 +118,7 @@ namespace RTXMnesia.EditorDev
                     try
                     {
                         Surface(m);
-                        Check(m.GetFloat("_BlendMode") == (blend == "Alpha" ? 0 : 4), blend + ": original blend mode kept");
+                        Check(m.GetFloat("_HplBlendMode") == (blend == "Alpha" ? 3 : 4), blend + ": original blend mode kept");
                     }
                     finally { Object.DestroyImmediate(m); }
                 }
@@ -165,6 +173,21 @@ namespace RTXMnesia.EditorDev
 
         static void Legacy(Material m)
         {
+            // A translucent copy as imported before 2026-11-27: lit HDRP/Lit transparent, specular preserved.
+            if (m.shader.name == MaterialConverter.TranslucentShader)
+            {
+                var texture = m.GetTexture("_BaseColorMap");
+                var color = m.GetColor("_BaseColor");
+                bool premul = m.GetFloat("_HplBlendMode") > 3.5f;
+                m.shader = Shader.Find("HDRP/Lit");
+                m.SetTexture("_BaseColorMap", texture);
+                m.SetColor("_BaseColor", color);
+                m.SetFloat("_SurfaceType", 1);
+                m.SetFloat("_BlendMode", premul ? 4 : 0);
+                m.SetFloat("_EnableBlendModePreserveSpecularLighting", 1);
+                HDMaterial.ValidateMaterial(m);
+                return;
+            }
             if (m.shader.name == "HDRP/Lit")
             {
                 m.SetFloat("_EnableBlendModePreserveSpecularLighting", 1);
@@ -301,7 +324,9 @@ namespace RTXMnesia.EditorDev
             return (float)(sum / count);
         }
 
-        // The room before the note/secret passage: translucent amnesia trails, not HDRP/Decal meshes.
+        // The room before the note/secret passage: translucent amnesia trails (trail_amnesia_floor, cube map reflection).
+        // Archives_0_lit_legacy: as imported before 2026-11-27 (HDRP/Lit transparent), Archives_1_translucent: unlit
+        // HplTranslucent as HPL2, Archives_2_no_multiply: without the multiply decals.
         public static void RunArchivesRenderBatch()
         {
             Directory.CreateDirectory(Folder);
@@ -310,27 +335,24 @@ namespace RTXMnesia.EditorDev
             camera.transform.SetPositionAndRotation(new Vector3(-30.5f, -0.35f, 26.1f), Quaternion.Euler(10, 180, 0));
             var renderers = Object.FindObjectsByType<Renderer>();
             var materials = renderers.SelectMany(r => r.sharedMaterials).Where(m => m != null).Distinct().ToArray();
-            var translucent = materials.Where(m => m.shader.name == "HDRP/Lit" && m.GetFloat("_SurfaceType") == 1).ToArray();
+            var translucent = materials.Where(m => m.shader.name == MaterialConverter.TranslucentShader).ToArray();
             var backups = translucent.Select(m => new Material(m)).ToArray();
             try
             {
-                foreach (var m in translucent)
-                {
-                    m.SetFloat("_EnableBlendModePreserveSpecularLighting", 1);
-                    HDMaterial.ValidateMaterial(m);
-                }
-                ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_0_imported.png"));
+                foreach (var m in translucent) Legacy(m);
                 foreach (var m in translucent)
                 {
                     m.SetFloat("_EnableBlendModePreserveSpecularLighting", 0);
                     HDMaterial.ValidateMaterial(m);
                 }
-                ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_1_alpha_weighted_specular.png"));
+                ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_0_lit_legacy.png"));
+                for (int i = 0; i < translucent.Length; i++) EditorUtility.CopySerialized(backups[i], translucent[i]);
+                ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_1_translucent.png"));
                 var multiply = renderers.Where(r => r.enabled && r.sharedMaterials.Any(m => m != null && m.shader.name is MaterialConverter.MultiplyShader or MaterialConverter.MulDecalShader)).ToArray();
                 foreach (var r in multiply) r.enabled = false;
                 ImportMenu.RenderToFile(camera, Path.Combine(Folder, "Archives_2_no_multiply.png"));
                 foreach (var r in multiply) r.enabled = true;
-                Debug.Log($"[DecalCheck] Archives: {translucent.Length} transparent materials compared");
+                Debug.Log($"[DecalCheck] Archives: {translucent.Length} translucent materials compared ({string.Join(", ", translucent.Select(m => m.name))})");
             }
             finally
             {

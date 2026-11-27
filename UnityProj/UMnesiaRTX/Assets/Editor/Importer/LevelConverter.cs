@@ -1294,6 +1294,7 @@ namespace RTXMnesia.Importer
             return Variant(baseMaterial, color, m =>
             {
                 m.SetFloat("_DoubleSidedEnable", 1f);
+                if (m.shader.name == MaterialConverter.TranslucentShader) m.SetFloat("_Cull", (float)CullMode.Off);
                 if (m.shader.name == "HDRP/Unlit")
                 {
                     // Additive HPL2 blending ignores alpha; HDRP multiplies additive color by it.

@@ -125,11 +125,25 @@ namespace RTXMnesia.Dev
             var previous = camera.targetTexture;
             try
             {
-                foreach (var (textures, lighting, tag) in new[] { (0, 0, "classic"), (1, 0, "enhanced"), (0, 1, "classic_rt"), (1, 1, "enhanced_rt") })
+                // -lookLightingSets: the lighting set is given too (classic / enhanced, "light" in the tag), RT at
+                // fixed levels (AO high, reflections medium, GI high); else the saved set and RT levels.
+                bool sets = Array.IndexOf(Environment.GetCommandLineArgs(), "-lookLightingSets") >= 0;
+                var variants = sets
+                    ? new[] { (0, 0, 0, "classic"), (0, 0, 1, "light"), (1, 0, 1, "light_enhanced"), (0, 1, 1, "light_rt"), (1, 1, 1, "light_enhanced_rt") }
+                    : new[] { (0, 0, -1, "classic"), (1, 0, -1, "enhanced"), (0, 1, -1, "classic_rt"), (1, 1, -1, "enhanced_rt") };
+                foreach (var (textures, lighting, lightingSet, tag) in variants)
                 {
                     var settings = saved.Copy();
                     settings.textures = textures;
                     settings.lighting = lighting;
+                    if (lightingSet >= 0)
+                    {
+                        settings.lightingSet = lightingSet;
+                        settings.rtAo = 3;
+                        settings.rtReflections = 2;
+                        settings.rtGi = 3;
+                        settings.rtPathTracing = 0;
+                    }
                     HplGraphics.Apply(settings);
                     camera.targetTexture = target;
                     // Temporal accumulation (TAA / DLSS, RT denoisers) and texture streaming settle over frames.
@@ -146,7 +160,7 @@ namespace RTXMnesia.Dev
                     File.WriteAllBytes(prefix + "_" + tag + ".png", texture.EncodeToPNG());
                     Destroy(texture);
                     camera.targetTexture = previous;
-                    result.AppendLine($"снимок {tag}: RT {HplRayTracing.Active}, отражения {HplRayTracing.Reflections}, GI {HplRayTracing.Gi}");
+                    result.AppendLine($"снимок {tag}: RT {HplRayTracing.Active}, отражения {HplRayTracing.Reflections}, GI {HplRayTracing.Gi}, набор света {settings.lightingSet}");
                 }
             }
             finally

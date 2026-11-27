@@ -16,12 +16,13 @@ namespace RTXMnesia.Importer
     /// - SolidDiffuse → HDRP/Lit, Specular Color workflow (Amnesia specular is a grey intensity + power):
     ///   Diffuse → base color, NMap → normal, Specular → specular color map (intensity) + mask map (smoothness),
     ///   Height → pixel displacement (POM), Alpha → alpha clipping, Illumination → emission.
-    /// - Translucent Add → HDRP/Unlit additive; Alpha / PremulAlpha → HDRP/Lit transparent.
+    /// - Translucent Add → HDRP/Unlit additive; Alpha / PremulAlpha → Assets/Shaders/HplTranslucent.shader, unlit as in
+    ///   HPL2 (deferred_transparent_frag.glsl), with its CubeMap / CubeMapAlpha reflection and AffectedByLightLevel.
     ///   Mul / MulX2 (no HDRP blend mode) → Assets/Shaders/HplMultiply.shader, also for decals.
     /// - Decal → HDRP/Decal (mesh decals), Add → HDRP/Unlit additive.
     /// - Water → Assets/Shaders/HplWater.shader (water_surface_frag.glsl): refraction, waves, cube map or world
     ///   reflection (HplWaterReflection), fog.
-    /// - CubeMap of other materials and CubeMapAlpha are ignored: HDRP reflection probes / ray-traced reflections replace them.
+    /// - CubeMap and CubeMapAlpha of other materials are ignored: HDRP reflection probes / ray-traced reflections replace them.
     /// Existing materials are updated in place so prefabs and scenes keep their references.
     /// </summary>
     public static class MaterialConverter
@@ -55,6 +56,8 @@ namespace RTXMnesia.Importer
             public AmnesiaMaterial Source;
             public string AssetPath;
             public readonly Dictionary<TextureRole, TextureJob> Jobs = new();
+            /// <summary>CubeMapAlpha of a translucent material: its alpha weights the reflection (converted as an albedo).</summary>
+            public TextureJob? CubeMapAlpha;
         }
 
         public static string AssetPathFor(string matAbsolute) =>
@@ -107,13 +110,19 @@ namespace RTXMnesia.Importer
 
             if (mat.Type == AmnesiaMaterial.Kind.Unknown)
                 log.Warn($"{rel}: unknown material type '{mat.TypeName}', converted as SolidDiffuse");
-            if (mat.Type == AmnesiaMaterial.Kind.Water) Add(plan, Resolve("CubeMap"), TextureRole.CubeMap);
+            if (mat.Type == AmnesiaMaterial.Kind.Water || IsTranslucentAlpha(mat)) Add(plan, Resolve("CubeMap"), TextureRole.CubeMap);
             else if (mat.Texture("CubeMap") != null)
                 log.Info($"{rel}: CubeMap ignored (HDRP reflections replace it)");
+            string cubeAlpha = IsTranslucentAlpha(mat) && plan.Jobs.ContainsKey(TextureRole.CubeMap) ? Resolve("CubeMapAlpha") : null;
+            if (cubeAlpha != null) plan.CubeMapAlpha = new TextureJob { Dds = cubeAlpha, Role = TextureRole.Albedo };
             if (mat.Texture("DissolveAlpha") != null)
                 log.Info($"{rel}: DissolveAlpha ignored (TODO when dissolve effects are ported)");
             return plan;
         }
+
+        /// <summary>A translucent material with BlendMode Alpha or PremulAlpha (HplTranslucent.shader).</summary>
+        static bool IsTranslucentAlpha(AmnesiaMaterial mat) =>
+            mat.Type == AmnesiaMaterial.Kind.Translucent && (mat.BlendMode ?? "").ToLowerInvariant() is "alpha" or "premulalpha";
 
         static void Add(Plan plan, string dds, TextureRole role)
         {
@@ -126,8 +135,11 @@ namespace RTXMnesia.Importer
             var results = new Dictionary<string, string>();
             var unique = new Dictionary<string, TextureJob>();
             foreach (var plan in plans)
+            {
                 foreach (var job in plan.Jobs.Values)
                     unique[Key(job)] = job;
+                if (plan.CubeMapAlpha is { } cubeAlpha) unique[Key(cubeAlpha)] = cubeAlpha;
+            }
 
             int done = 0, written = 0;
             try
@@ -169,6 +181,7 @@ namespace RTXMnesia.Importer
         static void BuildMaterials(List<Plan> plans, Dictionary<string, string> textures, ImportLog log)
         {
             bool updateLevelVariants = false;
+            var translucentByTexture = new Dictionary<Texture, Material>();
             Texture2D Tex(Plan plan, TextureRole role)
             {
                 if (!plan.Jobs.TryGetValue(role, out var job) || !textures.TryGetValue(Key(job), out string path)) return null;
@@ -198,12 +211,25 @@ namespace RTXMnesia.Importer
                             if (cube == null) log.Error($"Converted cube map missing in AssetDatabase: {path}");
                             return cube;
                         }
+                        Texture2D CubeAlpha()
+                        {
+                            if (plan.CubeMapAlpha is not { } job || !textures.TryGetValue(Key(job), out string path)) return null;
+                            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                        }
                         var material = plan.Source.Type == AmnesiaMaterial.Kind.Water
                             ? CreateWater(plan.Source, role => Tex(plan, role), Cube())
-                            : CreateMaterial(plan.Source, role => Tex(plan, role), log);
-                        updateLevelVariants |= material.shader.name is "HDRP/Decal" or MulDecalShader ||
-                            (material.shader.name == "HDRP/Lit" && material.GetFloat("_SurfaceType") == HdrpTransparent);
+                            : IsTranslucentAlpha(plan.Source)
+                                ? CreateTranslucent(plan.Source, Tex(plan, TextureRole.Albedo), Cube(), CubeAlpha())
+                                : CreateMaterial(plan.Source, role => Tex(plan, role), log);
+                        updateLevelVariants |= material.shader.name is "HDRP/Decal" or MulDecalShader or TranslucentShader;
+                        bool translucent = material.shader.name == TranslucentShader;
                         SaveInPlace(material, plan.AssetPath);
+                        if (translucent)
+                        {
+                            var saved = AssetDatabase.LoadAssetAtPath<Material>(plan.AssetPath);
+                            var texture = saved != null ? saved.GetTexture(BaseColorMap) : null;
+                            if (texture != null) translucentByTexture[texture] = saved;
+                        }
                     }
                     catch (Exception e)
                     {
@@ -216,7 +242,7 @@ namespace RTXMnesia.Importer
                 AssetDatabase.StopAssetEditing();
                 EditorUtility.ClearProgressBar();
             }
-            if (updateLevelVariants) UpdateLevelSurfaceVariants(log);
+            if (updateLevelVariants) UpdateLevelSurfaceVariants(translucentByTexture, log);
             AssetDatabase.SaveAssets();
         }
 
@@ -246,11 +272,15 @@ namespace RTXMnesia.Importer
                 case AmnesiaMaterial.Kind.Translucent when blend is "mul" or "mulx2":
                     return CreateMultiply(tex(TextureRole.Albedo), blend == "mulx2", false);
 
+                case AmnesiaMaterial.Kind.Translucent when blend is "alpha" or "premulalpha":
+                    return CreateTranslucent(src, tex(TextureRole.Albedo), null, null);
+
                 case AmnesiaMaterial.Kind.Translucent:
                 {
+                    // No known blend mode (none in the game's files): alpha blended, lit.
                     var m = CreateLit(src, tex);
                     m.SetFloat("_SurfaceType", HdrpTransparent);
-                    m.SetFloat("_BlendMode", (float)(blend == "premulalpha" ? HdrpBlend.Premultiply : HdrpBlend.Alpha));
+                    m.SetFloat("_BlendMode", (float)HdrpBlend.Alpha);
                     ConfigureTransparentSurface(m);
                     return m;
                 }
@@ -358,6 +388,33 @@ namespace RTXMnesia.Importer
             return m;
         }
 
+        public const string TranslucentShader = "RTXMnesia/HplTranslucent";
+
+        /// <summary>
+        /// Translucent Alpha / PremulAlpha (Assets/Shaders/HplTranslucent.shader): HPL2 draws them unlit, texture × color
+        /// (deferred_transparent_frag.glsl); as HDRP/Lit transparent the cobwebs in dark corners turned black with the
+        /// enhanced lighting (03_archives, 2026-11-27). The cube map reflection (Fresnel, rim light) and
+        /// AffectedByLightLevel (World/HplTranslucentLightLevel) are as in the original.
+        /// </summary>
+        static Material CreateTranslucent(AmnesiaMaterial src, Texture2D albedo, Cubemap cube, Texture2D cubeAlpha)
+        {
+            var m = new Material(FindShader(TranslucentShader));
+            if (albedo != null) m.SetTexture(BaseColorMap, albedo);
+            m.SetColor(BaseColor, Color.white);
+            ParticleConverter.SetBlend(m, src.BlendMode);
+            m.SetFloat("_HplEnvMap", cube != null ? 1f : 0f);
+            if (cube != null) m.SetTexture("_CubeMap", cube);
+            if (cubeAlpha != null) m.SetTexture("_CubeMapAlpha", cubeAlpha);
+            m.SetFloat("_FresnelBias", src.Float("FrenselBias", 0.2f));
+            m.SetFloat("_FresnelPow", src.Float("FrenselPow", 8f));
+            m.SetFloat("_RimLightMul", src.Float("RimLightMul", 0f));
+            m.SetFloat("_RimLightPow", src.Float("RimLightPow", 8f));
+            m.SetFloat("_HplAffectedByLightLevel", src.Bool("AffectedByLightLevel", false) ? 1f : 0f);
+            m.SetFloat("_HplLightLevel", 1f);
+            m.renderQueue = (int)RenderQueue.Transparent;
+            return m;
+        }
+
         static Material CreateUnlitTransparent(Texture2D albedo, HdrpBlend blending)
         {
             var m = new Material(FindShader("HDRP/Unlit"));
@@ -454,14 +511,15 @@ namespace RTXMnesia.Importer
             HDMaterial.ValidateMaterial(material);
         }
 
-        static void UpdateLevelSurfaceVariants(ImportLog log)
+        static void UpdateLevelSurfaceVariants(Dictionary<Texture, Material> translucentByTexture, ImportLog log)
         {
             // LevelConverter stores tinted decals as independent sub-assets, not live material variants.
             // Update those in place as well: keep their tint, GUID and local file ID, without rebuilding maps.
             string levels = AmnesiaPaths.ImportedAssetsRoot + "/Levels";
             if (!Directory.Exists(AmnesiaPaths.ToAbsolute(levels))) return;
-            int decals = 0, transparent = 0, mulDecals = 0;
+            int decals = 0, transparent = 0, mulDecals = 0, translucent = 0;
             var mulDecal = FindShader(MulDecalShader);
+            var translucentShader = FindShader(TranslucentShader);
             foreach (string file in Directory.GetFiles(AmnesiaPaths.ToAbsolute(levels), "*_generated.asset", SearchOption.AllDirectories))
             {
                 string path = levels + "/" + Path.GetRelativePath(AmnesiaPaths.ToAbsolute(levels), file).Replace('\\', '/');
@@ -472,6 +530,24 @@ namespace RTXMnesia.Importer
                     {
                         ConfigureDecalSurface(material);
                         decals++;
+                    }
+                    // Tinted copies of Translucent Alpha / PremulAlpha materials (until 2026-11-27 HDRP/Lit transparent):
+                    // rebuilt from the converted material with the same texture, keeping the tint and the culling.
+                    else if ((material.shader.name == TranslucentShader ||
+                              material.shader.name == "HDRP/Lit" && material.GetFloat("_SurfaceType") == HdrpTransparent) &&
+                             material.GetTexture(BaseColorMap) is { } baseTexture && translucentByTexture.TryGetValue(baseTexture, out var source))
+                    {
+                        var color = material.GetColor(BaseColor);
+                        bool doubleSided = material.shader.name == "HDRP/Lit"
+                            ? material.GetFloat("_DoubleSidedEnable") > 0.5f
+                            : material.GetFloat("_Cull") == (float)CullMode.Off;
+                        material.shader = translucentShader;
+                        material.CopyPropertiesFromMaterial(source);
+                        material.SetColor(BaseColor, color);
+                        material.SetFloat("_Cull", (float)(doubleSided ? CullMode.Off : CullMode.Back));
+                        material.renderQueue = source.renderQueue;
+                        material.shaderKeywords = Array.Empty<string>();
+                        translucent++;
                     }
                     else if (material.shader.name == "HDRP/Lit" && material.GetFloat("_SurfaceType") == HdrpTransparent)
                     {
@@ -496,7 +572,7 @@ namespace RTXMnesia.Importer
                     EditorUtility.SetDirty(material);
                 }
             }
-            log.Info($"Level surface variants updated in place: {decals} decals, {transparent} transparent, {mulDecals} Mul decals");
+            log.Info($"Level surface variants updated in place: {decals} decals, {translucent} translucent, {transparent} lit transparent, {mulDecals} Mul decals");
         }
 
         /// <summary>

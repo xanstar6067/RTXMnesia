@@ -340,6 +340,7 @@ namespace RTXMnesia.ScriptApi
                     if (!IsTemplate(r.transform)) renderers.Add(r);
                 WaterReflection = HplWaterReflection.Create(renderers, transform);
                 TranslucentSort = HplTranslucentSort.Create(renderers, transform);
+                HplTranslucentLightLevel.Create(renderers, transform);
             }
             // Fake effects out of the ray tracing structure. Also done when a scene loads, but a map opened in the editor
             // before Play is not "loaded": its Mul decals stayed in, and path tracing drew them black on the floors.
