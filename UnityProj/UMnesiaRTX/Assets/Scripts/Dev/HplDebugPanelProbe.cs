@@ -24,6 +24,9 @@ namespace RTXMnesia.Dev
         IEnumerator Start()
         {
             DontDestroyOnLoad(gameObject);
+            Application.runInBackground = true;
+            // A run with a window (screenshots) must not touch the profile's saves either.
+            RTXMnesia.Save.HplSaveHandler.FolderOverride = Path.GetFullPath("Logs/BatchSaves");
             _prefs = PlayerPrefs.HasKey(HplUserSettings.PrefsKey) ? PlayerPrefs.GetString(HplUserSettings.PrefsKey) : null;
             var settings = HplUserSettings.ReadSaved(); settings.debugPanel = true;
             PlayerPrefs.SetString(HplUserSettings.PrefsKey, JsonUtility.ToJson(settings));
@@ -61,6 +64,9 @@ namespace RTXMnesia.Dev
         IEnumerator Run()
         {
             yield return new WaitForSecondsRealtime(1);
+            // With a window (screenshots) the first frames take much longer than in batch mode.
+            double started = Time.realtimeSinceStartupAsDouble + 60;
+            while (Time.realtimeSinceStartupAsDouble < started && FindAnyObjectByType<HplMainMenu>()?.Ui == null) yield return null;
             var title = FindAnyObjectByType<HplMainMenu>();
             Check(title != null && title.Ui != null, "Title screen not initialized");
             var ui = title.Ui;
@@ -134,6 +140,11 @@ namespace RTXMnesia.Dev
             map.player.Lantern.SetActive(false, true);
             yield return new WaitForSecondsRealtime(1.5f);
 
+            yield return Tabs(stages);
+            map = HplMap.Current;
+            ui = map.GameUi;
+            map.player.readDevices = false;
+
             // The lantern lit with its key (F), then teleports to other maps: only the current player's hands stay.
             // A player build showed the old player's hands with the lit lantern standing in the new map.
             int strays = 0;
@@ -170,6 +181,59 @@ namespace RTXMnesia.Dev
                 }
             }
             finally { Application.logMessageReceived -= OnLog; }
+        }
+
+        /// <summary>Every tab on 03_archives (screenshots), a teleport to the key and a snapshot loaded back.</summary>
+        IEnumerator Tabs(System.Collections.Generic.List<HplDebugProgression.Stage> stages)
+        {
+            var map = HplMap.Current;
+            Check(map.GameUi.OpenDebugPanel() && map.GameUi.BeginDebugLoad(stages.Single(s => s.MapName == "03_archives")), "Teleport to 03 rejected");
+            yield return WaitMap(map, "03_archives");
+            map = HplMap.Current;
+            var ui = map.GameUi;
+            string folder = Path.GetFullPath("Logs/DebugSnapshotPlayCheck");
+            if (Directory.Exists(folder)) Directory.Delete(folder, true);
+            HplDebugSnapshots.FolderOverride = folder;
+            var world = ui.DebugPanel.World;
+            Check(world.Teleport(world.Points().Single(p => p.Name == "key_study_1"), out _), "Key teleport");
+            yield return new WaitForSecondsRealtime(2f);
+            Vector3 atKey = map.player.Body.FeetPosition;
+            ScreenCapture.CaptureScreenshot(Path.GetFullPath("Logs/DebugPanel_at_key.png"));
+            yield return new WaitForSecondsRealtime(0.5f);
+            Check(HplDebugSnapshots.Create(map, "у ключа") != null, "Snapshot at the key");
+            Check(ui.OpenDebugPanel(), "Panel on 03");
+            foreach (HplDebugPanel.Page page in Enum.GetValues(typeof(HplDebugPanel.Page)))
+            {
+                ui.DebugPanel.CurrentPage = page;
+                yield return new WaitForSecondsRealtime(0.5f);
+                ScreenCapture.CaptureScreenshot(Path.GetFullPath($"Logs/DebugPanel_{page}.png"));
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+            ui.DebugPanel.CurrentPage = HplDebugPanel.Page.Points;
+            Check(world.PickUp(world.Prop("key_study_1")), "Key pickup in play mode");
+            var before = map;
+            Check(ui.BeginDebugSnapshot(HplDebugSnapshots.List().Single().File), "Snapshot load rejected");
+            yield return WaitMap(before, "03_archives");
+            map = HplMap.Current;
+            Check(HplDebugSession.Active && map.disableAutoSaves, "A loaded snapshot must be a test session");
+            Check(map.GetEntityByName("key_study_1") != null && HplGame.GetItem("key_study_1") == null &&
+                  !HplGame.GlobalVars.ContainsKey("key_study_1"), "Snapshot did not restore the key");
+            Check(Vector3.Distance(map.player.Body.FeetPosition, atKey) < 0.5f, "Snapshot did not restore the position");
+            HplDebugSnapshots.FolderOverride = null;
+            Directory.Delete(folder, true);
+        }
+
+        IEnumerator WaitMap(HplMap previous, string name)
+        {
+            double deadline = Time.realtimeSinceStartupAsDouble + 90;
+            while (HplMap.Current == null || HplMap.Current == previous || HplMap.Current.MapName != name)
+            {
+                if (Time.realtimeSinceStartupAsDouble >= deadline) throw new InvalidOperationException("Load of " + name + " timed out");
+                yield return null;
+            }
+            yield return new WaitForSecondsRealtime(1f);
+            HplMap.Current.player.readDevices = false;
+            if (HplMap.Current.GameUi.IsPaused) HplMap.Current.GameUi.Resume();
         }
 
         /// <summary>The lantern key (F) of the test keyboard, then its draw animation.</summary>

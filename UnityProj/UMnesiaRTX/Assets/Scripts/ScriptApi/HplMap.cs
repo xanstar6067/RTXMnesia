@@ -1162,6 +1162,8 @@ namespace RTXMnesia.ScriptApi
         public HplEntity GetEntityByName(string name) =>
             name != null && _entitiesByName.TryGetValue(name.ToLowerInvariant(), out var e) ? e : null;
 
+        public IReadOnlyList<AmnesiaArea> PlayerStarts => _playerStartList;
+
         public AmnesiaArea GetPlayerStart(string name)
         {
             if (name != null && _playerStarts.TryGetValue(name, out var area)) return area;

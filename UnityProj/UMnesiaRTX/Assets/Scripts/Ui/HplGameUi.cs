@@ -225,6 +225,19 @@ namespace RTXMnesia.Ui
             if (stage == null || !DebugOpen || !Settings.debugPanel || IsTransitioning || _map.IsChangingMap) return false;
             return _transition.Begin(stage.ScenePath, false, stage);
         }
+        /// <summary>A developer snapshot: loaded like a save, then a test session (no saves).</summary>
+        public bool BeginDebugSnapshot(string file)
+        {
+            if (!DebugOpen || !Settings.debugPanel || IsTransitioning || _map.IsChangingMap) return false;
+            var save = RTXMnesia.Save.HplSaveHandler.ReadFile(file);
+            string scene = save != null ? HplMapChange.FindScene(save.mapFile) : null;
+            if (scene == null) return false;
+            RTXMnesia.Save.HplSaveHandler.BeginLoad(save);
+            if (_transition.Begin(scene, false, null, true)) return true;
+            RTXMnesia.Save.HplSaveHandler.ClearPending();
+            return false;
+        }
+
         public bool OpenDebugPanel()
         {
             if (!Settings.debugPanel || IsTransitioning || _map.IsChangingMap || (!IsTitleScreen && IsPaused)) return false;

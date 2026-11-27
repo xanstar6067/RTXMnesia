@@ -21,6 +21,12 @@ namespace RTXMnesia.Props
         /// <summary>cLuxProp_Item::GetItemType: the inventory item type name.</summary>
         public string ItemType => _itemType;
 
+        public string SubItemTypeName => _subItemTypeName;
+        public string ImageFile => _imageFile;
+        /// <summary>The journal text entry of a note or diary ("" for other items).</summary>
+        public string NoteText => _val;
+        public float Amount => _amount;
+
         /// <summary>cLuxProp_Item::mlSpawnContainerID: the broken object it came out of ("" for a placed item).</summary>
         public string SpawnContainer = "";
 

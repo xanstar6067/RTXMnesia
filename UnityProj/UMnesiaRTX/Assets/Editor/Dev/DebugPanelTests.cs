@@ -137,6 +137,7 @@ namespace RTXMnesia.EditorDev
                 Check(HplSaveHandler.AutoSave(map) == null && !HplSaveHandler.SaveGameToFile(map, blocked) && !File.Exists(blocked), "Debug session wrote a save");
                 HplGame.Reset();
                 Check(!HplDebugSession.Active && !HplDebugSession.DisableEnemyAI && HplGame.Items.Count == 0, "New game / load must reset debug run");
+                CheckArchives(Stage("03_archives"), Check);
                 File.WriteAllText(report, $"PASS: {checks} debug panel checks, {stages.Count} entry presets\n");
                 Debug.Log(File.ReadAllText(report));
             }
@@ -154,6 +155,94 @@ namespace RTXMnesia.EditorDev
                 Time.timeScale = timeScale;
                 Cursor.lockState = cursor; Cursor.visible = visible;
             }
+        }
+
+        /// <summary>Points, items, snapshots and progress steps on the real 03_archives.</summary>
+        static void CheckArchives(HplDebugProgression.Stage entry, Action<bool, string> check)
+        {
+            HplGame.Reset();
+            HplDebugSession.Start(entry, false);
+            EditorSceneManager.OpenScene(entry.ScenePath);
+            var player = UnityEngine.Object.FindAnyObjectByType<AmnesiaPlayer>();
+            Invoke(player, "Awake"); Invoke(player, "Start");
+            player.readDevices = false;
+            var map = UnityEngine.Object.FindAnyObjectByType<HplMap>();
+            map.Build();
+            var world = new HplDebugWorld(map);
+            map.Begin();
+            for (int i = 0; i < 30; i++) map.Step(Time.fixedDeltaTime);
+
+            var points = world.Points();
+            foreach (var category in HplDebugWorld.Categories.Skip(1))
+                Debug.Log($"[DebugPanelCheck] {category}: {points.Count(p => p.Category == category)}");
+            foreach (var category in new[] { "Записки", "Предметы", "Двери", "Механизмы", "Мебель", "Входы" })
+                check(points.Any(p => p.Category == category), "No points: " + category);
+            int failed = 0, hidden = 0, tried = 0;
+            foreach (var point in points.Where(p => p.Category is "Записки" or "Предметы" or "Двери" or "Механизмы" or "Мебель"))
+            {
+                tried++;
+                if (!world.Teleport(point, out string message)) { failed++; Debug.Log("[DebugPanelCheck] " + message); continue; }
+                if (message.Contains("преградой")) { hidden++; Debug.Log("[DebugPanelCheck] " + message); }
+                float distance = Vector3.Distance(player.Body.FeetPosition, HplDebugWorld.Bounds(point).center);
+                if (distance >= 7f) Debug.Log($"[DebugPanelCheck] far: {point.Name} {distance:0.0} m");
+            }
+            Debug.Log($"[DebugPanelCheck] teleports: {tried}, no spot {failed}, hidden {hidden}");
+            check(failed * 20 <= tried, $"Too many points without a free spot: {failed} of {tried}");
+            foreach (var name in new[] { "diary_paper01_2", "note_paper01_3", "key_study_1", "mansion_1", "SecretBook_1" })
+            {
+                var point = world.Points().Single(p => p.Name == name);
+                check(world.Teleport(point, out string message), "No spot: " + name);
+                float distance = Vector3.Distance(player.Body.FeetPosition, HplDebugWorld.Bounds(point).center);
+                Debug.Log($"[DebugPanelCheck] {message}: {distance:0.00} m");
+                check(distance < 4f, "Too far from " + name);
+            }
+            check(world.CanReturn && world.Return(), "Return failed");
+
+            var key = world.Items.Single(i => i.Name == "key_study_1");
+            check(world.Give(key) && HplGame.GetItem("key_study_1") != null && world.Prop("key_study_1") != null, "Silent give keeps the prop");
+            check(!HplGame.GlobalVars.ContainsKey("key_study_1"), "Silent give ran the pickup callback");
+            check(!world.Give(key), "Silent give duplicated");
+            world.Remove(HplGame.GetItem("key_study_1"), true);
+            check(HplGame.GetItem("key_study_1") == null, "Item not removed");
+            player.Lantern.SetActive(true, false);
+            world.Remove(HplGame.Items.First(i => i.type == "Lantern"), true);
+            check(!player.lanternActive, "Lantern stayed lit without the item");
+            int tinder = player.tinderboxes;
+            check(world.PickUp(world.Prop("tinderbox_1")) && player.tinderboxes == tinder + 1 && world.Prop("tinderbox_1") == null, "Real pickup");
+            check(world.Items.Any(i => i.Name == "tinderbox_1"), "Picked up item left the level list");
+
+            string folder = Path.GetFullPath("Logs/DebugSnapshotCheck");
+            if (Directory.Exists(folder)) Directory.Delete(folder, true);
+            HplDebugSnapshots.FolderOverride = folder;
+            try
+            {
+                check(HplDebugSnapshots.Create(map, "до этапов: тест") != null && HplDebugSnapshots.Create(map, "до этапов: тест") != null, "Snapshot not written");
+                var list = HplDebugSnapshots.List();
+                check(list.Count == 2 && list.All(e => e.Map == "03_archives") && HplSaveHandler.ReadFile(list[0].File) != null, "Snapshot list");
+                HplDebugSnapshots.Delete(list[0]);
+                check(HplDebugSnapshots.List().Count == 1, "Snapshot delete");
+            }
+            finally
+            {
+                HplDebugSnapshots.FolderOverride = null;
+                if (Directory.Exists(folder)) Directory.Delete(folder, true);
+            }
+
+            var steps = HplDebugStages.ForMap("03_archives");
+            check(steps.All(s => !s.Done(map)), "Fresh map has finished steps");
+            Vector3 shelfBefore = map.GetEntityByName("shelf_secret_door_1").AttachTransform.position;
+            HplDebugStages.Run(world, map, steps.Count - 1, true);
+            for (int i = 0; i < 60 * 20; i++) map.Step(Time.fixedDeltaTime);
+            for (int i = 0; i < steps.Count; i++) check(steps[i].Done(map), "Step not done: " + steps[i].Title);
+            check(HplGame.JournalEntries.Count(e => e.type == "Diary") == 3 && !map.GetEntityByName("orb_1").Active, "Diary step");
+            check(HplGame.GetQuest("03Books") is { active: false }, "Books quest");
+            check(HplGame.GetItem("key_study_1") != null && map.GetEntityByName("mansion_8").Active && !map.GetEntityByName("mansion_1").Active, "Key step");
+            check(map.GetEntityByName("mansion_2") is RTXMnesia.Props.PropSwingDoor { Locked: true }, "Cave in step");
+            float moved = Vector3.Distance(shelfBefore, map.GetEntityByName("shelf_secret_door_1").AttachTransform.position);
+            Debug.Log($"[DebugPanelCheck] shelf moved {moved:0.00} m");
+            check(moved > 0.5f, "Shelf did not open");
+            world.SetLocked(map.GetEntityByName("mansion_2"), false);
+            check(map.GetEntityByName("mansion_2") is RTXMnesia.Props.PropSwingDoor { Locked: false }, "Unlock");
         }
 
         static void Invoke(object target, string method) => target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(target, null);

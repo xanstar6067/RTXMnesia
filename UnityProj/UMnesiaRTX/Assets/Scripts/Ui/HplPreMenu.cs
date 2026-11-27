@@ -28,7 +28,7 @@ namespace RTXMnesia.Ui
         public static bool ShownThisRun { get; private set; }
         /// <summary>Batch tools skip the pre menu unless a check asks for it.</summary>
         public static bool AllowInBatchMode;
-        public static bool ShouldShow => !ShownThisRun && Application.isPlaying && (!Application.isBatchMode || AllowInBatchMode) &&
+        public static bool ShouldShow => !ShownThisRun && Application.isPlaying && (!Sound.HplBatchAudio.IsCheckRun || AllowInBatchMode) &&
                                          Resources.Load<HplPreMenuAssets>(HplPreMenuAssets.ResourceName) != null;
         public static bool IsFirstStart => PlayerPrefs.GetInt(FirstStartKey, 0) == 0;
 

@@ -20,6 +20,19 @@ namespace RTXMnesia.Dev
             HplDifficulty.HardMode = false;
         }
 
+        /// <summary>A panel action changes the running game: from now on a test run without saves.</summary>
+        public static void MarkTest(HplMap map)
+        {
+            Active = true;
+            if (map != null) map.disableAutoSaves = true;
+        }
+
+        /// <summary>A loaded snapshot: a test run without an entry preset, the difficulty of its data.</summary>
+        public static void StartRestored(bool disableEnemyAI)
+        {
+            Active = true; DisableEnemyAI = disableEnemyAI; s_entry = null;
+        }
+
         public static void Prepare(HplMap map)
         {
             if (Active) map.disableAutoSaves = true;

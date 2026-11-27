@@ -461,6 +461,16 @@ namespace RTXMnesia.Player
             PlaceAt(area.transform.position + new Vector3(0f, 0.05f, 0f), Mathf.Atan2(f.x, f.z));
         }
 
+        /// <summary>The debug panel teleport: like a start node, with a view of its own.</summary>
+        public void DebugPlace(Vector3 feet, float yaw, float pitch)
+        {
+            States?.ChangeState(PlayerStateType.Normal);
+            IsInWater = false;
+            PlaceAt(feet, yaw);
+            _pitch = Mathf.Clamp(pitch, _pitchMin, _pitchMax);
+            SnapCamera();
+        }
+
         public void PlaceAt(Vector3 feet, float yaw)
         {
             Body.StopMovement();
