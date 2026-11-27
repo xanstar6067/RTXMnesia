@@ -114,7 +114,16 @@ namespace RTXMnesia.Dev
             }
         }
 
-        const int ShotWidth = 1600, ShotHeight = 900, ShotFrames = 48;
+        const int ShotFrames = 48;
+        // -lookSize WxH: the shots' size (1600x900; the report's output size, e.g. 2560x1440, for what DLSS draws at its render size).
+        static readonly int ShotWidth = LookSize(0, 1600), ShotHeight = LookSize(1, 900);
+
+        static int LookSize(int index, int fallback)
+        {
+            var args = Environment.GetCommandLineArgs();
+            int at = Array.IndexOf(args, "-lookSize");
+            return at >= 0 && at + 1 < args.Length ? int.Parse(args[at + 1].Split('x')[index], CultureInfo.InvariantCulture) : fallback;
+        }
 
         static IEnumerator Shots(HplMap map, string prefix, StringBuilder result)
         {
@@ -187,7 +196,12 @@ namespace RTXMnesia.Dev
                 settings.textures = 0;
                 settings.lighting = 0;
             }
+            LookSet(settings);
             HplGraphics.Apply(settings);
+            result.AppendLine($"серия: освещение {settings.lighting}, набор {settings.lightingSet}, DLSS {(HplDlssMode)settings.dlssMode}, RT {HplRayTracing.Active}");
+            // -lookSeriesDrift <m/s>: the held pose slides sideways (the camera's right) at this speed, as a walking player.
+            int driftAt = Array.IndexOf(args, "-lookSeriesDrift");
+            float drift = driftAt >= 0 && driftAt + 1 < args.Length ? float.Parse(args[driftAt + 1], CultureInfo.InvariantCulture) : 0f;
             var camera = map.PlayerCamera;
             var target = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             var previous = camera.targetTexture;
@@ -197,13 +211,14 @@ namespace RTXMnesia.Dev
                 // The pose is held: the head sway (and the insanity's field of view and aspect sway) would move every edge.
                 camera.transform.GetPositionAndRotation(out var position, out var rotation);
                 float fov = camera.fieldOfView;
+                double startTime = Time.timeAsDouble;
                 // -lookSeriesFree: the player's own sway (the idle head bob) is kept, as in play.
                 bool hold = Array.IndexOf(args, "-lookSeriesFree") < 0;
                 void Render()
                 {
                     if (hold)
                     {
-                        camera.transform.SetPositionAndRotation(position, rotation);
+                        camera.transform.SetPositionAndRotation(position + rotation * Vector3.right * (float)(drift * (Time.timeAsDouble - startTime)), rotation);
                         camera.fieldOfView = fov;
                     }
                     camera.aspect = (float)ShotWidth / ShotHeight;
@@ -244,6 +259,7 @@ namespace RTXMnesia.Dev
             var settings = saved.Copy();
             settings.textures = 0;
             settings.lighting = 0;
+            LookSet(settings);
             HplGraphics.Apply(settings);
             var camera = map.PlayerCamera;
             var decals = FindObjectsByType<Renderer>().Where(r => r.enabled && r.sharedMaterials.Any(m => m != null && m.shader != null
@@ -285,6 +301,21 @@ namespace RTXMnesia.Dev
                 target.Release();
                 Destroy(target);
                 HplGraphics.Apply(saved);
+            }
+        }
+
+        /// <summary>-lookSet field=value,...: <see cref="HplUserSettings"/> fields over the settings of the series and the decal pairs
+        /// (the report's [Графика]: lighting, DLSS, RT levels).</summary>
+        static void LookSet(HplUserSettings settings)
+        {
+            var args = Environment.GetCommandLineArgs();
+            int at = Array.IndexOf(args, "-lookSet");
+            if (at < 0 || at + 1 >= args.Length) return;
+            foreach (var pair in args[at + 1].Split(',').Where(p => p.Contains('=')))
+            {
+                var kv = pair.Split('=');
+                var field = typeof(HplUserSettings).GetField(kv[0].Trim()) ?? throw new ArgumentException("Unknown setting " + kv[0]);
+                field.SetValue(settings, Convert.ChangeType(kv[1].Trim(), field.FieldType, CultureInfo.InvariantCulture));
             }
         }
 

@@ -16,6 +16,8 @@
 // _HplWorldFogRadiance of HplFogAreaPass) and the fog areas (HplFogAreas.hlsl) between the camera and the fragment.
 // For decals this is HPL2's order; for translucent glass HPL2 fades the factor to 1 by the fog opacity instead,
 // which darkened the haze in front of the glass as well.
+// The haze is capped by the fog of the opaque surface behind (depth buffer, see Haze): what the frame holds behind the
+// fragment; only that can be taken out of dst without going negative (a hanging web in front of a gap, 2026-11-27).
 // Depth: HPL2 tests decals LessOrEqual without a bias (RenderDecals). The offset here is only the constant unit, no
 // slope factor: at a grazing view the slope term pulled a decal over geometry millimetres above it, and the dirt
 // under the pebbles (01_old_archives, pebbles 4 mm above dirt_floor01) darkened them in a band beyond some distance.
@@ -97,8 +99,8 @@ Shader "RTXMnesia/HplMultiply"
                 return output;
             }
 
-            // The factor (linear) and the haze between the camera and the fragment.
-            void Shade(Varyings input, out float3 factor, out float3 haze)
+            // The factor (linear): texture x color in gamma (x 2 for MulX2), as the screen showed it.
+            float3 Factor(Varyings input)
             {
                 float4 t = SAMPLE_TEXTURE2D(_BaseColorMap, sampler_BaseColorMap, input.uv);
                 float alpha = t.a * _BaseColor.a;
@@ -106,41 +108,57 @@ Shader "RTXMnesia/HplMultiply"
 
                 float3 gamma = LinearToSRGB(t.rgb) * _BaseColor.rgb * _HplScale;
                 if (_HplScale <= 1.0) gamma = saturate(gamma);
-                factor = pow(max(gamma, 0.0), 2.2); // HPL2 multiplies the screen value; a gamma 2.2 monitor shows value^2.2
+                return pow(max(gamma, 0.0), 2.2); // HPL2 multiplies the screen value; a gamma 2.2 monitor shows value^2.2
+            }
 
-                haze = 0.0;
-                float viewDepth = max(-TransformWorldToView(input.positionRWS).z, 1e-6);
+            // The fog drawn in the frame between the camera and view depth `depth` along the pixel's ray (sky: no
+            // surface there, the world fog skips it, HplFogAreaPass).
+            float3 FogTo(float3 positionRWS, float viewDepth, float depth, bool sky)
+            {
+                float3 haze = 0.0;
                 float exposure = GetCurrentExposureMultiplier();
                 // The fog areas are drawn first, then the world fog over them (HplFogAreaPass).
                 if (_HplFogAreaCount > 0)
                 {
                     float3 cameraRWS = GetCurrentViewPosition();
                     float transmittance;
-                    HplFogAreasAlongRay(GetAbsolutePositionWS(cameraRWS), (input.positionRWS - cameraRWS) / viewDepth, viewDepth, false, exposure, haze, transmittance);
+                    HplFogAreasAlongRay(GetAbsolutePositionWS(cameraRWS), (positionRWS - cameraRWS) / viewDepth, depth, sky, exposure, haze, transmittance);
                 }
-                if (_HplFog.x > 0.0)
+                if (_HplFog.x > 0.0 && !sky)
                 {
-                    float fogAmount = _HplFog.z > 0.0 ? saturate((viewDepth - _HplFog.y) / _HplFog.z) : (viewDepth > _HplFog.y ? 1.0 : 0.0);
+                    float fogAmount = _HplFog.z > 0.0 ? saturate((depth - _HplFog.y) / _HplFog.z) : (depth > _HplFog.y ? 1.0 : 0.0);
                     float fogAlpha = fogAmount > 0.0 ? pow(fogAmount, _HplFog.w) * _HplFog.x : 0.0;
                     haze = haze * (1.0 - fogAlpha) + _HplWorldFogRadiance.rgb * exposure * fogAlpha;
                 }
+                return haze;
+            }
+
+            // The haze kept out of the multiplication: the fog in front of the fragment, but never more than the fog
+            // the frame holds there, the fog of the opaque surface behind it (depth buffer). A decal on a surface has
+            // the same fog; a web hanging in the air (web_spider01, 02_entrance_hall) has a far wall behind it, where a
+            // later fog layer covers part of an earlier one, or nothing at all (a gap to the background, no fog drawn):
+            // there dst < haze, and dst x factor + haze x (1 - factor) went negative for MulX2 (black points that DLSS
+            // spread and made flicker, 2026-11-27). With haze <= dst it is >= 0.
+            float3 Haze(Varyings input)
+            {
+                float viewDepth = max(-TransformWorldToView(input.positionRWS).z, 1e-6);
+                float rawDepth = LoadCameraDepth(uint2(input.positionCS.xy));
+                bool sky = rawDepth == UNITY_RAW_FAR_CLIP_VALUE;
+                float sceneDepth = sky ? 0.0 : LinearEyeDepth(rawDepth, _ZBufferParams);
+                return min(FogTo(input.positionRWS, viewDepth, viewDepth, false), FogTo(input.positionRWS, viewDepth, sceneDepth, sky));
             }
 
             float4 FragMultiply(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-                float3 factor, haze;
-                Shade(input, factor, haze);
-                return float4(factor, 1.0);
+                return float4(Factor(input), 1.0);
             }
 
             float4 FragHaze(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-                float3 factor, haze;
-                Shade(input, factor, haze);
-                // Negative where the factor brightens (MulX2 above 1): the blend is in float, dst ≥ haze.
-                return float4(haze * (1.0 - factor), 1.0);
+                // Negative where the factor brightens (MulX2 above 1): the blend is in float, dst >= haze (Haze).
+                return float4(Haze(input) * (1.0 - Factor(input)), 1.0);
             }
             ENDHLSL
         }
@@ -208,8 +226,8 @@ Shader "RTXMnesia/HplMultiply"
                 return output;
             }
 
-            // The factor (linear) and the haze between the camera and the fragment.
-            void Shade(Varyings input, out float3 factor, out float3 haze)
+            // The factor (linear): texture x color in gamma (x 2 for MulX2), as the screen showed it.
+            float3 Factor(Varyings input)
             {
                 float4 t = SAMPLE_TEXTURE2D(_BaseColorMap, sampler_BaseColorMap, input.uv);
                 float alpha = t.a * _BaseColor.a;
@@ -217,41 +235,57 @@ Shader "RTXMnesia/HplMultiply"
 
                 float3 gamma = LinearToSRGB(t.rgb) * _BaseColor.rgb * _HplScale;
                 if (_HplScale <= 1.0) gamma = saturate(gamma);
-                factor = pow(max(gamma, 0.0), 2.2); // HPL2 multiplies the screen value; a gamma 2.2 monitor shows value^2.2
+                return pow(max(gamma, 0.0), 2.2); // HPL2 multiplies the screen value; a gamma 2.2 monitor shows value^2.2
+            }
 
-                haze = 0.0;
-                float viewDepth = max(-TransformWorldToView(input.positionRWS).z, 1e-6);
+            // The fog drawn in the frame between the camera and view depth `depth` along the pixel's ray (sky: no
+            // surface there, the world fog skips it, HplFogAreaPass).
+            float3 FogTo(float3 positionRWS, float viewDepth, float depth, bool sky)
+            {
+                float3 haze = 0.0;
                 float exposure = GetCurrentExposureMultiplier();
                 // The fog areas are drawn first, then the world fog over them (HplFogAreaPass).
                 if (_HplFogAreaCount > 0)
                 {
                     float3 cameraRWS = GetCurrentViewPosition();
                     float transmittance;
-                    HplFogAreasAlongRay(GetAbsolutePositionWS(cameraRWS), (input.positionRWS - cameraRWS) / viewDepth, viewDepth, false, exposure, haze, transmittance);
+                    HplFogAreasAlongRay(GetAbsolutePositionWS(cameraRWS), (positionRWS - cameraRWS) / viewDepth, depth, sky, exposure, haze, transmittance);
                 }
-                if (_HplFog.x > 0.0)
+                if (_HplFog.x > 0.0 && !sky)
                 {
-                    float fogAmount = _HplFog.z > 0.0 ? saturate((viewDepth - _HplFog.y) / _HplFog.z) : (viewDepth > _HplFog.y ? 1.0 : 0.0);
+                    float fogAmount = _HplFog.z > 0.0 ? saturate((depth - _HplFog.y) / _HplFog.z) : (depth > _HplFog.y ? 1.0 : 0.0);
                     float fogAlpha = fogAmount > 0.0 ? pow(fogAmount, _HplFog.w) * _HplFog.x : 0.0;
                     haze = haze * (1.0 - fogAlpha) + _HplWorldFogRadiance.rgb * exposure * fogAlpha;
                 }
+                return haze;
+            }
+
+            // The haze kept out of the multiplication: the fog in front of the fragment, but never more than the fog
+            // the frame holds there, the fog of the opaque surface behind it (depth buffer). A decal on a surface has
+            // the same fog; a web hanging in the air (web_spider01, 02_entrance_hall) has a far wall behind it, where a
+            // later fog layer covers part of an earlier one, or nothing at all (a gap to the background, no fog drawn):
+            // there dst < haze, and dst x factor + haze x (1 - factor) went negative for MulX2 (black points that DLSS
+            // spread and made flicker, 2026-11-27). With haze <= dst it is >= 0.
+            float3 Haze(Varyings input)
+            {
+                float viewDepth = max(-TransformWorldToView(input.positionRWS).z, 1e-6);
+                float rawDepth = LoadCameraDepth(uint2(input.positionCS.xy));
+                bool sky = rawDepth == UNITY_RAW_FAR_CLIP_VALUE;
+                float sceneDepth = sky ? 0.0 : LinearEyeDepth(rawDepth, _ZBufferParams);
+                return min(FogTo(input.positionRWS, viewDepth, viewDepth, false), FogTo(input.positionRWS, viewDepth, sceneDepth, sky));
             }
 
             float4 FragMultiply(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-                float3 factor, haze;
-                Shade(input, factor, haze);
-                return float4(factor, 1.0);
+                return float4(Factor(input), 1.0);
             }
 
             float4 FragHaze(Varyings input) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-                float3 factor, haze;
-                Shade(input, factor, haze);
-                // Negative where the factor brightens (MulX2 above 1): the blend is in float, dst ≥ haze.
-                return float4(haze * (1.0 - factor), 1.0);
+                // Negative where the factor brightens (MulX2 above 1): the blend is in float, dst >= haze (Haze).
+                return float4(Haze(input) * (1.0 - Factor(input)), 1.0);
             }
             ENDHLSL
         }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using RTXMnesia.Hpl;
 using RTXMnesia.Importer;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -297,6 +298,7 @@ namespace RTXMnesia.EditorDev
                     Check(opacityDifference > 0.01f, "full-opacity decal renders distinctly from the old half blend");
                 }
                 finally { Object.DestroyImmediate(half); }
+                MulX2InFog(camera, floor, decal, Render);
                 Debug.Log($"[DecalCheck] PASS: {_checks} GPU regression checks");
             }
             finally
@@ -307,6 +309,78 @@ namespace RTXMnesia.EditorDev
                 Object.DestroyImmediate(floorMaterial);
                 volume.sharedProfile = null;
                 Object.DestroyImmediate(profile);
+            }
+        }
+
+        /// <summary>
+        /// A MulX2 decal (HplMultiply, factor 2.8) hanging in the world fog, half in front of the lit floor, half in front of
+        /// the background (no surface, no fog drawn there), as web_spider01 over a gap (02_entrance_hall, 2026-11-27).
+        /// The haze the shader keeps out of the multiplication was the fog at the decal: over the background more than
+        /// the frame held, and dst x f + haze x (1 - f) went black (negative before the clamp). Capped by the fog of the
+        /// surface behind, a brightening decal brightens on both halves.
+        /// </summary>
+        static void MulX2InFog(Camera camera, GameObject floor, GameObject decal, Func<string, Material, Color[]> render)
+        {
+            var data = camera.GetComponent<HDAdditionalCameraData>();
+            var clearMode = data.clearColorMode;
+            var clearColor = data.backgroundColorHDR;
+            var floorPosition = floor.transform.position;
+            var floorScale = floor.transform.localScale;
+            var decalPosition = decal.transform.position;
+            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            texture.SetPixels(Enumerable.Repeat(new Color(0.8f, 0.8f, 0.8f, 1f), 16).ToArray());
+            texture.Apply();
+            var material = new Material(Shader.Find(MaterialConverter.MultiplyShader));
+            try
+            {
+                material.SetTexture("_BaseColorMap", texture);
+                material.SetColor("_BaseColor", Color.white);
+                material.SetFloat("_HplScale", 2f);
+                material.SetFloat("_HplAlphaLimit", 0.01f);
+                material.SetFloat("_Cull", (float)CullMode.Off);
+                material.renderQueue = (int)RenderQueue.Transparent - 100;
+                // Fog from the camera to 4 m: at the decal (3 m) 0.75, on the floor (5 m) full. The background is a
+                // quarter of the fog (pre-exposed, fixed exposure 3: 1 / (1.2 x 2^3)), less than the haze x (f - 1) / f.
+                HplLighting.SetTranslucentFog(true, Color.white, 0f, 4f, 1f);
+                float exposure = 1f / (1.2f * 8f);
+                var fog = HplLighting.WorldFogRadiance * exposure;
+                data.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color;
+                data.backgroundColorHDR = new Color(fog.r * 0.25f, fog.g * 0.25f, fog.b * 0.25f, 1f);
+                floor.transform.SetPositionAndRotation(new Vector3(-3.05f, 0f, 0f), Quaternion.identity);
+                floor.transform.localScale = new Vector3(6f, 6f, 1f);
+                decal.transform.position = new Vector3(0f, 0f, -2f);
+
+                var without = render("7_mulx2_fog_none", null);
+                var with = render("8_mulx2_fog_decal", material);
+                float Mean(Color[] pixels, Vector3 world)
+                {
+                    var view = camera.WorldToViewportPoint(world);
+                    int cx = (int)(view.x * 1920), cy = (int)(view.y * 1080);
+                    double sum = 0;
+                    for (int y = cy - 10; y < cy + 10; y++)
+                        for (int x = cx - 10; x < cx + 10; x++)
+                            sum += pixels[y * 1920 + x].grayscale;
+                    return (float)(sum / 400);
+                }
+                var overBackground = new Vector3(1.2f, 0f, -2f);
+                var overFloor = new Vector3(-1.2f, 0f, -2f);
+                float backgroundBefore = Mean(without, overBackground), backgroundAfter = Mean(with, overBackground);
+                float floorBefore = Mean(without, overFloor), floorAfter = Mean(with, overFloor);
+                Debug.Log($"[DecalCheck] MulX2 in fog: over the background {backgroundBefore:F3} -> {backgroundAfter:F3}, over the floor {floorBefore:F3} -> {floorAfter:F3}");
+                Check(backgroundBefore > 0.05f, "MulX2 in fog: the background is grey, not black");
+                Check(backgroundAfter > backgroundBefore + 0.02f, "MulX2 in fog: a brightening decal over the background (no fog behind) brightens, not black");
+                Check(floorAfter > floorBefore + 0.02f, "MulX2 in fog: the same decal over the fogged floor brightens");
+            }
+            finally
+            {
+                HplLighting.SetTranslucentFog(false, Color.white, 0f, 1f, 1f);
+                data.clearColorMode = clearMode;
+                data.backgroundColorHDR = clearColor;
+                floor.transform.position = floorPosition;
+                floor.transform.localScale = floorScale;
+                decal.transform.position = decalPosition;
+                Object.DestroyImmediate(material);
+                Object.DestroyImmediate(texture);
             }
         }
 
