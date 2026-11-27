@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RTXMnesia.Hpl;
 using RTXMnesia.World;
@@ -91,6 +92,60 @@ namespace RTXMnesia.Dynamics
             foreach (var shape in _characterShapes)
                 foreach (var c in body.Colliders)
                     if (shape != null && c != null) Physics.IgnoreCollision(shape, c, !body.CollideCharacter);
+        }
+
+        /// <summary>Deepest authored overlap of a jointed body that is left without contacts (Newton allowed this much).</summary>
+        public const float MaxRestOverlap = 0.005f;
+        readonly List<(Collider own, Collider other)> _restOverlaps = new();
+        /// <summary>The collider pairs <see cref="IgnoreRestOverlaps"/> left without contacts (jointed body's, other).</summary>
+        public IReadOnlyList<(Collider own, Collider other)> RestOverlaps => _restOverlaps;
+
+        /// <summary>
+        /// Authored rest overlaps (deviation, 2026-11-27): Newton let a body rest a few millimetres inside another
+        /// without pushing it out. PhysX pushes it out; for a hinge or slider child the joint holds it in place, the
+        /// normal force grows and friction locks the joint: the panel of work_desk_door.ent sits 1 mm into the bottom
+        /// shelf of its desk (another entity) and the door did not open. So, in the loaded pose (before a save is
+        /// applied), the colliders of a dynamic hinge / slider child get no contacts with the non-dynamic colliders
+        /// they already overlap by at most <see cref="MaxRestOverlap"/>. The joint limits still hold the body.
+        /// </summary>
+        public void IgnoreRestOverlaps()
+        {
+            Physics.SyncTransforms();
+            var pairs = new HashSet<(Collider, Collider)>(_restOverlaps);
+            foreach (var joint in Joints)
+            {
+                if (joint.Type != HplJointType.Hinge && joint.Type != HplJointType.Slider) continue;
+                var child = joint.Child;
+                if (child.IsStatic) continue;
+                foreach (var own in child.Colliders)
+                {
+                    if (own == null || !own.enabled || own.isTrigger || own.gameObject.layer == NoCollideLayer) continue;
+                    var bounds = own.bounds;
+                    int count = Physics.OverlapBoxNonAlloc(bounds.center, bounds.extents + Vector3.one * MaxRestOverlap, _overlaps,
+                                                           Quaternion.identity, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+                    for (int i = 0; i < count; i++)
+                    {
+                        var other = _overlaps[i];
+                        var rb = other.attachedRigidbody;
+                        if (rb == child.Rigidbody || (rb != null && !rb.isKinematic) || other.gameObject.layer == NoCollideLayer) continue;
+                        if (other.gameObject.layer == HplPhysics.CharacterLayer || _characterShapes.Contains(other) || pairs.Contains((own, other))) continue;
+                        if (!Physics.ComputePenetration(own, own.transform.position, own.transform.rotation,
+                                                        other, other.transform.position, other.transform.rotation, out _, out float depth)
+                            || depth > MaxRestOverlap) continue;
+                        Physics.IgnoreCollision(own, other, true);
+                        pairs.Add((own, other));
+                        _restOverlaps.Add((own, other));
+                    }
+                }
+            }
+        }
+
+        /// <summary>A collider turned off and on again forgets IgnoreCollision: set the rest overlaps of the body again.</summary>
+        internal void ReapplyRestOverlaps(HplPhysicsBody body)
+        {
+            foreach (var (own, other) in _restOverlaps)
+                if (own != null && other != null && (Array.IndexOf(body.Colliders, own) >= 0 || Array.IndexOf(body.Colliders, other) >= 0))
+                    Physics.IgnoreCollision(own, other, true);
         }
 
         /// <summary>iPhysicsWorld::EnableBodiesInBV for a static body moving through others (UpdateBeforeSimulate).</summary>

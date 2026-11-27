@@ -149,6 +149,7 @@ namespace RTXMnesia.Dynamics
                     Rigidbody.angularVelocity = Vector3.zero;
                 }
                 foreach (var c in Colliders) if (c != null) c.enabled = value;
+                if (value) World.ReapplyRestOverlaps(this);
             }
         }
 

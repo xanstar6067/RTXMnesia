@@ -62,6 +62,8 @@ namespace RTXMnesia.EditorDev
                 return;
             }
 
+            // Silent like HplBatchAudio (edit mode: its RuntimeInitializeOnLoadMethod does not run here).
+            if (Application.isBatchMode) AudioListener.pause = true;
             if (int.TryParse(ImportMenu.Arg("-seed", ""), out int seed)) HplMath.Seed(seed);
             HplGame.Reset();
             string savePath = ImportMenu.Arg("-loadSave", "");
@@ -595,6 +597,41 @@ namespace RTXMnesia.EditorDev
                                                      $"layer {o.gameObject.layer}: depth {depth:0.000} dir {dir:F2}");
                                     }
                                 }
+                            continue;
+                        }
+                        case "nocollide":
+                        {
+                            // nocollide EntityA EntityB [collider]: no collisions between the bodies of two props (is a contact
+                            // the cause?), or only with B's colliders whose name contains the fourth word.
+                            if (p.Length < 3 || map?.GetEntityByName(p[1]) is not HplProp a || map.GetEntityByName(p[2]) is not HplProp b)
+                            { log.Warn($"No props '{raw.Trim()}'"); continue; }
+                            int pairs = 0;
+                            foreach (var ba in a.PhysicsBodies) foreach (var ca in ba.Colliders)
+                            foreach (var bb in b.PhysicsBodies) foreach (var cb in bb.Colliders)
+                                if (ca != null && cb != null && (p.Length < 4 || cb.name.Contains(p[3]))) { Physics.IgnoreCollision(ca, cb, true); pairs++; }
+                            log.Info($"t={time,6:0.00}   nocollide {a.Name} ↔ {b.Name}: {pairs} collider pairs");
+                            continue;
+                        }
+                        case "restoverlaps":
+                        {
+                            // restoverlaps [undo]: the jointed bodies' authored overlaps left without contacts (HplPhysicsWorld);
+                            // undo gives them their contacts back (the behaviour before that rule, for comparisons).
+                            if (map == null) { log.Warn("restoverlaps needs an HplMap"); continue; }
+                            if (p.Length > 1 && p[1] == "undo")
+                                foreach (var (own, other) in map.PhysicsWorld.RestOverlaps) Physics.IgnoreCollision(own, other, false);
+                            foreach (var (own, other) in map.PhysicsWorld.RestOverlaps)
+                                log.Info($"t={time,6:0.00}   rest overlap {own.transform.parent?.parent?.name}/{own.transform.parent?.name}/{own.name} ↔ " +
+                                         $"{other.transform.parent?.parent?.name}/{other.transform.parent?.name}/{other.name}");
+                            log.Info($"t={time,6:0.00}   rest overlaps: {map.PhysicsWorld.RestOverlaps.Count}");
+                            continue;
+                        }
+                        case "sticky":
+                        {
+                            // sticky Entity on|off: the sticky min / max limits of its joints.
+                            if (map?.GetEntityByName(p.Length > 1 ? p[1] : "") is not HplProp prop) { log.Warn($"No prop '{raw.Trim()}'"); continue; }
+                            bool on = p.Length > 2 && p[2] == "on";
+                            foreach (var j in prop.Joints) j.StickyMinLimit = j.StickyMaxLimit = on;
+                            log.Info($"t={time,6:0.00}   sticky {prop.Name} {on}");
                             continue;
                         }
                         case "call":

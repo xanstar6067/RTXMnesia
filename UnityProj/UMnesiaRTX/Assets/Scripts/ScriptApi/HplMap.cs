@@ -303,6 +303,8 @@ namespace RTXMnesia.ScriptApi
                 prop.Load(this, PhysicsWorld);
                 AddEntity(prop);
             }
+            // All entities exist and stand as loaded (a save is applied in Begin): jointed bodies resting in others.
+            PhysicsWorld.IgnoreRestOverlaps();
             SetCharacterShapes();
             // iLuxEntity::AfterWorldLoad: the enemies' node containers, the ropes.
             if (!disableEnemyAI)
