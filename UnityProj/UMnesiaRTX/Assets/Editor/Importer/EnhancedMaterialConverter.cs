@@ -330,6 +330,26 @@ namespace RTXMnesia.Importer
             Debug.Log($"[EnhancedTextures] CLASSIC SURFACE PASS: {ClassicSurfaceMaterials.Length} materials keep the classic normal and gloss.");
         }
 
+        /// <summary>Rebuilds the imported enhanced materials of hearths (<see cref="HearthNames"/>) from their own textures (matte rule).</summary>
+        [MenuItem("Tools/RTXMnesia/Import/Enhanced textures: rebuild hearth materials")]
+        public static void RebuildHearthBatch()
+        {
+            int count = 0;
+            foreach (string guid in AssetDatabase.FindAssets("t:Material", new[] { MaterialRoot }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!HearthNames.Any(n => Path.GetFileNameWithoutExtension(path).Contains(n, StringComparison.OrdinalIgnoreCase))) continue;
+                var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+                string relative = path.Substring(MaterialRoot.Length + 1);
+                BuildMaterial(relative, new[] { "_BaseColorMap", "_NormalMap", "_MaskMap", "_HeightMap" }
+                    .Select(p => existing.GetTexture(p) as Texture2D).ToArray());
+                Debug.Log($"[EnhancedTextures] hearth: {relative} smoothness max {existing.GetFloat("_SmoothnessRemapMax")}");
+                count++;
+            }
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[EnhancedTextures] HEARTH PASS: {count} materials rebuilt.");
+        }
+
         static void UpsertCatalog(Material classic, string relative)
         {
             var catalog = AssetDatabase.LoadAssetAtPath<HplTextureSet>(CatalogPath);
@@ -355,12 +375,20 @@ namespace RTXMnesia.Importer
         public const float MatteSmoothnessMax = 0.35f;
         static readonly string[] FabricNames = { "curtain", "carpet", "banner", "cloth", "bed_", "mattress", "sack", "bag_small", "bag02", "rope_pile", "shirt" };
 
+        /// <summary>
+        /// The stone of hearths (stoves, fireplaces): sooty brick lit by the fire from a few decimetres. PBRify's gloss made
+        /// the firebox shine like wet stone in the light of its fire (reports 18-41-19, 18-48-09, 03_archives); the classic
+        /// one is dull. The metal stove (stove_metal, physics Metal) is not one of them.
+        /// </summary>
+        static readonly string[] HearthNames = { "wall_stove", "stove_corner", "stove_front", "fire_place" };
+
         public static bool Matte(string relative, AmnesiaMaterial src)
         {
             string physics = src.PhysicsMaterial ?? "";
             if (physics.StartsWith("Generic_Soft", StringComparison.OrdinalIgnoreCase)) return true;
             string name = Path.GetFileNameWithoutExtension(relative);
             if (FabricNames.Any(n => name.Contains(n, StringComparison.OrdinalIgnoreCase))) return true;
+            if (HearthNames.Any(n => name.Contains(n, StringComparison.OrdinalIgnoreCase))) return true;
             // Without a Specular map: all but glass panes and wet surfaces, which keep the PBRify gloss.
             return src.Texture("Specular") == null && !physics.StartsWith("Glass", StringComparison.OrdinalIgnoreCase) &&
                    !physics.StartsWith("Metal", StringComparison.OrdinalIgnoreCase) && !physics.EndsWith("_Water", StringComparison.OrdinalIgnoreCase);

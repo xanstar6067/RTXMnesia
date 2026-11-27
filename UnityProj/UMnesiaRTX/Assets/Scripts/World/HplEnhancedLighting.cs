@@ -51,6 +51,17 @@ namespace RTXMnesia.World
         /// </summary>
         public const float CandleCandela = 15f;
         public const float LanternCandles = 10f;
+        /// <summary>
+        /// A hearth's fire (stoves, fireplaces, bonfires, the burner: ps_fire_smoke_stove*), in candles. HPL2 gives it a
+        /// pale light (bonfire 0.8/0.7/0.6) of radius 1.2 (about 7 cd); 20 candles (300 cd) inside the stone box of a
+        /// stove blew its walls out to white (reports 18-40-30, 18-48-09, 03_archives).
+        /// </summary>
+        public const float HearthCandles = 6f;
+        /// <summary>
+        /// The color (sRGB, brightest channel 1) a hearth's light shows at its map color: a wood fire, about 2000 K. The
+        /// map color's flicker (bonfire: to 0.75/0.6/0.4) keeps its relative change on top (<see cref="AmnesiaLight.enhancedTint"/>).
+        /// </summary>
+        public static readonly Color HearthColor = new(1f, 0.56f, 0.24f);
         /// <summary>Illuminance (lux) where a light ends: an albedo-0.5 wall at EV100 3 is ~0.4% of white there.</summary>
         public const float VisibleLux = 0.25f;
         public const float MaxRange = 25f;
@@ -324,8 +335,9 @@ namespace RTXMnesia.World
                 if (entity.entityType != "Lamp") continue;
                 var flames = new List<(Vector3 position, float radius, float lift)>();
                 float candles = 0f;
+                bool hearth = false;
                 foreach (var ps in entity.GetComponentsInChildren<AmnesiaParticleSystem>(true))
-                    if (Flame(ps.file, out float r, out float c, out float h)) { flames.Add((ps.transform.position, r, h)); candles += c; }
+                    if (Flame(ps.file, out float r, out float c, out float h)) { flames.Add((ps.transform.position, r, h)); candles += c; hearth |= IsHearth(ps.file); }
                 if (flames.Count == 0) continue;
                 // The lamp's own model does not shadow its flame: a point light just above a torch's cup threw the
                 // cup's shadow over the whole wall and floor below (the real flame is larger than the cup's rim).
@@ -360,6 +372,7 @@ namespace RTXMnesia.World
                     if (Vector3.Distance(light.transform.position, target) > 0.05f) Move(light, record, target, null);
                     // The flames share the lamp's lights.
                     SetPhysical(light, candles * CandleCandela / lights.Count);
+                    if (hearth) light.enhancedTint = HearthTint(light.diffuseColor);
                     light.tracedSourceRadius = Mathf.Min(Mathf.Max(flameRadius, spread), 0.5f);
                     SetShadows(light, true, lowResolution: true);
                     light.Apply(light.CurrentColor, light.CurrentRadius);
@@ -549,8 +562,26 @@ namespace RTXMnesia.World
         {
             string f = (file ?? "").ToLowerInvariant();
             (radius, candles, lift) = f.Contains("candle") ? (0.012f, 1f, 0.015f) : f.Contains("torch") ? (0.06f, 10f, 0.15f)
-                : f.Contains("stove") || f.Contains("bonfire") ? (0.15f, 20f, 0.15f) : (0.03f, 3f, 0.05f);
+                : IsHearth(f) ? (0.15f, HearthCandles, 0.15f) : (0.03f, 3f, 0.05f);
             return f.Contains("fire") || f.Contains("flame") || f.Contains("candle");
+        }
+
+        /// <summary>The fire of a stove, fireplace or bonfire (ps_fire_smoke_stove_small: bonfire, fire_place, 13_burner).</summary>
+        static bool IsHearth(string file)
+        {
+            string f = (file ?? "").ToLowerInvariant();
+            return f.Contains("stove") || f.Contains("bonfire");
+        }
+
+        /// <summary>The tint that turns the map color of a hearth's light into <see cref="HearthColor"/> (brightest channel 1).</summary>
+        static Color HearthTint(Color map)
+        {
+            float max = Mathf.Max(map.r, map.g, map.b);
+            if (max <= 0f) return HearthColor;
+            float r = map.r > 0f ? HearthColor.r * max / map.r : 1f, g = map.g > 0f ? HearthColor.g * max / map.g : 1f,
+                b = map.b > 0f ? HearthColor.b * max / map.b : 1f;
+            float top = Mathf.Max(r, g, b);
+            return new Color(r / top, g / top, b / top);
         }
 
         /// <summary>
@@ -784,6 +815,7 @@ namespace RTXMnesia.World
                 light.enhancedIntensity = 1f;
                 light.enhancedRange = 0f;
                 light.enhancedCandela = 0f;
+                light.enhancedTint = Color.white;
                 light.tracedSourceRadius = -1f;
                 light.noTracedShadows = false;
                 if (r.moved)

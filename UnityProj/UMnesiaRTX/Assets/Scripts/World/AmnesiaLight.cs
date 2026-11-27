@@ -73,6 +73,8 @@ namespace RTXMnesia.World
         [System.NonSerialized] public float enhancedRange;
         /// <summary>Enhanced lighting: the physical intensity (cd) at the map color instead of HPL2's radius (0 — none).</summary>
         [System.NonSerialized] public float enhancedCandela;
+        /// <summary>Enhanced lighting: per-channel multiplier of the light's color (white — none; a fire's warm tint).</summary>
+        [System.NonSerialized] public Color enhancedTint = Color.white;
         /// <summary>The source radius while the shadows are ray traced; −1: <see cref="HplRayTracing.SourceRadius"/>.</summary>
         [System.NonSerialized] public float tracedSourceRadius = -1f;
         /// <summary>A fill light: never ray-traced shadows, also not by "shadows from all lights".</summary>
@@ -159,7 +161,7 @@ namespace RTXMnesia.World
                 return;
             }
             // Light.color is sRGB and kept ≤ 1; the brightest channel goes into the intensity.
-            target.color = new Color(color.r / max, color.g / max, color.b / max);
+            target.color = new Color(color.r / max * enhancedTint.r, color.g / max * enhancedTint.g, color.b / max * enhancedTint.b);
             target.lightUnit = LightUnit.Candela;
             float level = Mathf.GammaToLinearSpace(max);
             if (enhancedCandela > 0f)
