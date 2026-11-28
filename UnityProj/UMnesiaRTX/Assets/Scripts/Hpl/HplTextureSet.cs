@@ -194,11 +194,16 @@ namespace RTXMnesia.Hpl
                 if (enhanced == null) continue;
                 // Start from the particular clone: emission, tint, UVs and culling can differ even when albedo is shared.
                 var copy = new Material(original) { name = original.name + " (enhanced)", hideFlags = HideFlags.HideAndDontSave };
-                foreach (string property in new[] { "_BaseColorMap", "_NormalMap", "_MaskMap", "_HeightMap", "_SpecularColorMap" })
+                foreach (string property in new[] { "_BaseColorMap", "_NormalMap", "_MaskMap", "_HeightMap", "_SpecularColorMap", "_DetailMap" })
                     copy.SetTexture(property, enhanced.GetTexture(property));
+                // _DetailMap: the classic normal as a detail normal (EnhancedClassicDetail), same UVs as the base map.
+                copy.SetTextureScale("_DetailMap", Vector2.one);
+                copy.SetTextureOffset("_DetailMap", Vector2.zero);
                 foreach (string property in new[] { "_MaterialID", "_NormalScale", "_Metallic", "_MetallicRemapMin", "_MetallicRemapMax", "_AORemapMin", "_AORemapMax", "_SmoothnessRemapMin", "_SmoothnessRemapMax",
-                    "_DisplacementMode", "_HeightPoMAmplitude", "_HeightAmplitude", "_HeightCenter", "_PPDMinSamples", "_PPDMaxSamples" })
+                    "_DisplacementMode", "_HeightPoMAmplitude", "_HeightAmplitude", "_HeightCenter", "_PPDMinSamples", "_PPDMaxSamples",
+                    "_DetailNormalScale", "_DetailAlbedoScale", "_DetailSmoothnessScale", "_LinkDetailsWithBase", "_UVDetail" })
                     copy.SetFloat(property, enhanced.GetFloat(property));
+                copy.SetVector("_UVDetailsMappingMask", enhanced.GetVector("_UVDetailsMappingMask"));
                 UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(copy);
                 s_forward[original] = copy;
                 s_reverse[copy] = original;

@@ -291,6 +291,8 @@ namespace RTXMnesia.Importer
             material.SetFloat("_HeightCenter", 1f);
             material.SetFloat("_PPDMinSamples", 8);
             material.SetFloat("_PPDMaxSamples", 32);
+            // The classic normal as a detail normal where PBRify lost its relief (ornaments, stone faces): EnhancedClassicDetail.
+            EnhancedClassicDetail.Apply(material, classic);
             HDMaterial.ValidateMaterial(material);
             EditorUtility.SetDirty(material);
             UpsertCatalog(classic, relative);

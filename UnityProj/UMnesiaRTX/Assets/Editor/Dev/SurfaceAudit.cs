@@ -16,7 +16,7 @@ namespace RTXMnesia.EditorDev
     /// Finds enhanced (PBRify) materials that lost the relief or the gloss of the classic one, like the flesh `spiderdetails`
     /// (bug report 2026-11-21 10-48-37; docs/EnhancedTextures.md, «Проверка поверхности»). For every catalog pair the normal
     /// and mask maps are read on the GPU at 1024² (mips, as HDRP sees them at a distance; in-memory shader <see cref="BlitShader"/>) and compared:
-    /// relief — mean tilt of the tangent normal × _NormalScale (only without POM); gloss — specular peak F0·D_GGX(smoothness), weighted by the
+    /// relief — mean tilt of the tangent normal × _NormalScale (with the classic detail normal; POM materials too); gloss — specular peak F0·D_GGX(smoothness), weighted by the
     /// classic F0. A material is suspect when the enhanced relief is under <see cref="ReliefLoss"/> of the classic one or
     /// the enhanced peak is under <see cref="ShineLoss"/> of a glossy classic (not for matte-by-rule materials). Then the level scenes are searched for a
     /// surface with each suspect and a player spot looking at it (feet on the floor, line of sight by the colliders).
@@ -77,11 +77,13 @@ namespace RTXMnesia.EditorDev
             public string relative;
             public Material classic;
             public bool classicSurface, cutout, height, matte;
-            public float tiltC, tiltE, glossC, glossE, shineC, shineE, f0;
+            public float tiltC, tiltE, glossC, glossE, shineC, shineE, f0, detail;
             public float Relief => tiltC > 1e-4f ? tiltE / tiltC : 1f;
             public float Shine => shineC > 1e-4f ? shineE / shineC : 1f;
-            // With POM the relief comes from the height map (approved walls): only the normal-only enhanced relief is compared.
-            public bool ReliefSuspect => !height && tiltC >= MinClassicTilt && Relief < ReliefLoss;
+            // POM shifts the texture but not the shading normal: flat-lit faces read flat whatever the parallax (reports
+            // 2026-11-27, 04_wine_cellar_lab / 03_archives), so POM materials are compared too. The enhanced tilt includes the
+            // classic detail normal (EnhancedClassicDetail) blended as HDRP does.
+            public bool ReliefSuspect => tiltC >= MinClassicTilt && Relief < ReliefLoss;
             // Matte materials (fabrics, no Specular map) are matte on purpose (docs/EnhancedTextures.md, «Матовые материалы»).
             public bool ShineSuspect => !matte && glossC >= MinClassicGloss && Shine < ShineLoss;
             public bool Suspect => ReliefSuspect || ShineSuspect;
@@ -149,7 +151,9 @@ namespace RTXMnesia.EditorDev
                 row.matte = remapMaxE <= EnhancedMaterialConverter.MatteSmoothnessMax + 1e-3f;
             }
             row.tiltC = Tilt(classic.GetTexture("_NormalMap"), classic.GetFloat("_NormalScale"), Covered);
-            row.tiltE = Tilt(normalE, row.classicSurface ? 1f : enhanced.GetFloat("_NormalScale"), Covered);
+            var detail = row.classicSurface ? null : enhanced.GetTexture("_DetailMap");
+            row.detail = detail != null ? enhanced.GetFloat("_DetailNormalScale") : 0f;
+            row.tiltE = Tilt(normalE, row.classicSurface ? 1f : enhanced.GetFloat("_NormalScale"), Covered, detail, row.detail);
             float[] sC = Smoothness(classic, classic.GetTexture("_MaskMap"), classic.GetFloat("_SmoothnessRemapMin"), classic.GetFloat("_SmoothnessRemapMax"));
             float[] sE = Smoothness(enhanced, maskE, remapMinE, remapMaxE);
             (row.glossC, row.shineC) = Gloss(sC, f0, Covered);
@@ -173,14 +177,32 @@ namespace RTXMnesia.EditorDev
             return pixels;
         }
 
-        static float Tilt(Texture normal, float scale, Func<int, bool> covered)
+        static float Tilt(Texture normal, float scale, Func<int, bool> covered, Texture detail = null, float detailScale = 0f)
         {
             if (normal == null) return 0f;
             var p = Read(normal, 0);
+            // HDRP detail map: x = A, y = G (UnpackNormalAG), mask 1 (PBRify Mask B).
+            var d = detail != null && detailScale > 0f ? Read(detail, 1) : null;
             double sum = 0; int count = 0;
             for (int i = 0; i < p.Length; i++)
-                if (covered(i)) { sum += Mathf.Min(1f, new Vector2(p[i].r, p[i].g).magnitude * scale); count++; }
+            {
+                if (!covered(i)) continue;
+                var xy = new Vector2(p[i].r, p[i].g) * scale;
+                if (d != null) xy = BlendRnm(xy, new Vector2(d[i].a * 2f - 1f, d[i].g * 2f - 1f) * detailScale);
+                sum += Mathf.Min(1f, xy.magnitude); count++;
+            }
             return count > 0 ? (float)(sum / count) : 0f;
+        }
+
+        /// <summary>BlendNormalRNM of HDRP (CommonMaterial.hlsl) on unpacked xy, z reconstructed; returns the result's xy / z.</summary>
+        static Vector2 BlendRnm(Vector2 a, Vector2 b)
+        {
+            var n1 = new Vector3(a.x, a.y, Mathf.Sqrt(Mathf.Max(0f, 1f - Mathf.Min(1f, a.sqrMagnitude))));
+            var n2 = new Vector3(b.x, b.y, Mathf.Sqrt(Mathf.Max(0f, 1f - Mathf.Min(1f, b.sqrMagnitude)))).normalized;
+            var t = n1 + Vector3.forward;
+            var u = new Vector3(-n2.x, -n2.y, n2.z);
+            var r = (t * Vector3.Dot(t, u) / t.z - u).normalized;
+            return new Vector2(r.x, r.y);
         }
 
         static float[] SpecularF0(Material m)
@@ -335,7 +357,7 @@ namespace RTXMnesia.EditorDev
 
         static string Line(Row r) =>
             $"{r.relative}: relief {r.Relief:0.00} (tilt {r.tiltC:0.000} → {r.tiltE:0.000}){(r.ReliefSuspect ? " LOSS" : "")}, " +
-            $"shine {r.Shine:0.00} (gloss {r.glossC:0.00} → {r.glossE:0.00}, F0 {r.f0:0.0000}){(r.ShineSuspect ? " LOSS" : "")}{(r.cutout ? ", cutout" : "")}{(r.height ? ", POM" : "")}{(r.matte ? ", matte" : "")}";
+            $"shine {r.Shine:0.00} (gloss {r.glossC:0.00} → {r.glossE:0.00}, F0 {r.f0:0.0000}){(r.ShineSuspect ? " LOSS" : "")}{(r.cutout ? ", cutout" : "")}{(r.height ? ", POM" : "")}{(r.detail > 0f ? $", classic detail {r.detail:0.00}" : "")}{(r.matte ? ", matte" : "")}";
 
         static string F(Vector3 v) => string.Join(" ", new[] { v.x, v.y, v.z }.Select(x => x.ToString("0.00", CultureInfo.InvariantCulture)));
         static string Safe(string s) => new string(s.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
