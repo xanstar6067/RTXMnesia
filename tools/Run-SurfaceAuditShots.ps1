@@ -6,13 +6,15 @@ Logs/SurfaceAudit/<view>__<map>.png: left classic, right enhanced, brightness x1
 Logs/SurfaceAudit/raw (-Recompose builds the sheets again from them, e.g. with another -Gain, without Unity).
 Unity with this project must be closed.
 
-  tools/Run-SurfaceAuditShots.ps1 [-Only s01_foo,s04_bar] [-Gain 1.3] [-Recompose]
+  tools/Run-SurfaceAuditShots.ps1 [-Only s01_foo,s04_bar] [-Gain 1.3] [-Recompose] [-ViewsFile views_glare.tsv]
+-ViewsFile picks another list of Logs/SurfaceAudit (views_glare.tsv: stone glare places, docs/EnhancedTextures.md, "Блеск камня").
 #>
 param(
     [string]$Only = "",
     [double]$Gain = 1.3,
     [string]$Modes = "enhanced_rt_classictex_lantern,enhanced_rt_tex_lantern",
-    [switch]$Recompose
+    [switch]$Recompose,
+    [string]$ViewsFile = "views.tsv"
 )
 Add-Type -AssemblyName System.Drawing
 $project = Join-Path $PSScriptRoot "..\UnityProj\UMnesiaRTX" | Resolve-Path
@@ -20,7 +22,7 @@ $audit = Join-Path $project "Logs\SurfaceAudit"
 $probeOut = Join-Path $project "Logs\EnhancedLighting"
 $raw = Join-Path $audit "raw"
 New-Item -ItemType Directory -Force $raw | Out-Null
-$rows = Get-Content (Join-Path $audit "views.tsv") -Encoding UTF8 | Where-Object { $_ } | ForEach-Object {
+$rows = Get-Content (Join-Path $audit $ViewsFile) -Encoding UTF8 | Where-Object { $_ } | ForEach-Object {
     $c = $_ -split "`t"; [pscustomobject]@{ Map = $c[0]; View = $c[1]; Place = $c[2]; Material = $c[3] }
 }
 if ($Only) { $keep = $Only -split ','; $rows = $rows | Where-Object { $keep -contains $_.View } }

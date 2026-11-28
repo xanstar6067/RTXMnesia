@@ -16,7 +16,7 @@ param(
     [string]$Modes = "classic_rt,enhanced_raster,enhanced_rt",
     [string]$Lit = "",
     [string]$Size = "1600x900",
-    [string]$Unity = "C:/Program Files/Unity/Hub/Editor/6000.6.8f1/Editor/Unity.exe"
+    [string]$Unity = "C:/Program Files/Unity/Hub/Editor/6000.6.10f1/Editor/Unity.exe"
 )
 $project = Join-Path $PSScriptRoot "..\UnityProj\UMnesiaRTX" | Resolve-Path
 $lock = Join-Path $project "Temp\UnityLockfile"

@@ -279,7 +279,8 @@ namespace RTXMnesia.Importer
             material.SetFloat("_AORemapMin", 1f);
             material.SetFloat("_AORemapMax", 1f);
             material.SetFloat("_SmoothnessRemapMin", 0f);
-            material.SetFloat("_SmoothnessRemapMax", matte ? MatteSmoothnessMax : 1f);
+            // Stone no glossier than the classic one (EnhancedStoneGloss; docs/EnhancedTextures.md, «Блеск камня»).
+            material.SetFloat("_SmoothnessRemapMax", matte ? MatteSmoothnessMax : EnhancedStoneGloss.RemapMax(relative, src.PhysicsMaterial, classic, textures[2]));
             // Physics "Glass" also marks opaque window walls (castlebase_wall_win: stone around the panes); see-through glass is
             // not a Solid material and never gets here.
             bool useHeight = textures[3] != null && src.Texture("Height") != null && classic.GetFloat("_AlphaCutoffEnable") == 0;

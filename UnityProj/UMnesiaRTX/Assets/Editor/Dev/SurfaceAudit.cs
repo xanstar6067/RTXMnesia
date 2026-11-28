@@ -25,7 +25,7 @@ namespace RTXMnesia.EditorDev
     /// </summary>
     public static class SurfaceAudit
     {
-        public const float ReliefLoss = 0.3f, ShineLoss = 0.4f;
+        public const float ReliefLoss = 0.3f, ShineLoss = 0.4f, GlareGloss = 0.1f, GlareShine = 3f;
         const float MinClassicTilt = 0.08f, MinClassicGloss = 0.3f, EyeHeight = 1.6f;
         const int Size = 1024;
         static string Folder => Path.Combine(AmnesiaPaths.ProjectRoot, "Logs", "SurfaceAudit");
@@ -74,9 +74,9 @@ namespace RTXMnesia.EditorDev
 
         sealed class Row
         {
-            public string relative;
+            public string relative, physics;
             public Material classic;
-            public bool classicSurface, cutout, height, matte;
+            public bool classicSurface, cutout, height, matte, stone;
             public float tiltC, tiltE, glossC, glossE, shineC, shineE, f0, detail;
             public float Relief => tiltC > 1e-4f ? tiltE / tiltC : 1f;
             public float Shine => shineC > 1e-4f ? shineE / shineC : 1f;
@@ -87,6 +87,9 @@ namespace RTXMnesia.EditorDev
             // Matte materials (fabrics, no Specular map) are matte on purpose (docs/EnhancedTextures.md, «Матовые материалы»).
             public bool ShineSuspect => !matte && glossC >= MinClassicGloss && Shine < ShineLoss;
             public bool Suspect => ReliefSuspect || ShineSuspect;
+            // The other direction (docs/EnhancedTextures.md, «Блеск камня»): stone much glossier than the classic one, as the
+            // castlebase walls before EnhancedStoneGloss (smoothness 0.19 → 0.6, GGX peak ×30–65).
+            public bool GlareSuspect => stone && glossE > glossC + GlareGloss && Shine > GlareShine;
             // Order: both lost (as the flesh), gloss lost, relief lost; inside a group the stronger loss first.
             public int Group => ReliefSuspect && ShineSuspect ? 0 : ShineSuspect ? 1 : 2;
             public float Score => Mathf.Min(ReliefSuspect ? Relief / ReliefLoss : 9f, ShineSuspect ? Shine / ShineLoss : 9f);
@@ -118,16 +121,20 @@ namespace RTXMnesia.EditorDev
                 if (++n % 50 == 0) { EditorUtility.UnloadUnusedAssetsImmediate(); Debug.Log($"[SurfaceAudit] measured {n}/{catalog.entries.Length}"); }
             }
             var suspects = rows.Where(r => r.Suspect && !r.classicSurface).OrderBy(r => r.Group).ThenBy(r => r.Score).ToList();
-            Locate(suspects);
+            var glare = rows.Where(r => r.GlareSuspect && !r.Suspect).OrderByDescending(r => r.Shine).ToList();
+            if (Array.IndexOf(args, "-auditMeasureOnly") < 0) Locate(suspects.Concat(glare).ToList());
             WriteReport(rows, suspects, top);
             UnityEngine.Object.DestroyImmediate(s_blit);
             UnityEngine.Object.DestroyImmediate(shader);
-            Debug.Log($"[SurfaceAudit] PASS: {rows.Count} pairs, {suspects.Count} suspects, {suspects.Count(s => s.view != null)} with a place; Logs/SurfaceAudit/report.txt");
+            Debug.Log($"[SurfaceAudit] PASS: {rows.Count} pairs, {suspects.Count} suspects, {suspects.Count(s => s.view != null)} with a place, " +
+                      $"{rows.Count(r => r.stone)} stone-like, {rows.Count(r => r.GlareSuspect)} stone glare; Logs/SurfaceAudit/report.txt");
         }
 
         static Row Measure(string relative, Material classic, Material enhanced)
         {
             var row = new Row { relative = relative, classic = classic, classicSurface = EnhancedMaterialConverter.ClassicSurface(relative) };
+            var src = AmnesiaMaterial.Load(Path.Combine(AmnesiaPaths.SourceRoot, relative));
+            row.physics = src.PhysicsMaterial ?? "";
             row.cutout = classic.GetFloat("_AlphaCutoffEnable") > 0;
             Color[] alpha = row.cutout && classic.GetTexture("_BaseColorMap") != null ? Read(classic.GetTexture("_BaseColorMap"), 1) : null;
             float cutoff = classic.GetFloat("_AlphaCutoff");
@@ -148,7 +155,8 @@ namespace RTXMnesia.EditorDev
             else
             {
                 row.height = enhanced.GetTexture("_HeightMap") != null && enhanced.GetFloat("_DisplacementMode") > 0;
-                row.matte = remapMaxE <= EnhancedMaterialConverter.MatteSmoothnessMax + 1e-3f;
+                row.matte = EnhancedMaterialConverter.Matte(relative, src);
+                row.stone = !row.matte && EnhancedStoneGloss.StoneLike(relative, row.physics);
             }
             row.tiltC = Tilt(classic.GetTexture("_NormalMap"), classic.GetFloat("_NormalScale"), Covered);
             var detail = row.classicSurface ? null : enhanced.GetTexture("_DetailMap");
@@ -276,7 +284,7 @@ namespace RTXMnesia.EditorDev
                         if (FindView(renderer, filter.sharedMesh, sub, out var feet, out var target))
                         {
                             row.map = map;
-                            row.view = "s" + (suspects.IndexOf(row) + 1).ToString("00") + "_" + Safe(Path.GetFileNameWithoutExtension(row.relative));
+                            row.view = (row.Suspect ? "s" : "g") +(suspects.IndexOf(row) + 1).ToString("00") + "_" + Safe(Path.GetFileNameWithoutExtension(row.relative));
                             row.place = $"{F(HplSpace.Position(feet))} {F(HplSpace.Position(target))}";
                         }
                     }
@@ -347,19 +355,29 @@ namespace RTXMnesia.EditorDev
             foreach (var r in suspects)
                 sb.AppendLine("  " + Line(r) + $" | scenes {r.scenes}, renderers {r.renderers}" + (r.view != null ? $" | {r.view} @ {r.map}: {r.place}" : " | no place found"));
             sb.AppendLine();
+            var glare = rows.Where(r => r.GlareSuspect).OrderByDescending(r => r.Shine).ToList();
+            sb.AppendLine($"Stone glare (stone-like, enhanced gloss > classic + {GlareGloss} and shine > {GlareShine}): {glare.Count} of {rows.Count(r => r.stone)} stone-like");
+            foreach (var r in glare) sb.AppendLine("  " + Line(r) + $", {r.physics} | scenes {r.scenes}, renderers {r.renderers}" + (r.view != null ? $" | {r.view} @ {r.map}: {r.place}" : ""));
+            sb.AppendLine();
             sb.AppendLine("Strongest gains (enhanced much bumpier or glossier; information only):");
             foreach (var r in rows.Where(r => !r.classicSurface && (r.Relief > 3f && r.tiltE > 0.15f || r.Shine > 5f && r.glossE > 0.5f))
                          .OrderByDescending(r => Mathf.Max(r.Relief, r.Shine / 2f)).Take(25))
                 sb.AppendLine("  " + Line(r));
             File.WriteAllText(Path.Combine(Folder, "report.txt"), sb.ToString());
+            // Every pair, for the statistics (docs/EnhancedTextures.md, «Блеск камня»).
+            File.WriteAllLines(Path.Combine(Folder, "rows.tsv"), new[] { "material\tphysics\tf0\tglossC\tglossE\tshineC\tshineE\tshine\trelief\tmatte\tstone\tclassicSurface" }
+                .Concat(rows.Select(r => string.Join("\t", r.relative, r.physics, F4(r.f0), F4(r.glossC), F4(r.glossE), F4(r.shineC), F4(r.shineE), F4(r.Shine), F4(r.Relief), r.matte ? 1 : 0, r.stone ? 1 : 0, r.classicSurface ? 1 : 0))));
             File.WriteAllLines(Path.Combine(Folder, "views.tsv"), suspects.Where(r => r.view != null).Take(top).Select(r => $"{r.map}\t{r.view}\t{r.place}\t{r.relative}"));
+            // Places of the stone glare, for tools/Run-SurfaceAuditShots.ps1 -ViewsFile views_glare.tsv.
+            File.WriteAllLines(Path.Combine(Folder, "views_glare.tsv"), glare.Where(r => r.view != null).Take(top).Select(r => $"{r.map}\t{r.view}\t{r.place}\t{r.relative}"));
         }
 
         static string Line(Row r) =>
             $"{r.relative}: relief {r.Relief:0.00} (tilt {r.tiltC:0.000} → {r.tiltE:0.000}){(r.ReliefSuspect ? " LOSS" : "")}, " +
-            $"shine {r.Shine:0.00} (gloss {r.glossC:0.00} → {r.glossE:0.00}, F0 {r.f0:0.0000}){(r.ShineSuspect ? " LOSS" : "")}{(r.cutout ? ", cutout" : "")}{(r.height ? ", POM" : "")}{(r.detail > 0f ? $", classic detail {r.detail:0.00}" : "")}{(r.matte ? ", matte" : "")}";
+            $"shine {r.Shine:0.00} (gloss {r.glossC:0.00} → {r.glossE:0.00}, F0 {r.f0:0.0000}){(r.ShineSuspect ? " LOSS" : "")}{(r.cutout ? ", cutout" : "")}{(r.height ? ", POM" : "")}{(r.detail > 0f ? $", classic detail {r.detail:0.00}" : "")}{(r.matte ? ", matte" : "")}{(r.stone ? ", stone" : "")}";
 
         static string F(Vector3 v) => string.Join(" ", new[] { v.x, v.y, v.z }.Select(x => x.ToString("0.00", CultureInfo.InvariantCulture)));
+        static string F4(float v) => v.ToString("0.####", CultureInfo.InvariantCulture);
         static string Safe(string s) => new string(s.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
     }
 }
