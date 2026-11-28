@@ -87,7 +87,7 @@
     {"name": "PointLight_8", "intensity": "0.7", "shadows": "off", "note": "Weak navigation fill at the far west end of the entrance room, retained in both modes where the window is distant."},
     {"name": "PointLight_6", "note": "Exterior backdrop fill outside the playable mansion: preserved until exterior sky/environment rework."},
     {"name": "PointLight_7", "note": "Exterior backdrop fill outside the playable mansion: preserved until exterior sky/environment rework."},
-    {"name": "PointLight_30", "note": "Script-controlled blue light: preserve colour/radius/intensity and the story fade to black."},
+    {"name": "PointLight_30", "shadows": "on", "note": "Script-controlled blue light of the hidden room behind shelf_secret_door_1: colour/radius/intensity and the story fade to black preserved. Shadows on: as a fill light only the level geometry shadowed it, the door shelf is a prop, so the light went through its back and lit the undersides of the boards white-blue in the archive (bug report 2026-11-27 18-56-21)."},
     {"name": "OrbLight", "note": "Supernatural orb flashback light: preserve script radius 0..20, colour changes and flicker."},
     {"name": "PointLight_41", "geometryShadows": "off", "note": "Stands behind the level geometry it lights (probe fills: 68% of its rays meet the back of a face): no shadows of the geometry, as in HPL2."}
   ],

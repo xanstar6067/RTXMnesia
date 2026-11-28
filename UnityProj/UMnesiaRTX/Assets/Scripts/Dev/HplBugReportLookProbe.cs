@@ -214,8 +214,11 @@ namespace RTXMnesia.Dev
                 double startTime = Time.timeAsDouble;
                 // -lookSeriesFree: the player's own sway (the idle head bob) is kept, as in play.
                 bool hold = Array.IndexOf(args, "-lookSeriesFree") < 0;
+                var off = LookOff();
+                result.AppendLine($"выключено источников: {off.Length}" + (off.Length > 0 ? " (" + string.Join(", ", off.Select(l => l.name)) + ")" : ""));
                 void Render()
                 {
+                    foreach (var light in off) light.intensity = 0f;
                     if (hold)
                     {
                         camera.transform.SetPositionAndRotation(position + rotation * Vector3.right * (float)(drift * (Time.timeAsDouble - startTime)), rotation);
@@ -317,6 +320,18 @@ namespace RTXMnesia.Dev
                 var field = typeof(HplUserSettings).GetField(kv[0].Trim()) ?? throw new ArgumentException("Unknown setting " + kv[0]);
                 field.SetValue(settings, Convert.ChangeType(kv[1].Trim(), field.FieldType, CultureInfo.InvariantCulture));
             }
+        }
+
+        /// <summary>-lookOff "name;name": lights held at intensity 0 in the series (game object names; "lantern": the
+        /// hand-held lights) - to find which source gives a highlight.</summary>
+        static Light[] LookOff()
+        {
+            var args = Environment.GetCommandLineArgs();
+            int at = Array.IndexOf(args, "-lookOff");
+            if (at < 0 || at + 1 >= args.Length) return Array.Empty<Light>();
+            var names = args[at + 1].Split(';').Where(n => n.Length > 0).ToArray();
+            return FindObjectsByType<Light>().Where(l => names.Contains(l.name)
+                || names.Contains("lantern") && l.GetComponentInParent<World.AmnesiaLight>() is { handHeld: true }).ToArray();
         }
 
         static string Section(string text, string title)
