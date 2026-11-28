@@ -17,11 +17,12 @@ namespace RTXMnesia.Ui
 
         HplMap _map;
 
-        void Start()
+        System.Collections.IEnumerator Start()
         {
             _map = GetComponent<HplMap>();
             _map.Begin();
             _map.hud.Canvas.enabled = false;
+            yield return HplShaderWarmupScreen.Prepare(_map);
             _map.sound.EnsureMusic();
             _map.sound.Music.GameVolumeMul = 1;
             if (HplPreMenu.ShouldShow)

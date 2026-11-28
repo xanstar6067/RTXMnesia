@@ -27,6 +27,24 @@ namespace RTXMnesia.Hpl
         /// <summary>The card's own memory (DXGI DedicatedVideoMemory), 0 if unknown.</summary>
         public static long Dedicated => Available ? s_dedicated : 0;
 
+        /// <summary>DXGI user-mode driver version of Unity's adapter. Empty when Windows cannot provide it.</summary>
+        public static string DriverVersion
+        {
+            get
+            {
+                var adapter = Adapter();
+                if (adapter == IntPtr.Zero) return "";
+                try
+                {
+                    var deviceId = new Guid("54ec77fa-1377-44e6-8c32-88fd5f44c84c"); // IDXGIDevice
+                    if (Method<CheckInterfaceSupportFn>(adapter, 9)(adapter, ref deviceId, out long version) != 0) return "";
+                    ulong v = (ulong)version;
+                    return $"{v >> 48}.{(v >> 32) & 65535}.{(v >> 16) & 65535}.{v & 65535}";
+                }
+                catch (Exception) { return ""; }
+            }
+        }
+
         public static bool TryQuery(out Info info)
         {
             info = default;
@@ -96,6 +114,7 @@ namespace RTXMnesia.Hpl
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate uint ReleaseFn(IntPtr self);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int EnumAdapters1Fn(IntPtr self, uint index, out IntPtr adapter);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetDesc1Fn(IntPtr self, ref AdapterDesc1 desc);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CheckInterfaceSupportFn(IntPtr self, ref Guid riid, out long version);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int QueryVideoMemoryInfoFn(IntPtr self, uint node, int group, out MemoryInfo info);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
