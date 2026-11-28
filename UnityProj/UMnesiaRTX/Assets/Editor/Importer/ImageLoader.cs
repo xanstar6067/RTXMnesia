@@ -69,7 +69,7 @@ namespace RTXMnesia.Importer
             }
 
             if (!topOrigin) FlipRows(pixels, width, height);
-            return new DdsDecoder.Image { Width = width, Height = height, Faces = new[] { pixels }, Format = $"TGA{type}/{bpp}" };
+            return new DdsDecoder.Image { Width = width, Height = height, Faces = new[] { pixels }, Format = $"TGA{type}/{bpp}", Luminance = bytes == 1 };
         }
 
         static DdsDecoder.Image LoadWithUnity(string path)

@@ -170,14 +170,21 @@ namespace RTXMnesia.Importer
             return (byte)Math.Round(Math.Clamp(smoothness, 0.0, 1.0) * 255.0);
         }
 
+        /// <summary>
+        /// A material's Alpha unit: HPL2 tests its .w (deferred_base_frag.glsl). A grayscale TGA is loaded as an alpha
+        /// texture (<see cref="DdsDecoder.Image.Luminance"/>), so its gray value is the alpha; reading .a of such a file
+        /// gave 255 everywhere, and 31 cutouts (pile_of_food, broken doors, keys, chains, rag piles) drew their whole quad.
+        /// </summary>
         static void CopyAlpha(Color32[] dst, int width, int height, DdsDecoder.Image alphaSource)
         {
             Color32[] src = alphaSource.Faces[0];
+            bool luminance = alphaSource.Luminance;
             for (int y = 0; y < height; y++)
                 for (int x = 0; x < width; x++)
                 {
                     int sx = x * alphaSource.Width / width, sy = y * alphaSource.Height / height;
-                    dst[y * width + x].a = src[sy * alphaSource.Width + sx].a;
+                    Color32 a = src[sy * alphaSource.Width + sx];
+                    dst[y * width + x].a = luminance ? a.r : a.a;
                 }
         }
 

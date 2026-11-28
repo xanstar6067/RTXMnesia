@@ -16,6 +16,11 @@ namespace RTXMnesia.Importer
             /// <summary>One array per face (1 for 2D, 6 for cube: +X,-X,+Y,-Y,+Z,-Z), top row first.</summary>
             public Color32[][] Faces;
             public string Format;
+            /// <summary>
+            /// Single-channel file (8-bit grayscale TGA): HPL2 loads it as an alpha texture (BitmapLoaderDevil.cpp,
+            /// IL_LUMINANCE → ePixelFormat_Alpha), so its value is the alpha a material's Alpha unit tests.
+            /// </summary>
+            public bool Luminance;
             public bool IsCube => Faces.Length == 6;
         }
 
