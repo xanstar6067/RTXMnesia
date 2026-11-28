@@ -65,6 +65,7 @@ namespace RTXMnesia.Dev
                     if (Time.realtimeSinceStartupAsDouble > deadline) throw new InvalidOperationException("Loading timed out: " + folder);
                     yield return null;
                 }
+                yield return Calls(HplMap.Current, folder, result);
                 yield return new WaitForSecondsRealtime(2);
                 var map = HplMap.Current;
                 if (map.GameUi.IsPaused) map.GameUi.Resume();
@@ -320,6 +321,144 @@ namespace RTXMnesia.Dev
                 var field = typeof(HplUserSettings).GetField(kv[0].Trim()) ?? throw new ArgumentException("Unknown setting " + kv[0]);
                 field.SetValue(settings, Convert.ChangeType(kv[1].Trim(), field.FieldType, CultureInfo.InvariantCulture));
             }
+        }
+
+        /// <summary>
+        /// -lookCalls "Func(a,b);@wait 6;@effects;@freeze", right after the save is loaded: functions of the level script
+        /// (and of HplScript) by name, arguments as the parameters' types (string without quotes); "@wait s" - game
+        /// seconds; "@effects" - the screen effects reset (fades, flash); "@freeze" - game time stopped (timeScale 0) for
+        /// the shots, so a scripted fade stays where it is. A save in the middle of a scripted scene (the orb flashback of
+        /// 03_archives) goes on after loading; this puts the scene in the state to look at.
+        /// </summary>
+        static IEnumerator Calls(HplMap map, string folder, StringBuilder result)
+        {
+            var args = Environment.GetCommandLineArgs();
+            int at = Array.IndexOf(args, "-lookCalls");
+            if (at < 0 || at + 1 >= args.Length) yield break;
+            Time.timeScale = 1f;
+            s_aim = null;
+            foreach (string raw in args[at + 1].Split(';').Select(c => c.Trim()).Where(c => c.Length > 0))
+            {
+                result.AppendLine("вызов: " + raw);
+                if (raw.StartsWith("@wait", StringComparison.Ordinal))
+                {
+                    float seconds = float.Parse(raw.Substring(5).Trim(), CultureInfo.InvariantCulture);
+                    for (double end = Time.timeAsDouble + seconds; Time.timeAsDouble < end;) yield return null;
+                    continue;
+                }
+                if (raw == "@effects") { map.effects.ResetAll(); continue; }
+                if (raw == "@freeze") { Time.timeScale = 0f; continue; }
+                if (raw.StartsWith("@aim ", StringComparison.Ordinal))
+                {
+                    var v = raw.Substring(5).Trim().Split(' ');
+                    s_aim = HplSpace.Position(new Vector3(float.Parse(v[0], CultureInfo.InvariantCulture), float.Parse(v[1], CultureInfo.InvariantCulture), float.Parse(v[2], CultureInfo.InvariantCulture)));
+                    continue;
+                }
+                if (raw.StartsWith("@shot ", StringComparison.Ordinal))
+                {
+                    int shots = Array.IndexOf(args, "-lookShots");
+                    if (shots < 0 || shots + 1 >= args.Length) throw new ArgumentException("@shot needs -lookShots");
+                    yield return CallShot(map, folder, Path.Combine(args[shots + 1], Path.GetFileName(folder)) + "_call_" + raw.Substring(6).Trim() + ".png", result);
+                    continue;
+                }
+                if (raw.StartsWith("@body ", StringComparison.Ordinal))
+                {
+                    // Saves of builds before 2026-11-27 20:20 kept the bodies of inactive props at the origin.
+                    var parts = raw.Substring(6).Trim().Split(' ');
+                    var prop = map.GetEntityByName(parts[0]) as HplProp ?? throw new ArgumentException("No prop " + raw);
+                    var hpl = new Vector3(float.Parse(parts[1], CultureInfo.InvariantCulture), float.Parse(parts[2], CultureInfo.InvariantCulture), float.Parse(parts[3], CultureInfo.InvariantCulture));
+                    prop.PhysicsBodies[0].SetPose(HplSpace.Position(hpl), Quaternion.identity);
+                    continue;
+                }
+                if (raw.StartsWith("@show ", StringComparison.Ordinal))
+                {
+                    var entity = map.GetEntityByName(raw.Substring(6).Trim());
+                    result.AppendLine(entity == null ? "  нет сущности" : $"  активна {entity.Active}, объект {entity.GameObject.activeInHierarchy}");
+                    if (entity != null)
+                        foreach (var r in entity.GameObject.GetComponentsInChildren<Renderer>(true))
+                            result.AppendLine($"  {r.name}: {(r.enabled && r.gameObject.activeInHierarchy ? "виден" : "скрыт")}, {string.Join(", ", r.sharedMaterials.Select(m => m == null ? "null" : m.name + " / " + m.shader.name))}, центр HPL {HplSpace.Position(r.bounds.center).ToString("0.000")}");
+                    continue;
+                }
+                int open = raw.IndexOf('(');
+                string name = raw.Substring(0, open).Trim();
+                string[] values = raw.Substring(open + 1, raw.LastIndexOf(')') - open - 1).Split(',').Select(v => v.Trim()).Where(v => v.Length > 0).ToArray();
+                var method = map.Script.GetType().GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                    .FirstOrDefault(m => m.Name == name && m.GetParameters().Length == values.Length)
+                    ?? throw new ArgumentException("No script function " + raw);
+                var parameters = method.GetParameters();
+                method.Invoke(map.Script, values.Select((v, i) => Convert.ChangeType(v, parameters[i].ParameterType, CultureInfo.InvariantCulture)).ToArray());
+            }
+        }
+
+        /// <summary>"@shot tag" of -lookCalls: one frame in the saved settings with -lookSet over them, game time stopped
+        /// while the temporal accumulation settles (the scripted fades stay where they are).</summary>
+        static IEnumerator CallShot(HplMap map, string folder, string file, StringBuilder result)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file));
+            var saved = HplUserSettings.ReadSaved();
+            var settings = saved.Copy();
+            LookSet(settings);
+            HplGraphics.Apply(settings);
+            float scale = Time.timeScale;
+            Time.timeScale = 0f;
+            // A copy of the player's camera at the report's pose (or aimed with "@aim"): the player of a scripted scene
+            // moves and turns after loading, and its camera follows it.
+            var source = map.PlayerCamera;
+            string report = File.ReadAllText(Path.Combine(folder, "report.txt"));
+            Vector3? position = ReportVector(report, "Камера Unity:"), direction = ReportVector(report, "Направление Unity:");
+            var go = new GameObject("Look probe camera") { hideFlags = HideFlags.DontSave };
+            var camera = go.AddComponent<Camera>();
+            var data = go.AddComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData>();
+            if (source.TryGetComponent(out UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData sourceData)) sourceData.CopyTo(data);
+            camera.CopyFrom(source);
+            camera.enabled = false;
+            var target = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            camera.targetTexture = target;
+            try
+            {
+                var p = position ?? source.transform.position;
+                var d = s_aim is { } aim ? aim - p : direction ?? source.transform.forward;
+                camera.transform.SetPositionAndRotation(p, Quaternion.LookRotation(d));
+                camera.aspect = (float)ShotWidth / ShotHeight;
+                for (int i = 0; i < ShotFrames; i++)
+                {
+                    camera.Render();
+                    yield return null;
+                }
+                var active = RenderTexture.active;
+                RenderTexture.active = target;
+                var texture = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
+                texture.ReadPixels(new Rect(0, 0, ShotWidth, ShotHeight), 0, 0);
+                RenderTexture.active = active;
+                File.WriteAllBytes(file, texture.EncodeToPNG());
+                Destroy(texture);
+                result.AppendLine($"  камера HPL {HplSpace.Position(camera.transform.position).ToString("0.000")}, вперёд {camera.transform.forward.ToString("0.000")}, FOV {camera.fieldOfView:0.0}, игрок HPL {HplSpace.Position(source.transform.position).ToString("0.000")}");
+                result.AppendLine($"  снимок {Path.GetFileName(file)}: освещение {settings.lighting}, набор {settings.lightingSet}, текстуры {settings.textures}, RT {HplRayTracing.Active}");
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                target.Release();
+                Destroy(target);
+                Destroy(go);
+                Time.timeScale = scale;
+                HplGraphics.Apply(saved);
+            }
+        }
+
+        /// <summary>"@aim x y z" of -lookCalls: the HPL point the "@shot" camera looks at (else the report's direction).</summary>
+        static Vector3? s_aim;
+
+        /// <summary>A "key: x y z" line of report.txt.</summary>
+        static Vector3? ReportVector(string report, string key)
+        {
+            foreach (var line in report.Split('\n'))
+            {
+                if (!line.StartsWith(key, StringComparison.Ordinal)) continue;
+                var v = line.Substring(key.Length).Trim().Split(' ');
+                return new Vector3(float.Parse(v[0], CultureInfo.InvariantCulture), float.Parse(v[1], CultureInfo.InvariantCulture), float.Parse(v[2], CultureInfo.InvariantCulture));
+            }
+            return null;
         }
 
         /// <summary>-lookOff "name;name": lights held at intensity 0 in the series (game object names; "lantern": the
